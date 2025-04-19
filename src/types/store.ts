@@ -55,6 +55,13 @@ export interface UserState {
   error: string | null;
 }
 
+export interface UserStore extends UserState {
+  setUser: (user: Partial<UserState>) => void;
+  setLoading: (isLoading: boolean) => void;
+  setError: (error: string | null) => void;
+  logout: () => void;
+}
+
 export interface AppState {
   theme: 'light' | 'dark' | 'system';
   sidebarOpen: boolean;
