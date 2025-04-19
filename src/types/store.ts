@@ -7,7 +7,7 @@ export interface FitsFile {
   fileType: FileType;
   filePath: string;
   fileSize: number;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, string | number | boolean>;
   createdAt: string;
 }
 
@@ -18,7 +18,7 @@ export interface ProcessingStep {
   status: ProcessingStatus;
   inputFiles: string[];
   outputFiles?: string[];
-  parameters?: Record<string, any>;
+  parameters?: Record<string, string | number | boolean>;
   startedAt?: string;
   completedAt?: string;
   createdAt: string;

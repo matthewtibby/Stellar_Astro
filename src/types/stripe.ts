@@ -1,5 +1,6 @@
 export type SubscriptionTier = 'free' | 'pro' | 'enterprise';
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export interface SubscriptionPlan {
   id: string;
   name: string;

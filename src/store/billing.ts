@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import type { BillingInfo, SubscriptionPlan, PaymentMethod } from '@/types/stripe';
+import type { BillingInfo, PaymentMethod } from '@/types/stripe';
 
 interface BillingStore extends BillingInfo {
   setCustomerId: (customerId: string) => void;
