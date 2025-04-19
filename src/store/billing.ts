@@ -8,7 +8,7 @@ interface BillingStore {
   paymentMethods: PaymentMethod[];
   hasActiveSubscription: boolean;
   isCanceled: boolean;
-  currentPeriodEnd: number | null;
+  currentPeriodEnd: string | null;
   setCustomerId: (customerId: string) => void;
   setSubscription: (subscription: BillingInfo['subscription']) => void;
   setPaymentMethods: (paymentMethods: PaymentMethod[]) => void;
@@ -35,8 +35,8 @@ export const useBillingStore = create<BillingStore>()(
         set({ 
           subscription,
           hasActiveSubscription: subscription?.status === 'active',
-          isCanceled: subscription?.cancel_at_period_end || false,
-          currentPeriodEnd: subscription?.current_period_end || null,
+          isCanceled: subscription?.cancelAtPeriodEnd || false,
+          currentPeriodEnd: subscription?.currentPeriodEnd || null,
         }),
       setPaymentMethods: (paymentMethods) => set({ paymentMethods }),
       addPaymentMethod: (paymentMethod) =>
