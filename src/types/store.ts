@@ -60,4 +60,11 @@ export interface AppState {
   sidebarOpen: boolean;
   notifications: boolean;
   language: string;
+}
+
+export interface AppStore extends AppState {
+  setTheme: (theme: AppState['theme']) => void;
+  toggleSidebar: () => void;
+  setNotifications: (enabled: boolean) => void;
+  setLanguage: (language: string) => void;
 } 
