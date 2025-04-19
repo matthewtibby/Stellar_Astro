@@ -4,6 +4,5 @@
   "devCommand": "npm run dev",
   "installCommand": "npm install",
   "framework": "nextjs",
-  "regions": ["iad1"],
-  "comment": "Updated to trigger deployment with NEXTAUTH_SECRET"
+  "regions": ["iad1"]
 } 
