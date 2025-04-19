@@ -6,7 +6,17 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "scaffold": "node cli/scaffold.js",
+    "create": "node cli/scaffold.js create",
+    "init": "node cli/scaffold.js init",
+    "deploy": "node cli/scaffold.js deploy",
+    "deploy:preview": "node cli/scaffold.js deploy --preview",
+    "deploy:firebase": "node cli/scaffold.js deploy --firebase",
+    "test": "node cli/scaffold.js test",
+    "test:setup": "node cli/scaffold.js test --setup",
+    "init-env": "node cli/scaffold.js init-env",
+    "help": "node cli/scaffold.js help"
   },
   "dependencies": {
     "@stripe/stripe-js": "^7.1.0",
@@ -15,7 +25,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.501.0",
-    "next": "15.3.1",
+    "next": "^15.3.1",
     "next-auth": "^4.24.11",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -30,9 +40,16 @@
     "@types/node": "^20.17.30",
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.2",
+    "chalk": "^4.1.2",
+    "commander": "^12.0.0",
     "eslint": "^9",
     "eslint-config-next": "15.3.1",
+    "inquirer": "^8.2.6",
+    "ora": "^5.4.1",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "bin": {
+    "stellar-astro": "./cli/scaffold.js"
   }
 }
