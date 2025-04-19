@@ -1,29 +1,26 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg width="1920" height="1080" viewBox="0 0 1920 1080" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="1920" height="1080" fill="#0a0a0a"/>
-  
-  <!-- Nebula effect -->
-  <path d="M0 0h1920v1080H0z" fill="url(#nebula)"/>
-  
-  <!-- Stars -->
-  <g id="stars">
-    <circle cx="200" cy="300" r="1" fill="white" opacity="0.8"/>
-    <circle cx="400" cy="200" r="1.5" fill="white" opacity="0.9"/>
-    <circle cx="600" cy="400" r="1" fill="white" opacity="0.7"/>
-    <circle cx="800" cy="300" r="1" fill="white" opacity="0.8"/>
-    <circle cx="1000" cy="500" r="1.5" fill="white" opacity="0.9"/>
-    <circle cx="1200" cy="200" r="1" fill="white" opacity="0.7"/>
-    <circle cx="1400" cy="400" r="1" fill="white" opacity="0.8"/>
-    <circle cx="1600" cy="300" r="1.5" fill="white" opacity="0.9"/>
-    <circle cx="1800" cy="500" r="1" fill="white" opacity="0.7"/>
+  <rect width="1920" height="1080" fill="#000000"/>
+  <g opacity="0.5">
+    <!-- Stars -->
+    <circle cx="100" cy="100" r="1" fill="white"/>
+    <circle cx="200" cy="150" r="1" fill="white"/>
+    <circle cx="300" cy="200" r="1" fill="white"/>
+    <circle cx="400" cy="250" r="1" fill="white"/>
+    <circle cx="500" cy="300" r="1" fill="white"/>
+    <circle cx="600" cy="350" r="1" fill="white"/>
+    <circle cx="700" cy="400" r="1" fill="white"/>
+    <circle cx="800" cy="450" r="1" fill="white"/>
+    <circle cx="900" cy="500" r="1" fill="white"/>
+    <circle cx="1000" cy="550" r="1" fill="white"/>
+    <!-- Add more stars as needed -->
   </g>
-  
-  <!-- Gradients -->
+  <!-- Nebula effect -->
+  <circle cx="960" cy="540" r="400" fill="url(#paint0_radial)" opacity="0.3"/>
   <defs>
-    <radialGradient id="nebula" cx="50%" cy="50%" r="70%" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.1"/>
-      <stop offset="50%" stop-color="#1e40af" stop-opacity="0.05"/>
-      <stop offset="100%" stop-color="#0a0a0a" stop-opacity="0"/>
+    <radialGradient id="paint0_radial" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(960 540) rotate(90) scale(400)">
+      <stop stop-color="#4F46E5"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0"/>
     </radialGradient>
   </defs>
 </svg> 
