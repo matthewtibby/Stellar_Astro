@@ -1,19 +1,24 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { persist } from 'zustand/middleware';
 import type { BillingInfo, PaymentMethod } from '@/types/stripe';
 
-interface BillingStore extends BillingInfo {
+interface BillingStore {
+  customerId: string | null;
+  subscription: BillingInfo['subscription'];
+  paymentMethods: PaymentMethod[];
+  hasActiveSubscription: boolean;
+  isCanceled: boolean;
+  currentPeriodEnd: number | null;
   setCustomerId: (customerId: string) => void;
   setSubscription: (subscription: BillingInfo['subscription']) => void;
   setPaymentMethods: (paymentMethods: PaymentMethod[]) => void;
   addPaymentMethod: (paymentMethod: PaymentMethod) => void;
   removePaymentMethod: (paymentMethodId: string) => void;
-  setDefaultPaymentMethod: (paymentMethodId: string) => void;
-  reset: () => void;
+  updatePaymentMethod: (paymentMethodId: string, updates: Partial<PaymentMethod>) => void;
 }
 
-const initialState: BillingInfo = {
-  customerId: null,
+const initialState = {
+  customerId: '',
   subscription: null,
   paymentMethods: [],
   hasActiveSubscription: false,
@@ -25,54 +30,34 @@ export const useBillingStore = create<BillingStore>()(
   persist(
     (set) => ({
       ...initialState,
-
-      setCustomerId: (customerId) =>
-        set({ customerId }),
-
-      setSubscription: (subscription) =>
-        set({
+      setCustomerId: (customerId) => set({ customerId }),
+      setSubscription: (subscription) => 
+        set({ 
           subscription,
           hasActiveSubscription: subscription?.status === 'active',
-          isCanceled: subscription?.cancelAtPeriodEnd ?? false,
-          currentPeriodEnd: subscription?.currentPeriodEnd ?? null,
+          isCanceled: subscription?.cancel_at_period_end || false,
+          currentPeriodEnd: subscription?.current_period_end || null,
         }),
-
-      setPaymentMethods: (paymentMethods) =>
-        set({ paymentMethods }),
-
+      setPaymentMethods: (paymentMethods) => set({ paymentMethods }),
       addPaymentMethod: (paymentMethod) =>
         set((state) => ({
           paymentMethods: [...state.paymentMethods, paymentMethod],
         })),
-
       removePaymentMethod: (paymentMethodId) =>
         set((state) => ({
           paymentMethods: state.paymentMethods.filter(
             (pm) => pm.id !== paymentMethodId
           ),
         })),
-
-      setDefaultPaymentMethod: (paymentMethodId) =>
+      updatePaymentMethod: (paymentMethodId, updates) =>
         set((state) => ({
-          paymentMethods: state.paymentMethods.map((pm) => ({
-            ...pm,
-            isDefault: pm.id === paymentMethodId,
-          })),
+          paymentMethods: state.paymentMethods.map((pm) =>
+            pm.id === paymentMethodId ? { ...pm, ...updates } : pm
+          ),
         })),
-
-      reset: () => set(initialState),
     }),
     {
-      name: 'billing-storage',
-      storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({
-        customerId: state.customerId,
-        subscription: state.subscription,
-        paymentMethods: state.paymentMethods,
-        hasActiveSubscription: state.hasActiveSubscription,
-        isCanceled: state.isCanceled,
-        currentPeriodEnd: state.currentPeriodEnd,
-      }),
+      name: 'billing-store',
     }
   )
 ); 
