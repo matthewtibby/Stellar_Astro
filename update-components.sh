@@ -10,10 +10,7 @@ export default function Hero() {
   return (
     <div className="relative min-h-screen flex items-center justify-center bg-black overflow-hidden">
       <div 
-        className="absolute inset-0 bg-[url(\'/images/hero-bg.jpg\')] bg-cover bg-center"
-        style={{ 
-          backgroundImage: "linear-gradient(to bottom, rgba(0,0,0,0.7), rgba(0,0,0,0.8))"
-        }}
+        className="absolute inset-0 bg-gradient-to-br from-blue-900 via-purple-900 to-black bg-cover bg-center"
       />
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-24 text-center">
         <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold text-white mb-8">
