@@ -19,6 +19,8 @@ export const useUserStore = create<UserStore>()(
       ...initialState,
       setLoading: (isLoading) => set({ isLoading }),
       setError: (error) => set({ error }),
+      setUser: (user) => set((state) => ({ ...state, ...user })),
+      logout: () => set(initialState),
     }),
     {
       name: 'user-store',
