@@ -66,4 +66,4 @@ export function convertPrice(
   return baseAmount * exchangeRates[toCurrency];
 }
 
-export const CURRENCIES = Object.keys(CURRENCY_SYMBOLS) as Currency[]; 
+export { currencies as CURRENCIES }; 

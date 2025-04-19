@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg width="64" height="64" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect x="2" y="4" width="20" height="14" rx="2" stroke="#3b82f6" stroke-width="2"/>
-  <line x1="2" y1="8" x2="22" y2="8" stroke="#3b82f6" stroke-width="2"/>
-  <line x1="8" y1="18" x2="16" y2="18" stroke="#3b82f6" stroke-width="2"/>
-  <line x1="12" y1="18" x2="12" y2="20" stroke="#3b82f6" stroke-width="2"/>
-  <line x1="8" y1="20" x2="16" y2="20" stroke="#3b82f6" stroke-width="2"/>
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="32" cy="32" r="30" stroke="#4F46E5" stroke-width="2"/>
+  <path d="M32 2C16.536 2 4 14.536 4 30C4 45.464 16.536 58 32 58C47.464 58 60 45.464 60 30C60 14.536 47.464 2 32 2ZM32 54C18.745 54 8 43.255 8 30C8 16.745 18.745 6 32 6C45.255 6 56 16.745 56 30C56 43.255 45.255 54 32 54Z" fill="#4F46E5"/>
+  <path d="M32 10C20.954 10 12 18.954 12 30C12 41.046 20.954 50 32 50C43.046 50 52 41.046 52 30C52 18.954 43.046 10 32 10ZM32 46C23.163 46 16 38.837 16 30C16 21.163 23.163 14 32 14C40.837 14 48 21.163 48 30C48 38.837 40.837 46 32 46Z" fill="#4F46E5"/>
+  <circle cx="32" cy="30" r="8" fill="#4F46E5"/>
 </svg> 
