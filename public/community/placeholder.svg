@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="800" height="800" viewBox="0 0 800 800" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="800" height="800" fill="#0a0a0a"/>
+  
+  <!-- Star field -->
+  <g id="stars" opacity="0.8">
+    <circle cx="400" cy="400" r="2" fill="white"/>
+    <circle cx="200" cy="300" r="1.5" fill="white"/>
+    <circle cx="600" cy="500" r="1.5" fill="white"/>
+    <circle cx="300" cy="600" r="1" fill="white"/>
+    <circle cx="500" cy="200" r="1" fill="white"/>
+    <circle cx="700" cy="400" r="1.5" fill="white"/>
+    <circle cx="100" cy="400" r="1" fill="white"/>
+  </g>
+  
+  <!-- Nebula effect -->
+  <circle cx="400" cy="400" r="200" fill="url(#nebula)"/>
+  
+  <!-- Gradients -->
+  <defs>
+    <radialGradient id="nebula" cx="50%" cy="50%" r="50%" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.2"/>
+      <stop offset="70%" stop-color="#1e40af" stop-opacity="0.1"/>
+      <stop offset="100%" stop-color="#0a0a0a" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+</svg> 

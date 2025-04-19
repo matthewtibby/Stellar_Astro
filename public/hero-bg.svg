@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1920" height="1080" viewBox="0 0 1920 1080" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1920" height="1080" fill="#0a0a0a"/>
+  
+  <!-- Nebula effect -->
+  <path d="M0 0h1920v1080H0z" fill="url(#nebula)"/>
+  
+  <!-- Stars -->
+  <g id="stars">
+    <circle cx="200" cy="300" r="1" fill="white" opacity="0.8"/>
+    <circle cx="400" cy="200" r="1.5" fill="white" opacity="0.9"/>
+    <circle cx="600" cy="400" r="1" fill="white" opacity="0.7"/>
+    <circle cx="800" cy="300" r="1" fill="white" opacity="0.8"/>
+    <circle cx="1000" cy="500" r="1.5" fill="white" opacity="0.9"/>
+    <circle cx="1200" cy="200" r="1" fill="white" opacity="0.7"/>
+    <circle cx="1400" cy="400" r="1" fill="white" opacity="0.8"/>
+    <circle cx="1600" cy="300" r="1.5" fill="white" opacity="0.9"/>
+    <circle cx="1800" cy="500" r="1" fill="white" opacity="0.7"/>
+  </g>
+  
+  <!-- Gradients -->
+  <defs>
+    <radialGradient id="nebula" cx="50%" cy="50%" r="70%" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.1"/>
+      <stop offset="50%" stop-color="#1e40af" stop-opacity="0.05"/>
+      <stop offset="100%" stop-color="#0a0a0a" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+</svg> 
