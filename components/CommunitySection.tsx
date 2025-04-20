@@ -22,7 +22,7 @@ interface CommunityPost {
 const posts: CommunityPost[] = [
   {
     id: '1',
-    image: 'https://placehold.co/600x400/1a1a1a/ffffff?text=Horsehead+Nebula',
+    image: 'https://images.unsplash.com/photo-zoAMOMA_ImU?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
     title: 'Horsehead Nebula in HaRGB',
     author: {
       name: 'Sarah Chen',
