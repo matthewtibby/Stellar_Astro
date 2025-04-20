@@ -22,8 +22,8 @@ interface CommunityPost {
 const posts: CommunityPost[] = [
   {
     id: '1',
-    image: 'https://images.unsplash.com/photo-zoAMOMA_ImU?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
-    title: 'Horsehead Nebula in HaRGB',
+    image: 'https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
+    title: 'Orion Constellation',
     author: {
       name: 'Sarah Chen',
       avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&q=80',
