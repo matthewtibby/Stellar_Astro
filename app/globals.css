@@ -2,14 +2,23 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --background: 0 0% 100%;
-  --foreground: 222.2 84% 4.9%;
-}
-
 @layer base {
+  :root {
+    --background: #ffffff;
+    --foreground: #171717;
+    --font-sans: var(--font-inter), var(--font-plus-jakarta-sans), system-ui, -apple-system, sans-serif;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --background: #0a0a0a;
+      --foreground: #ededed;
+    }
+  }
+
   body {
-    @apply bg-white text-gray-900 antialiased;
+    @apply bg-black text-white;
+    font-family: var(--font-sans);
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -31,18 +40,41 @@
 
 @layer components {
   .btn {
-    @apply inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50;
+    @apply inline-flex items-center justify-center rounded-md text-sm font-medium 
+           transition-colors focus-visible:outline-none focus-visible:ring-2 
+           focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50;
   }
 
   .btn-primary {
-    @apply bg-astro-primary text-white hover:bg-astro-primary/90;
+    @apply bg-indigo-600 text-white hover:bg-indigo-700;
   }
 
   .btn-secondary {
-    @apply bg-gray-100 text-gray-900 hover:bg-gray-200;
+    @apply bg-slate-800 text-white hover:bg-slate-700;
   }
 
   .container {
     @apply mx-auto max-w-7xl px-4 sm:px-6 lg:px-8;
   }
+
+  .card {
+    @apply bg-slate-800/70 backdrop-blur-md rounded-2xl border border-slate-700/50;
+  }
+
+  .card-hover {
+    @apply hover:shadow-[0_0_15px_rgba(59,130,246,0.2)] 
+           hover:border-blue-500/50 
+           hover:transform hover:scale-105 
+           transition-all duration-300;
+  }
+}
+
+@keyframes twinkle {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
 } 

@@ -4,6 +4,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import Hero from '@/components/Hero'
 import PricingSection from '@/components/PricingSection'
+import WhyChooseUs from '../components/WhyChooseUs'
 
 export default function Home() {
   return (
@@ -42,45 +43,11 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Why Choose Us Section */}
+      <WhyChooseUs />
+
       {/* Pricing Section */}
       <PricingSection />
-
-      {/* Features Section */}
-      <section className="py-20 bg-astro-dark">
-        <div className="container">
-          <h2 className="text-4xl font-bold text-center mb-16">Why Choose Us</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-            <div className="text-center">
-              <div className="mb-4 flex justify-center">
-                <Image src="/icons/web.svg" alt="Web-Based" width={64} height={64} />
-              </div>
-              <h3 className="text-xl font-bold mb-2">Web-Based</h3>
-              <p>Access from any device, no downloads required</p>
-            </div>
-            <div className="text-center">
-              <div className="mb-4 flex justify-center">
-                <Image src="/icons/beginner.svg" alt="Beginner-Friendly" width={64} height={64} />
-              </div>
-              <h3 className="text-xl font-bold mb-2">Beginner-Friendly</h3>
-              <p>Intuitive tools for processing deep-sky images</p>
-            </div>
-            <div className="text-center">
-              <div className="mb-4 flex justify-center">
-                <Image src="/icons/collaborate.svg" alt="Collaborate" width={64} height={64} />
-              </div>
-              <h3 className="text-xl font-bold mb-2">Collaborate Anywhere</h3>
-              <p>Work on projects together in real-time</p>
-            </div>
-            <div className="text-center">
-              <div className="mb-4 flex justify-center">
-                <Image src="/icons/community.svg" alt="Community" width={64} height={64} />
-              </div>
-              <h3 className="text-xl font-bold mb-2">Community-Led</h3>
-              <p>Share your results and get feedback</p>
-            </div>
-          </div>
-        </div>
-      </section>
 
       {/* Community Section */}
       <section className="py-20 bg-astro-dark">

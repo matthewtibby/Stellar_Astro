@@ -1,13 +1,11 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Currency, 
   currencies, 
   currencySymbols, 
   formatPrice, 
-  convertPrice, 
-  EXCHANGE_RATES,
   getCurrencyFromLocale 
 } from '@/lib/currency';
 
@@ -46,7 +44,7 @@ const pricingTiers: PricingTier[] = [
   },
   {
     name: 'Annual',
-    price: 10,  // Monthly equivalent of £120/year
+    price: 120,  // Annual price
     features: [
       'Everything in Monthly plan',
       '20GB storage',
@@ -78,19 +76,25 @@ export default function PricingSection() {
     }
   }, []);
 
-  const getPrice = useMemo(() => (basePrice: number, isAnnual = false) => {
-    try {
-      const adjustedPrice = isAnnual ? basePrice * 12 : basePrice;
-      const convertedPrice = convertPrice(adjustedPrice, 'GBP', selectedCurrency, EXCHANGE_RATES);
-      return formatPrice(
-        convertedPrice,
-        selectedCurrency
+  const formatPriceDisplay = (price: number, isAnnual: boolean = false) => {
+    if (price === 0) return 'Free';
+    
+    if (isAnnual) {
+      return (
+        <>
+          {formatPrice(price, selectedCurrency)}
+          <span className="text-sm text-gray-400">/year</span>
+        </>
       );
-    } catch (err) {
-      console.error('Error converting price:', err);
-      return formatPrice(basePrice, 'GBP');
     }
-  }, [selectedCurrency]);
+
+    return (
+      <>
+        {formatPrice(price, selectedCurrency)}
+        <span className="text-sm text-gray-400">/month</span>
+      </>
+    );
+  };
 
   if (isLoading) {
     return (
@@ -147,12 +151,7 @@ export default function PricingSection() {
             >
               <h3 id={`tier-${tier.name}`} className="text-2xl font-semibold mb-4">{tier.name}</h3>
               <p className="text-4xl font-bold mb-6">
-                {tier.price === 0 ? 'Free' : (
-                  <>
-                    {getPrice(tier.price, tier.name === 'Annual')}
-                    <span className="text-sm text-gray-400">/{tier.name.toLowerCase()}</span>
-                  </>
-                )}
+                {formatPriceDisplay(tier.price, tier.name === 'Annual')}
               </p>
               {tier.name === 'Annual' && (
                 <p className="text-indigo-400 mb-4">Save 2 months with annual billing</p>

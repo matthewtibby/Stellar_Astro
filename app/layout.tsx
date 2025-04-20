@@ -1,10 +1,14 @@
 import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
+import { Inter, Plus_Jakarta_Sans } from 'next/font/google'
 import './globals.css'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 
-const inter = Inter({ subsets: ['latin'] })
+const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
+const plusJakartaSans = Plus_Jakarta_Sans({ 
+  subsets: ['latin'],
+  variable: '--font-plus-jakarta-sans'
+})
 
 export const metadata: Metadata = {
   title: 'Stellar Astro - AI-Powered Image Processing',
@@ -17,8 +21,8 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className="h-full">
-      <body className={`${inter.className} min-h-full flex flex-col`}>
+    <html lang="en" className={`${inter.variable} ${plusJakartaSans.variable} h-full`}>
+      <body className={`${inter.className} min-h-full flex flex-col font-sans bg-black`}>
         <Header />
         <main className="flex-grow">
           {children}
