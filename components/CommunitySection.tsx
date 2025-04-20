@@ -99,12 +99,13 @@ export default function CommunitySection() {
           {featuredPost && (
             <div className="md:col-span-2">
               <div className="group relative bg-slate-900 rounded-md overflow-hidden transform transition-all duration-300 hover:scale-[1.01] hover:shadow-lg hover:shadow-blue-500/10 h-full">
-                <div className="relative aspect-[16/9]">
+                <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
                   <Image
                     src={featuredPost.image}
                     alt={featuredPost.title}
                     fill
                     className="object-cover transition-transform duration-300 group-hover:scale-105"
+                    sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                   />
                   
                   {/* Hover Overlay */}
@@ -175,13 +176,13 @@ export default function CommunitySection() {
                 key={post.id}
                 className="group relative bg-slate-900 rounded-md overflow-hidden transform transition-all duration-300 hover:scale-[1.01] hover:shadow-lg hover:shadow-blue-500/10"
               >
-                {/* Image Container */}
-                <div className="relative aspect-[16/9]">
+                <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
                   <Image
                     src={post.image}
                     alt={post.title}
                     fill
                     className="object-cover transition-transform duration-300 group-hover:scale-105"
+                    sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                   />
                   
                   {/* Hover Overlay */}
