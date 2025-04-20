@@ -22,12 +22,12 @@ interface CommunityPost {
 const posts: CommunityPost[] = [
   {
     id: '1',
-    image: 'https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
+    image: 'https://images.unsplash.com/photo-1630358277232-5a14997a08bd?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
     title: 'Orion Constellation',
     author: {
-      name: 'Sarah Chen',
+      name: 'Marc Sendra Martorell',
       avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&q=80',
-      profileUrl: '/profile/sarah'
+      profileUrl: '/profile/marc-sendra'
     },
     timestamp: '3h ago',
     likes: 153,
