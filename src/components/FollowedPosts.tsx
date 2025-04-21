@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { Heart, MessageCircle, Share2, Star } from 'lucide-react';
 
 interface Post {
@@ -9,6 +10,8 @@ interface Post {
   image: string;
   title: string;
   author: string;
+  authorId: string;
+  userAvatar: string;
   likes: number;
   comments: number;
   isLiked: boolean;
@@ -22,6 +25,8 @@ export default function FollowedPosts() {
       image: 'https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
       title: 'Orion Constellation',
       author: 'AstroExplorer',
+      authorId: 'astro-explorer',
+      userAvatar: 'https://images.unsplash.com/profile-1534796636912?ixlib=rb-4.0.3&auto=format&fit=crop&w=150&h=150&q=80',
       likes: 245,
       comments: 18,
       isLiked: false,
@@ -32,6 +37,8 @@ export default function FollowedPosts() {
       image: 'https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
       title: 'Milky Way Galaxy',
       author: 'StarChaser',
+      authorId: 'star-chaser',
+      userAvatar: 'https://images.unsplash.com/profile-1534796636913?ixlib=rb-4.0.3&auto=format&fit=crop&w=150&h=150&q=80',
       likes: 189,
       comments: 12,
       isLiked: false,
@@ -42,6 +49,8 @@ export default function FollowedPosts() {
       image: 'https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
       title: 'Andromeda Galaxy',
       author: 'CosmicObserver',
+      authorId: 'cosmic-observer',
+      userAvatar: 'https://images.unsplash.com/profile-1534796636914?ixlib=rb-4.0.3&auto=format&fit=crop&w=150&h=150&q=80',
       likes: 312,
       comments: 24,
       isLiked: false,
@@ -55,6 +64,8 @@ export default function FollowedPosts() {
       image: 'https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
       title: 'Saturn Rings',
       author: 'PlanetHunter',
+      authorId: 'planet-hunter',
+      userAvatar: 'https://images.unsplash.com/profile-1534796636915?ixlib=rb-4.0.3&auto=format&fit=crop&w=150&h=150&q=80',
       likes: 156,
       comments: 9,
       isLiked: false,
@@ -65,6 +76,8 @@ export default function FollowedPosts() {
       image: 'https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
       title: 'Jupiter Storm',
       author: 'SpaceExplorer',
+      authorId: 'space-explorer',
+      userAvatar: 'https://images.unsplash.com/profile-1534796636916?ixlib=rb-4.0.3&auto=format&fit=crop&w=150&h=150&q=80',
       likes: 278,
       comments: 15,
       isLiked: false,
@@ -75,6 +88,8 @@ export default function FollowedPosts() {
       image: 'https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
       title: 'Nebula Cloud',
       author: 'AstroPhotographer',
+      authorId: 'astro-photographer',
+      userAvatar: 'https://images.unsplash.com/profile-1534796636917?ixlib=rb-4.0.3&auto=format&fit=crop&w=150&h=150&q=80',
       likes: 423,
       comments: 31,
       isLiked: false,
@@ -85,6 +100,8 @@ export default function FollowedPosts() {
       image: 'https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
       title: 'Solar Eclipse',
       author: 'SkyWatcher',
+      authorId: 'sky-watcher',
+      userAvatar: 'https://images.unsplash.com/profile-1534796636918?ixlib=rb-4.0.3&auto=format&fit=crop&w=150&h=150&q=80',
       likes: 567,
       comments: 42,
       isLiked: false,
@@ -95,6 +112,8 @@ export default function FollowedPosts() {
       image: 'https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
       title: 'Meteor Shower',
       author: 'NightSky',
+      authorId: 'night-sky',
+      userAvatar: 'https://images.unsplash.com/profile-1534796636919?ixlib=rb-4.0.3&auto=format&fit=crop&w=150&h=150&q=80',
       likes: 198,
       comments: 16,
       isLiked: false,
@@ -105,6 +124,8 @@ export default function FollowedPosts() {
       image: 'https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
       title: 'Aurora Borealis',
       author: 'NorthernLights',
+      authorId: 'northern-lights',
+      userAvatar: 'https://images.unsplash.com/profile-1534796636920?ixlib=rb-4.0.3&auto=format&fit=crop&w=150&h=150&q=80',
       likes: 345,
       comments: 28,
       isLiked: false,
@@ -155,8 +176,25 @@ export default function FollowedPosts() {
         />
       </div>
       <div className="p-4">
+        <div className="flex items-center mb-4">
+          <div className="relative w-10 h-10 rounded-full overflow-hidden mr-3">
+            <Image
+              src={post.userAvatar}
+              alt={post.author}
+              fill
+              className="object-cover"
+            />
+          </div>
+          <div>
+            <Link 
+              href={`/profile/${post.authorId}`}
+              className="text-white hover:text-blue-400 transition-colors font-medium"
+            >
+              {post.author}
+            </Link>
+          </div>
+        </div>
         <h3 className="text-lg font-semibold text-white mb-2">{post.title}</h3>
-        <p className="text-slate-400 text-sm mb-4">by {post.author}</p>
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <button
