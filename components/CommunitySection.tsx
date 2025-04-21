@@ -37,16 +37,16 @@ const posts: CommunityPost[] = [
   },
   {
     id: '2',
-    image: 'https://images.unsplash.com/photo-1716881139357-ddcb2f52940c?q=80&w=3018&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
+    image: 'https://images.unsplash.com/photo-1684019608073-e79bc1642ec5?q=80&w=2948&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
     title: 'Rosette Nebula - Deep Sky Capture',
     author: {
-      name: 'Mark Thompson',
+      name: 'Sarah Chen',
       avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&q=80',
-      profileUrl: '/profile/mark'
+      profileUrl: '/profile/sarah'
     },
     timestamp: '5h ago',
-    likes: 206,
-    comments: 6,
+    likes: 128,
+    comments: 15,
     tags: ['Nebula', 'Deep Sky', 'DSLR']
   },
   {
