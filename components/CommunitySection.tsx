@@ -51,8 +51,8 @@ const posts: CommunityPost[] = [
   },
   {
     id: '3',
-    image: 'https://placehold.co/600x400/1a1a1a/ffffff?text=Lagoon+Nebula',
-    title: 'Lagoon Nebula - First Light with New Camera',
+    image: 'https://images.unsplash.com/photo-PiqZfESKt3k?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
+    title: 'Rosette Nebula - First Light with New Camera',
     author: {
       name: 'Emily Rodriguez',
       avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&q=80',
