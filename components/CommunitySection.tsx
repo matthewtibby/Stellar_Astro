@@ -37,7 +37,7 @@ const posts: CommunityPost[] = [
   },
   {
     id: '2',
-    image: 'https://placehold.co/600x400/1a1a1a/ffffff?text=Andromeda+Galaxy',
+    image: 'https://images.unsplash.com/photo-1604644401890-0bd6781c8800?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
     title: 'Andromeda Galaxy - 12 hours integration',
     author: {
       name: 'Mark Thompson',
