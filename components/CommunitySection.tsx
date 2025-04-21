@@ -37,8 +37,8 @@ const posts: CommunityPost[] = [
   },
   {
     id: '2',
-    image: 'https://images.unsplash.com/photo-45Z6hW1dQMI',
-    title: 'Andromeda Galaxy - 12 hours integration',
+    image: 'https://images.unsplash.com/photo-1716881139357-ddcb2f52940c?q=80&w=3018&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
+    title: 'Rosette Nebula - Deep Sky Capture',
     author: {
       name: 'Mark Thompson',
       avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&q=80',
@@ -47,7 +47,7 @@ const posts: CommunityPost[] = [
     timestamp: '5h ago',
     likes: 206,
     comments: 6,
-    tags: ['Galaxy', 'DSLR', 'Deep Sky']
+    tags: ['Nebula', 'Deep Sky', 'DSLR']
   },
   {
     id: '3',
