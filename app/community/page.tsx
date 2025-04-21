@@ -1,5 +1,6 @@
 import CommunitySection from '@/components/CommunitySection';
 import AwardsBanner from '@/src/components/AwardsBanner';
+import FollowedPosts from '@/src/components/FollowedPosts';
 
 export default function CommunityPage() {
   return (
@@ -11,6 +12,11 @@ export default function CommunityPage() {
         <div className="mb-12">
           <h2 className="text-xl font-semibold text-white mb-4">Featured Awards</h2>
           <AwardsBanner />
+        </div>
+        
+        {/* Followed Posts Section */}
+        <div className="mb-12">
+          <FollowedPosts />
         </div>
         
         {/* Community Posts Section */}
