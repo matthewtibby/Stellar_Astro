@@ -37,7 +37,7 @@ const posts: CommunityPost[] = [
   },
   {
     id: '2',
-    image: 'https://images.unsplash.com/photo-1604644401890-0bd6781c8800?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
+    image: 'https://images.unsplash.com/photo-45Z6hW1dQMI',
     title: 'Andromeda Galaxy - 12 hours integration',
     author: {
       name: 'Mark Thompson',
@@ -51,7 +51,7 @@ const posts: CommunityPost[] = [
   },
   {
     id: '3',
-    image: 'https://images.unsplash.com/photo-PiqZfESKt3k?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
+    image: 'https://images.unsplash.com/photo-PiqZfESKt3k',
     title: 'Rosette Nebula - First Light with New Camera',
     author: {
       name: 'Emily Rodriguez',
