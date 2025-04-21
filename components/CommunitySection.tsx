@@ -51,7 +51,7 @@ const posts: CommunityPost[] = [
   },
   {
     id: '3',
-    image: 'https://images.unsplash.com/photo-PiqZfESKt3k',
+    image: 'https://images.unsplash.com/photo-1684019608073-e79bc1642ec5?q=80&w=2948&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
     title: 'Rosette Nebula - First Light with New Camera',
     author: {
       name: 'Emily Rodriguez',
