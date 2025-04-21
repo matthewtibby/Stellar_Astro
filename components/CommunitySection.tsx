@@ -51,8 +51,8 @@ const posts: CommunityPost[] = [
   },
   {
     id: '3',
-    image: 'https://images.unsplash.com/photo-1684019608073-e79bc1642ec5?q=80&w=2948&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
-    title: 'Rosette Nebula - First Light with New Camera',
+    image: 'https://images.unsplash.com/photo-1716881139357-ddcb2f52940c?q=80&w=3018&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
+    title: 'Wizard Nebula - Deep Sky Capture',
     author: {
       name: 'Emily Rodriguez',
       avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&q=80',
@@ -61,7 +61,7 @@ const posts: CommunityPost[] = [
     timestamp: '8h ago',
     likes: 182,
     comments: 15,
-    tags: ['Nebula', 'First Light', 'DSLR']
+    tags: ['Nebula', 'Deep Sky', 'DSLR']
   },
   {
     id: '4',
