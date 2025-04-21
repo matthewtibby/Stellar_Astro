@@ -103,7 +103,7 @@ export default function TargetAutocomplete({
               >
                 <div className="flex justify-between">
                   <span className="font-medium text-white">{target.name}</span>
-                  <span className="text-sm text-gray-400">{target.catalogId}</span>
+                  <span className="text-sm text-gray-400">{target.catalogIds.join(', ')}</span>
                 </div>
                 <div className="text-sm text-gray-400">
                   {target.constellation} • {target.category}
