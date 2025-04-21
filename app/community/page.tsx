@@ -1,3 +1,5 @@
+"use client";
+
 import CommunitySection from '@/components/CommunitySection';
 import AwardsBanner from '@/src/components/AwardsBanner';
 import FollowedPosts from '@/src/components/FollowedPosts';
