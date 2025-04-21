@@ -21,11 +21,10 @@ const pricingTiers: PricingTier[] = [
     name: 'Free',
     price: 0,
     features: [
-      'Basic image processing',
-      '1GB storage',
-      'Community support',
-      'Standard exports',
-      'Limited to 100 images/month'
+      '3 projects',
+      'Standard resolution exports',
+      'Stellar-Astro signature on exports',
+      'Basic support'
     ],
     buttonText: 'Get Started'
   },
@@ -33,28 +32,26 @@ const pricingTiers: PricingTier[] = [
     name: 'Monthly',
     price: 15,
     features: [
-      'Advanced image processing',
-      '10GB storage',
-      'Priority email support',
-      'Premium exports',
-      'Unlimited images',
-      'API access'
+      'Unlimited projects',
+      'High resolution exports',
+      'No watermarks',
+      'Priority support',
+      'Advanced processing tools'
     ],
-    buttonText: 'Start Monthly Plan'
+    buttonText: 'Start your 7-day free trial'
   },
   {
     name: 'Annual',
-    price: 120,  // Annual price
+    price: 120,
     features: [
-      'Everything in Monthly plan',
-      '20GB storage',
-      'Priority 24/7 support',
-      'Custom exports',
-      'Unlimited images',
-      'API access',
+      'Unlimited projects',
+      'High resolution exports',
+      'No watermarks',
+      'Priority support',
+      'Advanced processing tools',
       '2 months free'
     ],
-    buttonText: 'Start Annual Plan'
+    buttonText: 'Start your 7-day free trial'
   }
 ];
 
@@ -77,7 +74,14 @@ export default function PricingSection() {
   }, []);
 
   const formatPriceDisplay = (price: number, isAnnual: boolean = false) => {
-    if (price === 0) return 'Free';
+    if (price === 0) {
+      return (
+        <>
+          {formatPrice(0, selectedCurrency)}
+          <span className="text-sm text-gray-400">/month</span>
+        </>
+      );
+    }
     
     if (isAnnual) {
       return (

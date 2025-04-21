@@ -1,6 +1,5 @@
 "use client";
 
-import CommunitySection from '@/components/CommunitySection';
 import AwardsBanner from '@/src/components/AwardsBanner';
 import FollowedPosts from '@/src/components/FollowedPosts';
 
@@ -19,12 +18,6 @@ export default function CommunityPage() {
         {/* Followed Posts Section */}
         <div className="mb-12">
           <FollowedPosts />
-        </div>
-        
-        {/* Community Posts Section */}
-        <div>
-          <h2 className="text-xl font-semibold text-white mb-4">Recent Posts</h2>
-          <CommunitySection />
         </div>
       </div>
     </main>

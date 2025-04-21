@@ -29,20 +29,9 @@ const features = [
 
 export default function WhyChooseUs() {
   return (
-    <section className="relative bg-gradient-to-b from-slate-900 to-slate-950 py-20 px-6 overflow-hidden">
-      {/* Background stars/particles effect */}
-      <div className="absolute inset-0 z-0">
-        <div 
-          className="absolute inset-0 bg-[url('/stars.svg')] opacity-30 animate-[twinkle_4s_ease-in-out_infinite]"
-          style={{
-            backgroundSize: '400px 400px',
-            backgroundRepeat: 'repeat'
-          }}
-        />
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-slate-900/50 to-slate-950" />
-      </div>
-      
-      <div className="relative z-10 max-w-6xl mx-auto text-center">
+    <section className="relative py-24 overflow-hidden bg-gradient-to-b from-slate-950 to-slate-900">
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(56,189,248,0.15),transparent_50%)]" />
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <h2 className="text-3xl md:text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 mb-4">
           Why Choose Stellar Astro
         </h2>

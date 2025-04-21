@@ -5,6 +5,7 @@ import Link from 'next/link'
 import Hero from '@/components/Hero'
 import PricingSection from '@/components/PricingSection'
 import WhyChooseUs from '../components/WhyChooseUs'
+import CommunitySection from '../components/CommunitySection'
 
 export default function Home() {
   return (
@@ -29,10 +30,10 @@ export default function Home() {
             Astrophotography<br />
             Online
           </h1>
-          <p className="text-xl md:text-2xl mb-8 max-w-3xl mx-auto text-gray-200">
-            Upload, process, and store your astrophotography projects securely in the cloud.
+          <p className="mt-6 text-lg leading-8 text-gray-300">
+            Upload, process, and store your astrophotography projects securely in the cosmos.
           </p>
-          <div className="flex gap-4 justify-center">
+          <div className="flex gap-4 justify-center mt-12">
             <Link 
               href="/dashboard"
               className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3 rounded-lg text-lg transition-all duration-200 transform hover:scale-105"
@@ -50,63 +51,7 @@ export default function Home() {
       <PricingSection />
 
       {/* Community Section */}
-      <section className="py-20 bg-astro-dark">
-        <div className="container">
-          <h2 className="text-4xl font-bold text-center mb-16">Community</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[
-              {
-                image: '/community/placeholder.svg',
-                title: 'Horsehead Nebula',
-                author: 'Sarah',
-                likes: 153,
-                comments: 12
-              },
-              {
-                image: '/community/placeholder.svg',
-                title: 'Andromeda Galaxy',
-                author: 'Mark',
-                likes: 206,
-                comments: 6
-              },
-              {
-                image: '/community/placeholder.svg',
-                title: 'Lagoon Nebula',
-                author: 'Emily',
-                likes: 182,
-                comments: 15
-              },
-              {
-                image: '/community/placeholder.svg',
-                title: 'Rosette Nebula',
-                author: 'John',
-                likes: 241,
-                comments: 18
-              }
-            ].map((item, index) => (
-              <div key={index} className="bg-gray-900 rounded-lg overflow-hidden">
-                <div className="relative aspect-square">
-                  <Image
-                    src={item.image}
-                    alt={item.title}
-                    width={400}
-                    height={400}
-                    className="object-cover w-full h-full"
-                  />
-                </div>
-                <div className="p-4">
-                  <h3 className="font-bold mb-1">{item.title}</h3>
-                  <p className="text-gray-400 mb-2">{item.author}</p>
-                  <div className="flex gap-4 text-gray-400">
-                    <span>❤️ {item.likes}</span>
-                    <span>💬 {item.comments}</span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+      <CommunitySection />
     </div>
   )
 } 

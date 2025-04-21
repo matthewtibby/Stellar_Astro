@@ -61,6 +61,9 @@ export default function Header() {
             <Link href="/pricing" className="text-gray-300 hover:text-white transition-colors">
               Pricing
             </Link>
+            <Link href="/community" className="text-gray-300 hover:text-white transition-colors">
+              Community
+            </Link>
           </div>
           <div className="flex items-center space-x-4">
             {loading ? (
