@@ -17,10 +17,15 @@ export const useUserStore = create<UserStore>()(
   persist(
     (set) => ({
       ...initialState,
+      user: null,
       setLoading: (isLoading) => set({ isLoading }),
       setError: (error) => set({ error }),
-      setUser: (user) => set((state) => ({ ...state, ...user })),
-      logout: () => set(initialState),
+      setUser: (user) => set((state) => ({ 
+        ...state,
+        user: { ...state.user, ...user } as UserState,
+        ...user 
+      })),
+      logout: () => set({ ...initialState, user: null }),
     }),
     {
       name: 'user-store',

@@ -1,16 +1,60 @@
 "use client";
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useUserStore } from '@/src/store/user';
+
+// Dummy user credentials for testing
+const DUMMY_USER = {
+  email: 'demo@stellarastro.com',
+  password: 'Demo123!',
+};
 
 export default function LoginPage() {
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  
+  const { setUser, setLoading, setError: setStoreError } = useUserStore();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Handle login logic here
-    console.log('Login attempt with:', { email, password });
+    setError(null);
+    setIsLoading(true);
+    setLoading(true);
+
+    try {
+      // Simulate API call delay
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Check against dummy credentials
+      if (email === DUMMY_USER.email && password === DUMMY_USER.password) {
+        // Set user data in store
+        setUser({
+          id: '1',
+          email: DUMMY_USER.email,
+          username: 'demo',
+          fullName: 'Demo User',
+          avatarUrl: null,
+          isAuthenticated: true,
+        });
+        
+        // Redirect to dashboard
+        router.push('/dashboard');
+      } else {
+        throw new Error('Invalid email or password');
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'An error occurred during login';
+      setError(errorMessage);
+      setStoreError(errorMessage);
+    } finally {
+      setIsLoading(false);
+      setLoading(false);
+    }
   };
 
   return (
@@ -37,6 +81,17 @@ export default function LoginPage() {
         <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
           <div className="bg-gray-900/50 px-4 py-8 shadow sm:rounded-lg sm:px-10">
             <form onSubmit={handleSubmit} className="space-y-6">
+              {error && (
+                <div className="rounded-md bg-red-500/10 p-4">
+                  <div className="flex">
+                    <div className="ml-3">
+                      <h3 className="text-sm font-medium text-red-400">Error</h3>
+                      <div className="mt-2 text-sm text-red-400">{error}</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-gray-300">
                   Email address
@@ -98,9 +153,10 @@ export default function LoginPage() {
               <div>
                 <button
                   type="submit"
-                  className="flex w-full justify-center rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                  disabled={isLoading}
+                  className="flex w-full justify-center rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Sign in
+                  {isLoading ? 'Signing in...' : 'Sign in'}
                 </button>
               </div>
             </form>

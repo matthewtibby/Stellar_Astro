@@ -56,6 +56,7 @@ export interface UserState {
 }
 
 export interface UserStore extends UserState {
+  user: UserState | null;
   setUser: (user: Partial<UserState>) => void;
   setLoading: (isLoading: boolean) => void;
   setError: (error: string | null) => void;
