@@ -30,10 +30,11 @@ const PRO_ANNUAL_FEATURES = [
 
 export default function PricingPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-black to-gray-900 text-white">
+    <div className="min-h-screen bg-gradient-to-b from-slate-950 to-slate-900 text-white">
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(56,189,248,0.15),transparent_50%)]" />
       <CurrencyProvider>
         {/* Hero Section */}
-        <section className="py-24">
+        <section className="py-24 relative">
           <div className="container">
             <h1 className="text-5xl md:text-6xl font-bold text-center mb-6 bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">
               Simple, Transparent Pricing
@@ -46,7 +47,6 @@ export default function PricingPage() {
 
         {/* Pricing Tables */}
         <section className="py-24 relative">
-          <div className="absolute inset-0 bg-gradient-to-b from-primary/5 to-transparent" />
           <div className="container relative">
             <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto px-4">
               <PricingCard
@@ -80,7 +80,7 @@ export default function PricingPage() {
         </section>
 
         {/* Feature Comparison */}
-        <section className="py-24">
+        <section className="py-24 relative">
           <div className="container">
             <h2 className="text-3xl font-bold text-center mb-12 bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">
               Compare Features
@@ -127,7 +127,7 @@ export default function PricingPage() {
         </section>
 
         {/* FAQ Section */}
-        <section className="py-24 bg-gradient-to-b from-gray-900 to-black">
+        <section className="py-24 relative">
           <div className="container">
             <h2 className="text-3xl font-bold text-center mb-12 bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">
               Frequently Asked Questions

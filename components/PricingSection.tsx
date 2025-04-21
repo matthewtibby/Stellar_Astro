@@ -121,10 +121,10 @@ export default function PricingSection() {
   }
 
   return (
-    <section className="py-20 bg-gray-900" aria-labelledby="pricing-heading">
-      <div className="container mx-auto px-4">
+    <section className="relative py-24 overflow-hidden" aria-labelledby="pricing-heading">
+      <div className="container mx-auto px-4 relative">
         <div className="flex justify-between items-center mb-12">
-          <h2 id="pricing-heading" className="text-4xl font-bold">Pricing</h2>
+          <h2 id="pricing-heading" className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">Pricing</h2>
           <div className="flex items-center space-x-2">
             <label htmlFor="currency-select" className="text-gray-400">
               Currency:
