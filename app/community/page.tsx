@@ -1,5 +1,5 @@
 import CommunitySection from '@/components/CommunitySection';
-import AwardsBanner from '@/components/AwardsBanner';
+import AwardsBanner from '@/src/components/AwardsBanner';
 
 export default function CommunityPage() {
   return (
