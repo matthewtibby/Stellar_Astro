@@ -36,10 +36,12 @@ export default function LoginPage() {
         setUser({
           id: '1',
           email: DUMMY_USER.email,
-          username: 'demo',
           fullName: 'Demo User',
-          avatarUrl: null,
           isAuthenticated: true,
+          subscription: {
+            type: 'free',
+            projectLimit: 5
+          }
         });
         
         // Redirect to dashboard

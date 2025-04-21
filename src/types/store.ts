@@ -45,14 +45,14 @@ export interface PipelineState {
 }
 
 export interface UserState {
-  id: string | null;
-  email: string | null;
-  username: string | null;
-  fullName: string | null;
-  avatarUrl: string | null;
+  id: string;
+  email: string;
+  fullName: string;
   isAuthenticated: boolean;
-  isLoading: boolean;
-  error: string | null;
+  subscription: {
+    type: 'free' | 'pro' | 'enterprise';
+    projectLimit: number;
+  };
 }
 
 export interface UserStore extends UserState {

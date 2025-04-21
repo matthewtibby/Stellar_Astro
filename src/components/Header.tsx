@@ -24,7 +24,11 @@ export default function Header() {
             </Link>
           </div>
           <div className="hidden md:flex items-center space-x-8">
-            {!user?.isAuthenticated && (
+            {user?.isAuthenticated ? (
+              <Link href="/dashboard" className="text-gray-300 hover:text-white transition-colors">
+                Dashboard
+              </Link>
+            ) : (
               <>
                 <Link href="/features" className="text-gray-300 hover:text-white transition-colors">
                   Features
