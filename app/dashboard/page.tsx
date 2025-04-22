@@ -3,25 +3,30 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUserStore } from '@/src/store/user';
-import { User, Plus, Grid, List, Image, Settings, Share2, CheckCircle, ChevronRight, ChevronDown, FolderOpen, Upload, Layers, Sliders, Share, LogOut } from 'lucide-react';
+import { User, Plus, Grid, List, Image, Settings, Share2, CheckCircle, ChevronRight, ChevronDown, FolderOpen, Upload, Layers, Sliders, Share, LogOut, X } from 'lucide-react';
 import Link from 'next/link';
 import TargetAutocomplete from '@/components/TargetAutocomplete';
 import { AstronomicalTarget } from '@/src/data/astronomicalTargets';
+import { Telescope, Camera, Filter } from '@/src/data/equipmentDatabase';
+import EquipmentAutocomplete from '@/src/components/EquipmentAutocomplete';
 
 // Add these interfaces before the mockProjects array
 interface Project {
-  id: number;
+  id: string;
   name: string;
-  thumbnail: string;
-  status: 'completed' | 'in-progress' | 'draft';
-  lastUpdated: string;
-  progress: number;
-  target?: {
+  target: AstronomicalTarget;
+  telescope?: Telescope;
+  camera?: Camera;
+  filters?: Filter[];
+  createdAt: Date;
+  updatedAt: Date;
+  status: 'draft' | 'in_progress' | 'completed';
+  steps: {
     id: string;
     name: string;
-    catalogId?: string;
-    constellation: string;
-  };
+    status: 'pending' | 'in_progress' | 'completed';
+    completedAt?: Date;
+  }[];
 }
 
 interface WorkflowStep {
@@ -47,36 +52,120 @@ interface User {
 // Mock project data
 const mockProjects: Project[] = [
   {
-    id: 1,
+    id: "project-1",
     name: "Orion Nebula",
-    thumbnail: "/images/placeholder-1.jpg",
+    target: {
+      id: "NGC 7000",
+      name: "Orion Nebula",
+      catalogIds: ["M42"],
+      constellation: "Orion",
+      category: "nebula",
+      type: "messier",
+      commonNames: ["Great Nebula in Orion"],
+      coordinates: {
+        ra: "05h 35m 17.3s",
+        dec: "-05° 23' 28\""
+      }
+    },
+    createdAt: new Date("2023-06-15"),
+    updatedAt: new Date("2023-06-15"),
     status: "completed",
-    lastUpdated: "2023-06-15",
-    progress: 100
+    steps: [
+      { id: "step-1-project-details", name: "Project Details", status: "completed" },
+      { id: "step-1-file-upload", name: "File Upload", status: "completed" },
+      { id: "step-1-calibration", name: "Calibration", status: "completed" },
+      { id: "step-1-registration", name: "Registration", status: "completed" },
+      { id: "step-1-stacking", name: "Stacking", status: "completed" },
+      { id: "step-1-post-processing", name: "Post-Processing", status: "completed" },
+      { id: "step-1-export", name: "Export & Share", status: "completed" }
+    ]
   },
   {
-    id: 2,
+    id: "project-2",
     name: "Andromeda Galaxy",
-    thumbnail: "/images/placeholder-2.jpg",
-    status: "in-progress",
-    lastUpdated: "2023-06-10",
-    progress: 60
+    target: {
+      id: "M31",
+      name: "Andromeda Galaxy",
+      catalogIds: ["M31", "NGC 224"],
+      constellation: "Andromeda",
+      category: "galaxy",
+      type: "messier",
+      commonNames: ["Great Andromeda Nebula"],
+      coordinates: {
+        ra: "00h 42m 44.3s",
+        dec: "+41° 16' 09\""
+      }
+    },
+    createdAt: new Date("2023-06-10"),
+    updatedAt: new Date("2023-06-10"),
+    status: "in_progress",
+    steps: [
+      { id: "step-2-project-details", name: "Project Details", status: "in_progress" },
+      { id: "step-2-file-upload", name: "File Upload", status: "pending" },
+      { id: "step-2-calibration", name: "Calibration", status: "pending" },
+      { id: "step-2-registration", name: "Registration", status: "pending" },
+      { id: "step-2-stacking", name: "Stacking", status: "pending" },
+      { id: "step-2-post-processing", name: "Post-Processing", status: "pending" },
+      { id: "step-2-export", name: "Export & Share", status: "pending" }
+    ]
   },
   {
-    id: 3,
+    id: "project-3",
     name: "Horsehead Nebula",
-    thumbnail: "/images/placeholder-3.jpg",
+    target: {
+      id: "NGC 2024",
+      name: "Horsehead Nebula",
+      catalogIds: ["NGC 2024"],
+      constellation: "Orion",
+      category: "nebula",
+      type: "ic",
+      commonNames: ["Barnard 33"],
+      coordinates: {
+        ra: "05h 40m 59.0s",
+        dec: "-02° 27' 30.0\""
+      }
+    },
+    createdAt: new Date("2023-06-05"),
+    updatedAt: new Date("2023-06-05"),
     status: "draft",
-    lastUpdated: "2023-06-05",
-    progress: 30
+    steps: [
+      { id: "step-3-project-details", name: "Project Details", status: "pending" },
+      { id: "step-3-file-upload", name: "File Upload", status: "pending" },
+      { id: "step-3-calibration", name: "Calibration", status: "pending" },
+      { id: "step-3-registration", name: "Registration", status: "pending" },
+      { id: "step-3-stacking", name: "Stacking", status: "pending" },
+      { id: "step-3-post-processing", name: "Post-Processing", status: "pending" },
+      { id: "step-3-export", name: "Export & Share", status: "pending" }
+    ]
   },
   {
-    id: 4,
+    id: "project-4",
     name: "Eagle Nebula",
-    thumbnail: "/images/placeholder-4.jpg",
+    target: {
+      id: "M16",
+      name: "Eagle Nebula",
+      catalogIds: ["M16"],
+      constellation: "Orion",
+      category: "nebula",
+      type: "messier",
+      commonNames: ["Star Queen Nebula"],
+      coordinates: {
+        ra: "18h 18m 48.0s",
+        dec: "-13° 49' 00.0\""
+      }
+    },
+    createdAt: new Date("2023-06-01"),
+    updatedAt: new Date("2023-06-01"),
     status: "draft",
-    lastUpdated: "2023-06-01",
-    progress: 10
+    steps: [
+      { id: "step-4-project-details", name: "Project Details", status: "pending" },
+      { id: "step-4-file-upload", name: "File Upload", status: "pending" },
+      { id: "step-4-calibration", name: "Calibration", status: "pending" },
+      { id: "step-4-registration", name: "Registration", status: "pending" },
+      { id: "step-4-stacking", name: "Stacking", status: "pending" },
+      { id: "step-4-post-processing", name: "Post-Processing", status: "pending" },
+      { id: "step-4-export", name: "Export & Share", status: "pending" }
+    ]
   }
 ];
 
@@ -111,6 +200,9 @@ export default function DashboardPage() {
   const [projectName, setProjectName] = useState('');
   const [projectDescription, setProjectDescription] = useState('');
   const [selectedTarget, setSelectedTarget] = useState<AstronomicalTarget | null>(null);
+  const [selectedTelescope, setSelectedTelescope] = useState<Telescope | null>(null);
+  const [selectedCamera, setSelectedCamera] = useState<Camera | null>(null);
+  const [selectedFilters, setSelectedFilters] = useState<Filter[]>([]);
 
   useEffect(() => {
     // Redirect to login if not authenticated
@@ -189,9 +281,9 @@ export default function DashboardPage() {
               </div>
               <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
                 <h3 className="text-lg font-semibold text-white">{project.name}</h3>
-                <p className="text-sm text-gray-400">Last updated: {project.lastUpdated}</p>
+                <p className="text-sm text-gray-400">Last updated: {project.updatedAt.toLocaleDateString()}</p>
               </div>
-              {project.status === 'completed' && (
+              {project.status === "completed" && (
                 <div className="absolute top-2 right-2">
                   <CheckCircle size={20} className="text-green-500" />
                 </div>
@@ -203,7 +295,7 @@ export default function DashboardPage() {
                 <div className="w-24 h-2 bg-gray-700 rounded-full overflow-hidden">
                   <div 
                     className="h-full bg-blue-500 rounded-full" 
-                    style={{ width: `${project.progress}%` }}
+                    style={{ width: `${project.steps.filter(s => s.status === "completed").length / project.steps.length * 100}%` }}
                   ></div>
                 </div>
               </div>
@@ -228,16 +320,16 @@ export default function DashboardPage() {
             </div>
             <div className="flex-1">
               <h3 className="text-lg font-semibold text-white">{project.name}</h3>
-              <p className="text-sm text-gray-400">Last updated: {project.lastUpdated}</p>
+              <p className="text-sm text-gray-400">Last updated: {project.updatedAt.toLocaleDateString()}</p>
             </div>
             <div className="flex items-center space-x-4">
               <div className="w-24 h-2 bg-gray-700 rounded-full overflow-hidden">
                 <div 
                   className="h-full bg-blue-500 rounded-full" 
-                  style={{ width: `${project.progress}%` }}
+                  style={{ width: `${project.steps.filter(s => s.status === "completed").length / project.steps.length * 100}%` }}
                 ></div>
               </div>
-              {project.status === 'completed' ? (
+              {project.status === "completed" ? (
                 <CheckCircle size={20} className="text-green-500" />
               ) : (
                 <span className="text-sm text-gray-400 capitalize">{project.status}</span>
@@ -296,23 +388,23 @@ export default function DashboardPage() {
 
   const renderNewProjectForm = () => {
     const handleCreateProject = () => {
-      if (!projectName.trim()) {
-        return;
-      }
+      if (!projectName || !selectedTarget) return;
 
       const newProject: Project = {
-        id: mockProjects.length + 1,
+        id: `project-${Date.now()}`,
         name: projectName,
-        thumbnail: "/images/placeholder-1.jpg",
-        status: "draft",
-        lastUpdated: new Date().toISOString().split('T')[0],
-        progress: 0,
-        target: selectedTarget ? {
-          id: selectedTarget.id,
-          name: selectedTarget.name,
-          catalogId: selectedTarget.catalogId,
-          constellation: selectedTarget.constellation
-        } : undefined
+        target: selectedTarget,
+        telescope: selectedTelescope || undefined,
+        camera: selectedCamera || undefined,
+        filters: selectedFilters.length > 0 ? selectedFilters : undefined,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        status: 'draft',
+        steps: workflowSteps.map(step => ({
+          id: `step-${Date.now()}-${step.id}`,
+          name: step.name,
+          status: 'pending'
+        }))
       };
 
       // In a real app, we would save this to the database
@@ -325,11 +417,14 @@ export default function DashboardPage() {
       setProjectName('');
       setProjectDescription('');
       setSelectedTarget(null);
+      setSelectedTelescope(null);
+      setSelectedCamera(null);
+      setSelectedFilters([]);
     };
 
     return (
-      <div className="bg-gray-800/50 rounded-lg p-6 shadow-lg border border-gray-700">
-        <h3 className="text-xl font-semibold text-white mb-6">New Project</h3>
+      <div className="bg-gray-800 p-6 rounded-lg shadow-lg">
+        <h2 className="text-xl font-semibold text-white mb-4">Create New Project</h2>
         <div className="space-y-4">
           <div>
             <label htmlFor="projectName" className="block text-sm font-medium text-gray-300 mb-1">
@@ -340,63 +435,73 @@ export default function DashboardPage() {
               id="projectName"
               value={projectName}
               onChange={(e) => setProjectName(e.target.value)}
-              className="w-full bg-gray-900 border border-gray-700 rounded-md px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               placeholder="Enter project name"
             />
           </div>
-          
           <div>
-            <label htmlFor="projectTarget" className="block text-sm font-medium text-gray-300 mb-1">
-              Astronomical Target
+            <label className="block text-sm font-medium text-gray-300 mb-1">
+              Target
             </label>
-            <TargetAutocomplete 
+            <TargetAutocomplete
               onSelect={setSelectedTarget}
-              placeholder="Search for a target (e.g., Orion Nebula, M42, NGC 7000)"
+              placeholder="Search for a target..."
             />
-            {selectedTarget && (
-              <div className="mt-2 p-3 bg-gray-900/50 rounded-md border border-gray-700">
-                <div className="flex justify-between">
-                  <span className="font-medium text-white">{selectedTarget.name}</span>
-                  <span className="text-sm text-gray-400">{selectedTarget.catalogId}</span>
-                </div>
-                <div className="text-sm text-gray-400">
-                  {selectedTarget.constellation} • {selectedTarget.category}
-                </div>
-              </div>
-            )}
           </div>
-          
           <div>
-            <label htmlFor="projectDescription" className="block text-sm font-medium text-gray-300 mb-1">
-              Description
+            <label className="block text-sm font-medium text-gray-300 mb-1">
+              Telescope
             </label>
-            <textarea
-              id="projectDescription"
-              value={projectDescription}
-              onChange={(e) => setProjectDescription(e.target.value)}
-              rows={3}
-              className="w-full bg-gray-900 border border-gray-700 rounded-md px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Enter project description"
-            ></textarea>
+            <EquipmentAutocomplete
+              type="telescope"
+              onSelect={(item) => setSelectedTelescope(item as Telescope)}
+              placeholder="Search for a telescope..."
+            />
           </div>
-          
-          <div className="flex justify-end space-x-3 pt-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">
+              Camera
+            </label>
+            <EquipmentAutocomplete
+              type="camera"
+              onSelect={(item) => setSelectedCamera(item as Camera)}
+              placeholder="Search for a camera..."
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">
+              Filters (Optional)
+            </label>
+            <div className="space-y-2">
+              {selectedFilters.map((filter, index) => (
+                <div key={filter.id} className="flex items-center justify-between bg-gray-700 p-2 rounded-md">
+                  <span className="text-white">{filter.brand} {filter.model}</span>
+                  <button
+                    onClick={() => setSelectedFilters(filters => filters.filter((_, i) => i !== index))}
+                    className="text-gray-400 hover:text-white"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+              <EquipmentAutocomplete
+                type="filter"
+                onSelect={(filter) => setSelectedFilters([...selectedFilters, filter as Filter])}
+                placeholder="Search for a filter..."
+              />
+            </div>
+          </div>
+          <div className="flex justify-end space-x-3 mt-6">
             <button
-              className="px-4 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600 transition-colors"
-              onClick={() => {
-                setShowNewProject(false);
-                // Reset form fields
-                setProjectName('');
-                setProjectDescription('');
-                setSelectedTarget(null);
-              }}
+              onClick={() => setShowNewProject(false)}
+              className="px-4 py-2 text-sm font-medium text-gray-300 hover:text-white"
             >
               Cancel
             </button>
             <button
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
               onClick={handleCreateProject}
-              disabled={!projectName.trim()}
+              disabled={!projectName || !selectedTarget}
+              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Create Project
             </button>

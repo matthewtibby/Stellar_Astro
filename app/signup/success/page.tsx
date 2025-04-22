@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect } from 'react';
+import { useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCurrency } from '@/components/CurrencyProvider';
 import { formatPrice } from '@/lib/currency';
 import { CheckCircle, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
+import LoadingState from '@/app/components/LoadingState';
 
 // Define plan type
 interface PlanDetails {
@@ -58,7 +59,7 @@ const planDetails: Record<string, PlanDetails> = {
   }
 };
 
-export default function SuccessPage() {
+function SuccessPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { currency } = useCurrency();
@@ -162,5 +163,13 @@ export default function SuccessPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function SuccessPage() {
+  return (
+    <Suspense fallback={<LoadingState />}>
+      <SuccessPageContent />
+    </Suspense>
   );
 } 

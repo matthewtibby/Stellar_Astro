@@ -48,14 +48,16 @@ export default function Header() {
             ) : user?.isAuthenticated ? (
               <div className="flex items-center space-x-4">
                 <div className="flex items-center space-x-2">
-                  <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center">
-                    <span className="text-white text-sm font-medium">
-                      {user.fullName ? user.fullName.charAt(0).toUpperCase() : <User size={16} />}
+                  <Link href="/profile" className="flex items-center space-x-2 hover:opacity-80 transition-opacity">
+                    <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center">
+                      <span className="text-white text-sm font-medium">
+                        {user.fullName ? user.fullName.charAt(0).toUpperCase() : <User size={16} />}
+                      </span>
+                    </div>
+                    <span className="text-white text-sm hidden sm:inline-block">
+                      {user.fullName || 'User'}
                     </span>
-                  </div>
-                  <span className="text-white text-sm hidden sm:inline-block">
-                    {user.fullName || 'User'}
-                  </span>
+                  </Link>
                 </div>
                 <button
                   onClick={handleLogout}
