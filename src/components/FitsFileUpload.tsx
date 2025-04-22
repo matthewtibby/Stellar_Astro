@@ -5,11 +5,12 @@ import { useDropzone } from 'react-dropzone';
 import { Upload, X, CheckCircle, AlertCircle, File, Trash2 } from 'lucide-react';
 import { uploadRawFrame } from '@/src/utils/storage';
 import { FileType } from '@/src/types/store';
+import { validateFitsFile } from '@/src/utils/fitsValidation';
 
 interface FitsFileUploadProps {
   projectId: string;
-  fileType: FileType;
-  onUploadComplete: (filePaths: string[]) => void;
+  fileType?: FileType; // Make fileType optional
+  onUploadComplete: (filePaths: string[], selectedFileType: FileType) => void; // Update to include selected file type
   onError: (error: string) => void;
   maxFileSize?: number; // in bytes
 }
@@ -21,7 +22,7 @@ interface FileWithPreview extends File {
 
 const FitsFileUpload: React.FC<FitsFileUploadProps> = ({
   projectId,
-  fileType,
+  fileType: initialFileType, // Rename to initialFileType
   onUploadComplete,
   onError,
   maxFileSize = 100 * 1024 * 1024, // 100MB default
@@ -33,6 +34,7 @@ const FitsFileUpload: React.FC<FitsFileUploadProps> = ({
   const [files, setFiles] = useState<FileWithPreview[]>([]);
   const [error, setError] = useState<string>('');
   const [isSupabaseReady, setIsSupabaseReady] = useState(false);
+  const [selectedFileType, setSelectedFileType] = useState<FileType>(initialFileType || 'light'); // Add state for selected file type
   const uploadStartTime = useRef<number>(0);
   const totalFiles = useRef<number>(0);
   const uploadedFiles = useRef<number>(0);
@@ -73,6 +75,13 @@ const FitsFileUpload: React.FC<FitsFileUploadProps> = ({
     checkSupabase();
   }, [onError]);
 
+  // Update selectedFileType when initialFileType changes
+  useEffect(() => {
+    if (initialFileType) {
+      setSelectedFileType(initialFileType);
+    }
+  }, [initialFileType]);
+
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
@@ -81,11 +90,20 @@ const FitsFileUpload: React.FC<FitsFileUploadProps> = ({
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  const validateFile = (file: File): string | null => {
+  const validateFile = async (file: File): Promise<string | null> => {
     if (file.size > maxFileSize) {
       return `File size exceeds ${formatFileSize(maxFileSize)} limit`;
     }
-    return null;
+
+    try {
+      const validationResult = await validateFitsFile(file, selectedFileType);
+      if (!validationResult.valid) {
+        return validationResult.message;
+      }
+      return null;
+    } catch (error) {
+      return `Error validating FITS file: ${error instanceof Error ? error.message : 'Unknown error'}`;
+    }
   };
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
@@ -99,14 +117,14 @@ const FitsFileUpload: React.FC<FitsFileUploadProps> = ({
     const validFiles: FileWithPreview[] = [];
     const errors: string[] = [];
 
-    acceptedFiles.forEach(file => {
-      const error = validateFile(file);
+    for (const file of acceptedFiles) {
+      const error = await validateFile(file);
       if (error) {
         errors.push(`${file.name}: ${error}`);
       } else {
         validFiles.push(file);
       }
-    });
+    }
 
     if (errors.length > 0) {
       setError(errors.join('\n'));
@@ -114,84 +132,67 @@ const FitsFileUpload: React.FC<FitsFileUploadProps> = ({
     }
 
     setFiles(validFiles);
-  }, [maxFileSize, isSupabaseReady]);
+  }, [maxFileSize, isSupabaseReady, selectedFileType]);
 
   const handleUpload = async () => {
-    if (files.length === 0) return;
-    
-    if (!isSupabaseReady) {
-      setError('Storage service is currently unavailable. Please try again later.');
+    if (files.length === 0) {
+      setError('Please select at least one file to upload');
       return;
     }
 
     setIsUploading(true);
-    setUploadProgress(0);
+    setError('');
     uploadStartTime.current = Date.now();
     totalFiles.current = files.length;
     uploadedFiles.current = 0;
 
-    const filePaths: string[] = [];
-    let hasError = false;
+    const uploadedPaths: string[] = [];
 
-    for (const file of files) {
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      setCurrentFile(file.name);
+
       try {
-        setCurrentFile(file.name);
-        
-        // Create a progress callback for this file
-        const onFileProgress = (progress: number) => {
-          // Calculate overall progress including this file
-          const fileProgress = progress / totalFiles.current;
-          const previousFilesProgress = uploadedFiles.current / totalFiles.current;
-          const totalProgress = previousFilesProgress + fileProgress;
-          
-          setUploadProgress(totalProgress * 100);
-          
-          // Update estimated time
-          const elapsedTime = Date.now() - uploadStartTime.current;
-          const estimatedTotalTime = elapsedTime / (totalProgress);
-          const remainingTime = estimatedTotalTime - elapsedTime;
-          
-          if (remainingTime > 0) {
-            const minutes = Math.floor(remainingTime / 60000);
-            const seconds = Math.floor((remainingTime % 60000) / 1000);
-            setEstimatedTime(`${minutes}m ${seconds}s`);
+        const filePath = await uploadRawFrame(
+          projectId,
+          selectedFileType, // Use the selected file type
+          file,
+          (progress) => {
+            const totalProgress = ((uploadedFiles.current + progress / 100) / totalFiles.current) * 100;
+            setUploadProgress(totalProgress);
+            
+            // Calculate estimated time remaining
+            const elapsedTime = Date.now() - uploadStartTime.current;
+            const estimatedTotalTime = elapsedTime / (totalProgress / 100);
+            const remainingTime = estimatedTotalTime - elapsedTime;
+            
+            if (remainingTime > 0) {
+              const minutes = Math.floor(remainingTime / 60000);
+              const seconds = Math.floor((remainingTime % 60000) / 1000);
+              setEstimatedTime(`${minutes}m ${seconds}s`);
+            }
           }
-        };
-        
-        const filePath = await uploadRawFrame(projectId, fileType, file, onFileProgress);
-        
+        );
+
+        uploadedPaths.push(filePath);
         uploadedFiles.current++;
-        const totalProgress = (uploadedFiles.current / totalFiles.current) * 100;
-        setUploadProgress(totalProgress);
-
-        const elapsedTime = Date.now() - uploadStartTime.current;
-        const estimatedTotalTime = elapsedTime / (uploadedFiles.current / totalFiles.current);
-        const remainingTime = estimatedTotalTime - elapsedTime;
-        
-        if (remainingTime > 0) {
-          const minutes = Math.floor(remainingTime / 60000);
-          const seconds = Math.floor((remainingTime % 60000) / 1000);
-          setEstimatedTime(`${minutes}m ${seconds}s`);
-        }
-
-        filePaths.push(filePath);
-      } catch (error) {
-        hasError = true;
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        onError(`Failed to upload ${file.name}: ${errorMessage}`);
-        setError(`Failed to upload ${file.name}: ${errorMessage}`);
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
+        setError(`Error uploading ${file.name}: ${errorMessage}`);
+        onError(errorMessage);
+        break;
       }
     }
 
+    if (uploadedPaths.length > 0) {
+      onUploadComplete(uploadedPaths, selectedFileType); // Pass the selected file type
+    }
+
     setIsUploading(false);
-    setCurrentFile('');
+    setFiles([]);
     setUploadProgress(0);
     setEstimatedTime('');
-    setFiles([]);
-
-    if (!hasError && filePaths.length > 0) {
-      onUploadComplete(filePaths);
-    }
+    setCurrentFile('');
   };
 
   const removeFile = (index: number) => {
@@ -208,14 +209,12 @@ const FitsFileUpload: React.FC<FitsFileUploadProps> = ({
   });
 
   return (
-    <div className="w-full space-y-4">
+    <div className="space-y-4">
       <div
         {...getRootProps()}
-        className={`
-          border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors
-          ${isDragActive ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-gray-400'}
-          ${!isSupabaseReady ? 'opacity-50 cursor-not-allowed' : ''}
-        `}
+        className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+          isDragActive ? 'border-blue-500 bg-blue-500/10' : 'border-gray-600 hover:border-gray-500'
+        } ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}`}
       >
         <input {...getInputProps()} />
         <div className="flex flex-col items-center justify-center">
