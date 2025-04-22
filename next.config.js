@@ -11,6 +11,14 @@ const nextConfig = {
       {
         protocol: 'https',
         hostname: 'firstlightoptics.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'images.unsplash.com',
+      },
+      {
+        protocol: 'https',
+        hostname: '*.supabase.co',
       }
     ],
     dangerouslyAllowSVG: true,
@@ -20,9 +28,8 @@ const nextConfig = {
   env: {
     // Add any environment variables that need to be exposed to the browser
   },
-  experimental: {
-    serverActions: true,
-  },
+  // Server Actions are now available by default in Next.js 14
+  // No need to enable them in experimental
 }
 
 module.exports = nextConfig 
