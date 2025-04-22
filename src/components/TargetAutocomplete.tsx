@@ -35,9 +35,16 @@ export default function TargetAutocomplete({
     };
   }, []);
 
+  // Ensure dropdown is closed when a target is selected
+  useEffect(() => {
+    if (selectedTarget) {
+      setIsOpen(false);
+    }
+  }, [selectedTarget]);
+
   // Search for targets when query changes
   useEffect(() => {
-    if (query.length >= 2) {
+    if (query.length >= 2 && !selectedTarget) {
       const searchResults = searchTargets(query);
       setResults(searchResults);
       setIsOpen(true);
@@ -45,18 +52,20 @@ export default function TargetAutocomplete({
       setResults([]);
       setIsOpen(false);
     }
-  }, [query]);
+  }, [query, selectedTarget]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setQuery(e.target.value);
-    setSelectedTarget(null);
+    if (selectedTarget) {
+      setSelectedTarget(null);
+    }
   };
 
   const handleSelectTarget = (target: AstronomicalTarget) => {
     if (selectedTarget?.id === target.id) return; // Prevent double selection
     setSelectedTarget(target);
     setQuery(target.name);
-    setIsOpen(false);
+    setIsOpen(false); // Ensure dropdown is closed
     onSelect(target);
   };
 
@@ -77,7 +86,7 @@ export default function TargetAutocomplete({
           type="text"
           value={query}
           onChange={handleInputChange}
-          onFocus={() => query.length >= 2 && setIsOpen(true)}
+          onFocus={() => query.length >= 2 && !selectedTarget && setIsOpen(true)}
           placeholder={placeholder}
           className="block w-full pl-10 pr-10 py-2 border border-gray-700 rounded-md bg-gray-800 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
         />

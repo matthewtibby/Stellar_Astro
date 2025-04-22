@@ -78,10 +78,10 @@ export default function EquipmentSelector({
               {expandedTelescope === telescope.id && (
                 <div className="px-4 pb-4 border-t border-gray-700 pt-3">
                   <ul className="space-y-1 mb-3">
-                    {telescope.specs.map((spec, index) => (
+                    {Object.entries(telescope.specs).map(([key, value], index) => (
                       <li key={index} className="flex items-start text-sm text-gray-300">
                         <Check className="h-4 w-4 text-green-500 shrink-0 mt-0.5 mr-2" />
-                        <span>{spec}</span>
+                        <span>{key}: {value}</span>
                       </li>
                     ))}
                   </ul>
@@ -147,10 +147,10 @@ export default function EquipmentSelector({
               {expandedCamera === camera.id && (
                 <div className="px-4 pb-4 border-t border-gray-700 pt-3">
                   <ul className="space-y-1 mb-3">
-                    {camera.specs.map((spec, index) => (
+                    {Object.entries(camera.specs).map(([key, value], index) => (
                       <li key={index} className="flex items-start text-sm text-gray-300">
                         <Check className="h-4 w-4 text-green-500 shrink-0 mt-0.5 mr-2" />
-                        <span>{spec}</span>
+                        <span>{key}: {value}</span>
                       </li>
                     ))}
                   </ul>
