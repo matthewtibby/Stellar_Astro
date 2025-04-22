@@ -47,8 +47,12 @@ export interface PipelineState {
 export interface UserState {
   id: string;
   email: string;
+  username: string;
   fullName: string;
+  avatarUrl: string;
+  isLoading: boolean;
   isAuthenticated: boolean;
+  error: string | null;
   subscription: {
     type: 'free' | 'pro' | 'enterprise';
     projectLimit: number;

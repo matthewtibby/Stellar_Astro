@@ -11,6 +11,10 @@ const initialState: UserState = {
   isAuthenticated: false,
   isLoading: false,
   error: null,
+  subscription: {
+    type: 'free',
+    projectLimit: 3
+  }
 };
 
 export const useUserStore = create<UserStore>()(
