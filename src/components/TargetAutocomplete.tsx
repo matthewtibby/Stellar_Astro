@@ -53,6 +53,7 @@ export default function TargetAutocomplete({
   };
 
   const handleSelectTarget = (target: AstronomicalTarget) => {
+    if (selectedTarget?.id === target.id) return; // Prevent double selection
     setSelectedTarget(target);
     setQuery(target.name);
     setIsOpen(false);
