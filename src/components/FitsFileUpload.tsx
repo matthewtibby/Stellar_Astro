@@ -136,7 +136,29 @@ const FitsFileUpload: React.FC<FitsFileUploadProps> = ({
     for (const file of files) {
       try {
         setCurrentFile(file.name);
-        const filePath = await uploadRawFrame(projectId, fileType, file);
+        
+        // Create a progress callback for this file
+        const onFileProgress = (progress: number) => {
+          // Calculate overall progress including this file
+          const fileProgress = progress / totalFiles.current;
+          const previousFilesProgress = uploadedFiles.current / totalFiles.current;
+          const totalProgress = previousFilesProgress + fileProgress;
+          
+          setUploadProgress(totalProgress * 100);
+          
+          // Update estimated time
+          const elapsedTime = Date.now() - uploadStartTime.current;
+          const estimatedTotalTime = elapsedTime / (totalProgress);
+          const remainingTime = estimatedTotalTime - elapsedTime;
+          
+          if (remainingTime > 0) {
+            const minutes = Math.floor(remainingTime / 60000);
+            const seconds = Math.floor((remainingTime % 60000) / 1000);
+            setEstimatedTime(`${minutes}m ${seconds}s`);
+          }
+        };
+        
+        const filePath = await uploadRawFrame(projectId, fileType, file, onFileProgress);
         
         uploadedFiles.current++;
         const totalProgress = (uploadedFiles.current / totalFiles.current) * 100;
@@ -259,20 +281,33 @@ const FitsFileUpload: React.FC<FitsFileUploadProps> = ({
       )}
 
       {isUploading && (
-        <div className="space-y-2">
+        <div className="space-y-3 mt-4 p-4 bg-gray-800/50 rounded-lg border border-gray-700">
           <div className="flex items-center justify-between text-sm">
-            <span className="text-gray-400">{currentFile}</span>
+            <div className="flex items-center space-x-2">
+              <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent"></div>
+              <span className="text-gray-300">{currentFile}</span>
+            </div>
             <span className="text-gray-400">{estimatedTime} remaining</span>
           </div>
-          <div className="w-full bg-gray-700 rounded-full h-2 overflow-hidden">
-            <div
-              className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-              style={{ width: `${uploadProgress}%` }}
-            />
+          <div className="space-y-1">
+            <div className="w-full bg-gray-700 rounded-full h-2.5 overflow-hidden">
+              <div
+                className="bg-blue-500 h-2.5 rounded-full transition-all duration-300 ease-out"
+                style={{ 
+                  width: `${uploadProgress}%`,
+                  boxShadow: '0 0 10px rgba(59, 130, 246, 0.5)'
+                }}
+              />
+            </div>
+            <div className="flex justify-between text-xs">
+              <span className="text-gray-400">
+                {uploadedFiles.current} of {totalFiles.current} files
+              </span>
+              <span className="text-gray-400 font-medium">
+                {Math.round(uploadProgress)}%
+              </span>
+            </div>
           </div>
-          <p className="text-xs text-gray-500 text-right">
-            {uploadedFiles.current} of {totalFiles.current} files uploaded
-          </p>
         </div>
       )}
     </div>

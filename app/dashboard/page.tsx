@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useUserStore } from '@/src/store/user';
 import { 
@@ -33,6 +33,8 @@ import { Telescope, Camera as CameraType, Filter } from '@/src/data/equipmentDat
 import EquipmentAutocomplete from '@/src/components/EquipmentAutocomplete';
 import FitsFileUpload from '@/src/components/FitsFileUpload';
 import StepsIndicator from '@/src/components/StepsIndicator';
+import { FileManagementPanel } from '@/src/components/FileManagementPanel';
+import { type StorageFile } from '@/src/utils/storage';
 
 // Add these interfaces before the mockProjects array
 interface Project {
@@ -359,6 +361,8 @@ const DashboardPage = () => {
   const [uploadErrors, setUploadErrors] = useState<Record<string, string>>({});
   const params = useParams();
   const currentProjectId = Array.isArray(params.projectId) ? params.projectId[0] : params.projectId;
+  const [selectedFile, setSelectedFile] = useState<StorageFile | null>(null);
+  const fileListRef = useRef<{ refresh: () => void }>(null);
 
   useEffect(() => {
     // Redirect to login if not authenticated
@@ -881,6 +885,18 @@ const DashboardPage = () => {
         );
       default:
         return null;
+    }
+  };
+
+  const handleFileSelect = (file: StorageFile) => {
+    setSelectedFile(file);
+    // TODO: Implement file viewing logic
+  };
+
+  const handleUploadComplete = () => {
+    // Force refresh of file list
+    if (fileListRef.current) {
+      fileListRef.current.refresh();
     }
   };
 
