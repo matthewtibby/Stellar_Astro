@@ -4,6 +4,8 @@ create extension if not exists "uuid-ossp";
 -- Create custom types
 create type processing_status as enum ('pending', 'processing', 'completed', 'failed');
 create type file_type as enum ('light', 'dark', 'flat', 'bias', 'master', 'final');
+create type subscription_status as enum ('active', 'canceled', 'past_due', 'trialing', 'incomplete', 'incomplete_expired');
+create type subscription_plan as enum ('free', 'pro-monthly', 'pro-annual');
 
 -- Create profiles table (extends Supabase auth.users)
 create table profiles (
@@ -11,6 +13,39 @@ create table profiles (
   username text unique,
   full_name text,
   avatar_url text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Create subscriptions table
+create table subscriptions (
+  id uuid default uuid_generate_v4() primary key,
+  user_id uuid references profiles(id) on delete cascade not null,
+  stripe_customer_id text,
+  stripe_subscription_id text,
+  plan subscription_plan default 'free' not null,
+  status subscription_status default 'active' not null,
+  current_period_start timestamp with time zone,
+  current_period_end timestamp with time zone,
+  cancel_at_period_end boolean default false,
+  canceled_at timestamp with time zone,
+  trial_start timestamp with time zone,
+  trial_end timestamp with time zone,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Create payment_methods table
+create table payment_methods (
+  id uuid default uuid_generate_v4() primary key,
+  user_id uuid references profiles(id) on delete cascade not null,
+  stripe_payment_method_id text not null,
+  type text not null,
+  card_brand text,
+  card_last4 text,
+  card_exp_month integer,
+  card_exp_year integer,
+  is_default boolean default false,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
@@ -86,6 +121,8 @@ create table likes (
 
 -- Create RLS (Row Level Security) policies
 alter table profiles enable row level security;
+alter table subscriptions enable row level security;
+alter table payment_methods enable row level security;
 alter table projects enable row level security;
 alter table fits_files enable row level security;
 alter table processing_steps enable row level security;
@@ -101,6 +138,32 @@ create policy "Public profiles are viewable by everyone"
 create policy "Users can update their own profile"
   on profiles for update
   using (auth.uid() = id);
+
+-- Subscriptions policies
+create policy "Users can view their own subscriptions"
+  on subscriptions for select
+  using (auth.uid() = user_id);
+
+create policy "Users can update their own subscriptions"
+  on subscriptions for update
+  using (auth.uid() = user_id);
+
+-- Payment methods policies
+create policy "Users can view their own payment methods"
+  on payment_methods for select
+  using (auth.uid() = user_id);
+
+create policy "Users can insert their own payment methods"
+  on payment_methods for insert
+  with check (auth.uid() = user_id);
+
+create policy "Users can update their own payment methods"
+  on payment_methods for update
+  using (auth.uid() = user_id);
+
+create policy "Users can delete their own payment methods"
+  on payment_methods for delete
+  using (auth.uid() = user_id);
 
 -- Projects policies
 create policy "Projects are viewable by owner and if public"
@@ -204,6 +267,11 @@ returns trigger as $$
 begin
   insert into public.profiles (id, username, full_name)
   values (new.id, new.raw_user_meta_data->>'username', new.raw_user_meta_data->>'full_name');
+  
+  -- Create a free subscription for new users
+  insert into public.subscriptions (user_id)
+  values (new.id);
+  
   return new;
 end;
 $$ language plpgsql security definer;
@@ -224,6 +292,14 @@ $$ language plpgsql;
 -- Add updated_at triggers to relevant tables
 create trigger handle_updated_at
   before update on profiles
+  for each row execute procedure public.handle_updated_at();
+
+create trigger handle_updated_at
+  before update on subscriptions
+  for each row execute procedure public.handle_updated_at();
+
+create trigger handle_updated_at
+  before update on payment_methods
   for each row execute procedure public.handle_updated_at();
 
 create trigger handle_updated_at
