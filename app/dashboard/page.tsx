@@ -239,6 +239,7 @@ const FileUploadSection = ({ projectId }: { projectId: string }) => {
     flat: [],
     bias: [],
   });
+  const [activeTab, setActiveTab] = useState<string>('light');
 
   const handleUploadComplete = (fileType: string, filePaths: string[]) => {
     setUploadedFiles(prev => ({
@@ -252,86 +253,65 @@ const FileUploadSection = ({ projectId }: { projectId: string }) => {
     // You can add toast notification here if needed
   };
 
+  const fileTypes = [
+    { id: 'light', label: 'Light Frames' },
+    { id: 'dark', label: 'Dark Frames' },
+    { id: 'flat', label: 'Flat Frames' },
+    { id: 'bias', label: 'Bias Frames' },
+  ];
+
   return (
-    <div className="space-y-8">
-      <div className="space-y-4">
-        <h3 className="text-lg font-medium text-gray-200">Light Frames</h3>
-        <FitsFileUpload
-          projectId={projectId}
-          fileType="light"
-          onUploadComplete={(paths) => handleUploadComplete('light', paths)}
-          onError={handleUploadError}
-        />
-        {uploadedFiles.light.length > 0 && (
-          <div className="mt-2">
-            <p className="text-sm text-gray-400">Uploaded files:</p>
-            <ul className="mt-1 space-y-1">
-              {uploadedFiles.light.map((path, index) => (
-                <li key={index} className="text-sm text-gray-500">{path}</li>
-              ))}
-            </ul>
-          </div>
-        )}
+    <div className="space-y-6">
+      {/* Tab Navigation */}
+      <div className="border-b border-gray-700">
+        <nav className="flex space-x-1" aria-label="File type tabs">
+          {fileTypes.map((type) => (
+            <button
+              key={type.id}
+              onClick={() => setActiveTab(type.id)}
+              className={`
+                py-2 px-4 text-sm font-medium rounded-t-lg
+                ${activeTab === type.id
+                  ? 'bg-blue-600 text-white'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+                }
+              `}
+            >
+              {type.label}
+            </button>
+          ))}
+        </nav>
       </div>
 
-      <div className="space-y-4">
-        <h3 className="text-lg font-medium text-gray-200">Dark Frames</h3>
-        <FitsFileUpload
-          projectId={projectId}
-          fileType="dark"
-          onUploadComplete={(paths) => handleUploadComplete('dark', paths)}
-          onError={handleUploadError}
-        />
-        {uploadedFiles.dark.length > 0 && (
-          <div className="mt-2">
-            <p className="text-sm text-gray-400">Uploaded files:</p>
-            <ul className="mt-1 space-y-1">
-              {uploadedFiles.dark.map((path, index) => (
-                <li key={index} className="text-sm text-gray-500">{path}</li>
-              ))}
-            </ul>
+      {/* Tab Content */}
+      <div className="pt-4">
+        {fileTypes.map((type) => (
+          <div
+            key={type.id}
+            className={activeTab === type.id ? 'block' : 'hidden'}
+          >
+            <FitsFileUpload
+              projectId={projectId}
+              fileType={type.id as any}
+              onUploadComplete={(paths) => handleUploadComplete(type.id, paths)}
+              onError={handleUploadError}
+            />
+            
+            {uploadedFiles[type.id].length > 0 && (
+              <div className="mt-4 p-3 bg-gray-800/50 rounded-lg border border-gray-700">
+                <p className="text-sm font-medium text-gray-300 mb-2">Uploaded files:</p>
+                <ul className="space-y-1 max-h-40 overflow-y-auto">
+                  {uploadedFiles[type.id].map((path, index) => (
+                    <li key={index} className="text-sm text-gray-400 flex items-center">
+                      <File size={14} className="mr-2 text-gray-500" />
+                      <span className="truncate">{path.split('/').pop()}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
-        )}
-      </div>
-
-      <div className="space-y-4">
-        <h3 className="text-lg font-medium text-gray-200">Flat Frames</h3>
-        <FitsFileUpload
-          projectId={projectId}
-          fileType="flat"
-          onUploadComplete={(paths) => handleUploadComplete('flat', paths)}
-          onError={handleUploadError}
-        />
-        {uploadedFiles.flat.length > 0 && (
-          <div className="mt-2">
-            <p className="text-sm text-gray-400">Uploaded files:</p>
-            <ul className="mt-1 space-y-1">
-              {uploadedFiles.flat.map((path, index) => (
-                <li key={index} className="text-sm text-gray-500">{path}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </div>
-
-      <div className="space-y-4">
-        <h3 className="text-lg font-medium text-gray-200">Bias Frames</h3>
-        <FitsFileUpload
-          projectId={projectId}
-          fileType="bias"
-          onUploadComplete={(paths) => handleUploadComplete('bias', paths)}
-          onError={handleUploadError}
-        />
-        {uploadedFiles.bias.length > 0 && (
-          <div className="mt-2">
-            <p className="text-sm text-gray-400">Uploaded files:</p>
-            <ul className="mt-1 space-y-1">
-              {uploadedFiles.bias.map((path, index) => (
-                <li key={index} className="text-sm text-gray-500">{path}</li>
-              ))}
-            </ul>
-          </div>
-        )}
+        ))}
       </div>
     </div>
   );
@@ -370,6 +350,24 @@ const DashboardPage = () => {
   const currentProjectId = Array.isArray(params.projectId) ? params.projectId[0] : params.projectId;
   const [selectedFile, setSelectedFile] = useState<StorageFile | null>(null);
   const fileListRef = useRef<{ refresh: () => void }>(null);
+
+  // Function to check if there are any uploaded files
+  const checkForUploadedFiles = () => {
+    const hasFiles = Object.values(uploadedFiles).some(files => files.length > 0);
+    setHasUploadedFiles(hasFiles);
+    
+    // If files are uploaded, collapse other sections
+    if (hasFiles) {
+      setIsViewExpanded(false);
+      setIsWorkflowExpanded(false);
+      setIsFilesExpanded(true);
+    }
+  };
+
+  // Effect to check for uploaded files on component mount
+  useEffect(() => {
+    checkForUploadedFiles();
+  }, []);
 
   useEffect(() => {
     // Redirect to login if not authenticated
@@ -693,44 +691,10 @@ const DashboardPage = () => {
   };
 
   const renderFileUpload = () => {
-    // Define the handleUploadComplete function at the component level
-    const handleUploadComplete = (filePaths: string[]) => {
-      // Since we don't have the fileType here, we'll need to determine it
-      // For now, we'll assume it's a light frame
-      const fileType = 'light';
-      
-      setUploadedFiles(prev => ({
-        ...prev,
-        [fileType]: [...prev[fileType], ...filePaths]
-      }));
-      
-      // Force refresh of file list
-      if (fileListRef.current) {
-        fileListRef.current.refresh();
-      }
-      
-      // Check for uploaded files and update UI accordingly
-      checkForUploadedFiles();
-    };
-
-    const handleUploadError = (error: string) => {
-      // Since we don't have the fileType here, we'll use a default
-      const fileType = 'light';
-      setUploadErrors(prev => ({
-        ...prev,
-        [fileType]: error
-      }));
-    };
-
     return (
       <div className="bg-gray-800/50 rounded-lg p-6 shadow-lg border border-gray-700">
         <h3 className="text-xl font-semibold text-white mb-6">Upload Files</h3>
-        <FitsFileUpload 
-          projectId={currentProjectId || 'temp-project'} 
-          fileType="light"
-          onUploadComplete={handleUploadComplete}
-          onError={handleUploadError}
-        />
+        <FileUploadSection projectId={currentProjectId || 'temp-project'} />
       </div>
     );
   };
@@ -805,24 +769,6 @@ const DashboardPage = () => {
     setSelectedFile(file);
     // TODO: Implement file viewing logic
   };
-
-  // Add this function to check if there are any uploaded files
-  const checkForUploadedFiles = () => {
-    const hasFiles = Object.values(uploadedFiles).some(files => files.length > 0);
-    setHasUploadedFiles(hasFiles);
-    
-    // If files are uploaded, collapse other sections
-    if (hasFiles) {
-      setIsViewExpanded(false);
-      setIsWorkflowExpanded(false);
-      setIsFilesExpanded(true);
-    }
-  };
-
-  // Add this effect to check for uploaded files on component mount
-  useEffect(() => {
-    checkForUploadedFiles();
-  }, []);
 
   // Add this function to render the Files box
   const renderFilesBox = () => {

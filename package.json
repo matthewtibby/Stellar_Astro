@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "./start-dev.sh",
+    "dev:next": "next dev",
+    "dev:python": "cd python-worker && ./run.sh",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
