@@ -3,16 +3,25 @@ const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
   images: {
-    domains: ['localhost'],
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: '**',
+        hostname: 'placehold.co',
       },
+      {
+        protocol: 'https',
+        hostname: 'firstlightoptics.com',
+      }
     ],
+    dangerouslyAllowSVG: true,
+    contentDispositionType: 'attachment',
+    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
   env: {
     // Add any environment variables that need to be exposed to the browser
+  },
+  experimental: {
+    serverActions: true,
   },
 }
 

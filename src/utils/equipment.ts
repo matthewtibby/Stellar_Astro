@@ -5,104 +5,97 @@ export interface EquipmentItem {
   imageUrl: string;
   category: 'telescope' | 'camera';
   description: string;
-  specs: string[];
+  specs: Record<string, string>;
 }
 
 // Mock data based on First Light Optics products
 export const telescopes: EquipmentItem[] = [
   {
-    id: 't1',
-    name: 'Sky-Watcher Evostar 72ED DS-Pro',
-    price: 299,
-    imageUrl: 'https://www.firstlightoptics.com/media/catalog/product/cache/1/image/9df78eab33525d08d6e5fb8d27136e95/e/v/evostar-72ed-ds-pro-1.jpg',
-    category: 'telescope',
-    description: 'A high-quality 72mm ED doublet refractor telescope',
-    specs: [
-      '72mm aperture',
-      '420mm focal length',
-      'f/5.8 focal ratio',
-      'ED glass for reduced chromatic aberration',
-      '2" focuser with 1.25" adapter'
-    ]
-  },
-  {
-    id: 't2',
-    name: 'Sky-Watcher Explorer-130PDS',
-    price: 199,
-    imageUrl: 'https://www.firstlightoptics.com/media/catalog/product/cache/1/image/9df78eab33525d08d6e5fb8d27136e95/e/x/explorer-130pds-1.jpg',
-    category: 'telescope',
-    description: 'A versatile 130mm Newtonian reflector telescope',
-    specs: [
-      '130mm aperture',
-      '650mm focal length',
-      'f/5 focal ratio',
-      'Parabolic mirror',
-      'Dual-speed 2" focuser'
-    ]
-  },
-  {
-    id: 't3',
+    id: 'telescope-1',
     name: 'William Optics GT81',
-    price: 599,
-    imageUrl: 'https://www.firstlightoptics.com/media/catalog/product/cache/1/image/9df78eab33525d08d6e5fb8d27136e95/w/i/william-optics-gt81-1.jpg',
+    price: 1199.00,
+    imageUrl: 'https://placehold.co/600x400.png?text=William+Optics+GT81',
     category: 'telescope',
-    description: 'Premium 81mm triplet apochromatic refractor',
-    specs: [
-      '81mm aperture',
-      '382mm focal length',
-      'f/4.7 focal ratio',
-      'Triplet design with FPL-53 glass',
-      'Rotating focuser with 2" adapter'
-    ]
+    description: 'A versatile 81mm f/5.9 apochromatic refractor perfect for both visual and photographic use.',
+    specs: {
+      'Aperture': '81mm',
+      'Focal Length': '478mm',
+      'Focal Ratio': 'f/5.9',
+      'Weight': '3.2kg'
+    }
+  },
+  {
+    id: 'telescope-2',
+    name: 'Sky-Watcher Esprit 100ED',
+    price: 2499.00,
+    imageUrl: 'https://placehold.co/600x400.png?text=Sky-Watcher+Esprit+100ED',
+    category: 'telescope',
+    description: 'Professional-grade 100mm f/5.5 triplet apochromatic refractor with exceptional color correction.',
+    specs: {
+      'Aperture': '100mm',
+      'Focal Length': '550mm',
+      'Focal Ratio': 'f/5.5',
+      'Weight': '5kg'
+    }
+  },
+  {
+    id: 'telescope-3',
+    name: 'Celestron EdgeHD 8',
+    price: 1999.00,
+    imageUrl: 'https://placehold.co/600x400.png?text=Celestron+EdgeHD+8',
+    category: 'telescope',
+    description: '8-inch Schmidt-Cassegrain telescope with EdgeHD optics for superior edge correction.',
+    specs: {
+      'Aperture': '203.2mm',
+      'Focal Length': '2032mm',
+      'Focal Ratio': 'f/10',
+      'Weight': '6.8kg'
+    }
   }
 ];
 
 export const cameras: EquipmentItem[] = [
   {
-    id: 'c1',
-    name: 'ZWO ASI 533MC Pro',
-    price: 399,
-    imageUrl: 'https://www.firstlightoptics.com/media/catalog/product/cache/1/image/9df78eab33525d08d6e5fb8d27136e95/z/w/zwo-asi533mc-pro-1.jpg',
+    id: 'camera-1',
+    name: 'ZWO ASI533MC Pro',
+    price: 999.00,
+    imageUrl: 'https://placehold.co/600x400.png?text=ZWO+ASI533MC+Pro',
     category: 'camera',
-    description: 'One-shot color CMOS camera for deep sky imaging',
-    specs: [
-      'APS-C sized sensor',
-      '11.3MP resolution',
-      'Cooled to -35°C below ambient',
-      'USB 3.0 interface',
-      'Built-in filter drawer'
-    ]
+    description: 'One-shot color astronomy camera with excellent cooling and low noise performance.',
+    specs: {
+      'Sensor': 'Sony IMX533',
+      'Resolution': '9MP',
+      'Pixel Size': '3.76µm',
+      'Cooling': '-35°C below ambient'
+    }
   },
   {
-    id: 'c2',
-    name: 'ZWO ASI 2600MM Pro',
-    price: 1299,
-    imageUrl: 'https://www.firstlightoptics.com/media/catalog/product/cache/1/image/9df78eab33525d08d6e5fb8d27136e95/z/w/zwo-asi2600mm-pro-1.jpg',
+    id: 'camera-2',
+    name: 'QHY268M',
+    price: 2499.00,
+    imageUrl: 'https://placehold.co/600x400.png?text=QHY268M',
     category: 'camera',
-    description: 'Monochrome CMOS camera for professional astrophotography',
-    specs: [
-      'APS-C sized sensor',
-      '26MP resolution',
-      'Cooled to -35°C below ambient',
-      'USB 3.0 interface',
-      'Built-in filter drawer',
-      'Compatible with 1.25" and 2" filters'
-    ]
+    description: 'Professional monochrome astronomy camera with back-illuminated sensor.',
+    specs: {
+      'Sensor': 'Sony IMX571',
+      'Resolution': '26MP',
+      'Pixel Size': '3.76µm',
+      'Cooling': '-40°C below ambient'
+    }
   },
   {
-    id: 'c3',
-    name: 'ZWO ASI 120MM Mini',
-    price: 149,
-    imageUrl: 'https://www.firstlightoptics.com/media/catalog/product/cache/1/image/9df78eab33525d08d6e5fb8d27136e95/z/w/zwo-asi120mm-mini-1.jpg',
+    id: 'camera-3',
+    name: 'ZWO ASI2600MM Pro',
+    price: 3299.00,
+    imageUrl: 'https://placehold.co/600x400.png?text=ZWO+ASI2600MM+Pro',
     category: 'camera',
-    description: 'Compact monochrome camera for planetary imaging',
-    specs: [
-      '1.2MP resolution',
-      'USB 2.0 interface',
-      'Small form factor',
-      'Ideal for planetary and lunar imaging',
-      'Compatible with 1.25" filters'
-    ]
+    description: 'High-end monochrome camera with large sensor and excellent cooling.',
+    specs: {
+      'Sensor': 'Sony IMX571',
+      'Resolution': '26MP',
+      'Pixel Size': '3.76µm',
+      'Cooling': '-45°C below ambient'
+    }
   }
 ];
 
