@@ -537,7 +537,7 @@ export default function DashboardClient({ user, projects }: { user: { id: string
                                     updatedAt={project.updatedAt}
                                     onDelete={() => handleDeleteProject(project.id)}
                                     onProjectDeleted={handleProjectDeleted}
-                                    onClick={() => setActiveProject(project)}
+                                    onClick={() => router.push(`/dashboard/${project.id}/upload`)}
                                   />
                                 ))
                               )}
@@ -567,7 +567,7 @@ export default function DashboardClient({ user, projects }: { user: { id: string
                                     updatedAt={project.updatedAt}
                                     onDelete={() => handleDeleteProject(project.id)}
                                     onProjectDeleted={handleProjectDeleted}
-                                    onClick={() => setActiveProject(project)}
+                                    onClick={() => router.push(`/dashboard/${project.id}/upload`)}
                                   />
                                 ))
                               )}
