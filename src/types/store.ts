@@ -1,5 +1,5 @@
 export type ProcessingStatus = 'pending' | 'processing' | 'completed' | 'failed';
-export type FileType = 'light' | 'dark' | 'flat' | 'bias' | 'master' | 'final';
+export type FileType = 'light' | 'dark' | 'bias' | 'flat' | 'master-dark' | 'master-bias' | 'master-flat' | 'calibrated' | 'stacked' | 'aligned' | 'pre-processed' | 'post-processed';
 
 export interface FitsFile {
   id: string;

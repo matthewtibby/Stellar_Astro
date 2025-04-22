@@ -1,72 +1,118 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { FileType } from '@/src/types/store';
 
-// Initialize Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
+// Get environment variables
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-// Define storage bucket names
+// Initialize Supabase client with error handling
+let supabase: SupabaseClient | null = null;
+let supabaseError: string | null = null;
+
+try {
+  if (!supabaseUrl) {
+    throw new Error('NEXT_PUBLIC_SUPABASE_URL is not configured in environment variables.');
+  }
+  
+  if (!supabaseAnonKey) {
+    throw new Error('NEXT_PUBLIC_SUPABASE_ANON_KEY is not configured in environment variables.');
+  }
+  
+  supabase = createClient(supabaseUrl, supabaseAnonKey);
+  console.log('Supabase client initialized successfully');
+} catch (error) {
+  console.error('Failed to initialize Supabase client:', error);
+  supabaseError = error instanceof Error ? error.message : 'Unknown error initializing Supabase';
+}
+
+// Storage bucket names
 export const STORAGE_BUCKETS = {
-  PROFILE_PICS: 'profile-pictures',
+  PROFILE_PICTURES: 'profile-pictures',
   RAW_FRAMES: 'raw-frames',
   MASTER_FRAMES: 'master-frames',
   CALIBRATED_FRAMES: 'calibrated-frames',
   STACKED_FRAMES: 'stacked-frames',
   PRE_PROCESSED: 'pre-processed',
-  POST_PROCESSED: 'post-processed'
-};
+  POST_PROCESSED: 'post-processed',
+} as const;
 
-// Define file type folders
-export const FILE_TYPE_FOLDERS = {
-  LIGHT: 'light',
-  DARK: 'dark',
-  BIAS: 'bias',
-  FLAT: 'flat',
-  MASTER_DARK: 'master-dark',
-  MASTER_BIAS: 'master-bias',
-  MASTER_FLAT: 'master-flat',
-  CALIBRATED: 'calibrated',
-  STACKED: 'stacked',
-  ALIGNED: 'aligned',
-  PRE_PROCESSED: 'pre-processed',
-  POST_PROCESSED: 'post-processed'
+// File type folders
+export const FILE_TYPE_FOLDERS: Record<FileType, string> = {
+  'light': 'light',
+  'dark': 'dark',
+  'bias': 'bias',
+  'flat': 'flat',
+  'master-dark': 'master-dark',
+  'master-bias': 'master-bias',
+  'master-flat': 'master-flat',
+  'calibrated': 'calibrated',
+  'stacked': 'stacked',
+  'aligned': 'aligned',
+  'pre-processed': 'pre-processed',
+  'post-processed': 'post-processed',
+} as const;
+
+// Helper function to check if Supabase is available
+const checkSupabase = () => {
+  if (!supabase) {
+    throw new Error(supabaseError || 'Storage service is currently unavailable. Please try again later.');
+  }
+  return supabase;
 };
 
 // Profile picture functions
 export const uploadProfilePicture = async (userId: string, file: File): Promise<string> => {
+  const client = checkSupabase();
   const fileExt = file.name.split('.').pop();
   const filePath = `${userId}/profile.${fileExt}`;
   
-  const { data, error } = await supabase.storage
-    .from(STORAGE_BUCKETS.PROFILE_PICS)
+  const { data, error } = await client.storage
+    .from(STORAGE_BUCKETS.PROFILE_PICTURES)
     .upload(filePath, file, { upsert: true });
   
   if (error) throw error;
   
-  const { data: { publicUrl } } = supabase.storage
-    .from(STORAGE_BUCKETS.PROFILE_PICS)
+  const { data: { publicUrl } } = client.storage
+    .from(STORAGE_BUCKETS.PROFILE_PICTURES)
     .getPublicUrl(filePath);
   
   return publicUrl;
 };
 
 // Raw frames functions
-export const uploadRawFrame = async (
-  projectId: string, 
-  fileType: 'light' | 'dark' | 'bias' | 'flat', 
-  file: File
-): Promise<string> => {
-  const fileExt = file.name.split('.').pop();
-  const filePath = `${projectId}/${fileType}/${file.name}`;
-  
-  const { data, error } = await supabase.storage
-    .from(STORAGE_BUCKETS.RAW_FRAMES)
-    .upload(filePath, file);
-  
-  if (error) throw error;
-  
-  return filePath;
-};
+export type UploadProgressCallback = (progress: number) => void;
+
+export async function uploadRawFrame(
+  projectId: string,
+  fileType: FileType,
+  file: File,
+  onProgress?: UploadProgressCallback
+): Promise<string> {
+  try {
+    const client = checkSupabase();
+    const filePath = `${projectId}/${FILE_TYPE_FOLDERS[fileType]}/${file.name}`;
+    
+    const { error: uploadError, data } = await client.storage
+      .from(STORAGE_BUCKETS.RAW_FRAMES)
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: false,
+      });
+
+    if (uploadError) {
+      throw uploadError;
+    }
+
+    if (!data?.path) {
+      throw new Error('Upload failed: No file path returned');
+    }
+
+    return data.path;
+  } catch (error) {
+    console.error('Error uploading raw frame:', error);
+    throw error;
+  }
+}
 
 // Master frames functions
 export const uploadMasterFrame = async (
@@ -74,10 +120,11 @@ export const uploadMasterFrame = async (
   masterType: 'master-dark' | 'master-bias' | 'master-flat', 
   file: File
 ): Promise<string> => {
+  const client = checkSupabase();
   const fileExt = file.name.split('.').pop();
   const filePath = `${projectId}/${masterType}/${file.name}`;
   
-  const { data, error } = await supabase.storage
+  const { data, error } = await client.storage
     .from(STORAGE_BUCKETS.MASTER_FRAMES)
     .upload(filePath, file);
   
@@ -91,10 +138,11 @@ export const uploadCalibratedFrame = async (
   projectId: string, 
   file: File
 ): Promise<string> => {
+  const client = checkSupabase();
   const fileExt = file.name.split('.').pop();
-  const filePath = `${projectId}/${FILE_TYPE_FOLDERS.CALIBRATED}/${file.name}`;
+  const filePath = `${projectId}/${FILE_TYPE_FOLDERS.calibrated}/${file.name}`;
   
-  const { data, error } = await supabase.storage
+  const { data, error } = await client.storage
     .from(STORAGE_BUCKETS.CALIBRATED_FRAMES)
     .upload(filePath, file);
   
@@ -108,10 +156,11 @@ export const uploadStackedFrame = async (
   projectId: string, 
   file: File
 ): Promise<string> => {
+  const client = checkSupabase();
   const fileExt = file.name.split('.').pop();
-  const filePath = `${projectId}/${FILE_TYPE_FOLDERS.STACKED}/${file.name}`;
+  const filePath = `${projectId}/${FILE_TYPE_FOLDERS.stacked}/${file.name}`;
   
-  const { data, error } = await supabase.storage
+  const { data, error } = await client.storage
     .from(STORAGE_BUCKETS.STACKED_FRAMES)
     .upload(filePath, file);
   
@@ -122,41 +171,52 @@ export const uploadStackedFrame = async (
 
 // Pre-processed image functions
 export const uploadPreProcessedImage = async (
-  projectId: string, 
+  projectId: string,
   file: File
 ): Promise<string> => {
+  const client = checkSupabase();
   const fileExt = file.name.split('.').pop();
-  const filePath = `${projectId}/${FILE_TYPE_FOLDERS.PRE_PROCESSED}/${file.name}`;
+  const filePath = `${projectId}/${FILE_TYPE_FOLDERS['pre-processed']}/${file.name}`;
   
-  const { data, error } = await supabase.storage
+  const { data, error } = await client.storage
     .from(STORAGE_BUCKETS.PRE_PROCESSED)
-    .upload(filePath, file);
+    .upload(filePath, file, { upsert: true });
   
   if (error) throw error;
   
-  return filePath;
+  const { data: { publicUrl } } = client.storage
+    .from(STORAGE_BUCKETS.PRE_PROCESSED)
+    .getPublicUrl(filePath);
+  
+  return publicUrl;
 };
 
 // Post-processed image functions
 export const uploadPostProcessedImage = async (
-  projectId: string, 
+  projectId: string,
   file: File
 ): Promise<string> => {
+  const client = checkSupabase();
   const fileExt = file.name.split('.').pop();
-  const filePath = `${projectId}/${FILE_TYPE_FOLDERS.POST_PROCESSED}/${file.name}`;
+  const filePath = `${projectId}/${FILE_TYPE_FOLDERS['post-processed']}/${file.name}`;
   
-  const { data, error } = await supabase.storage
+  const { data, error } = await client.storage
     .from(STORAGE_BUCKETS.POST_PROCESSED)
-    .upload(filePath, file);
+    .upload(filePath, file, { upsert: true });
   
   if (error) throw error;
   
-  return filePath;
+  const { data: { publicUrl } } = client.storage
+    .from(STORAGE_BUCKETS.POST_PROCESSED)
+    .getPublicUrl(filePath);
+  
+  return publicUrl;
 };
 
 // Generic download function
 export const downloadFile = async (bucket: string, filePath: string): Promise<Blob> => {
-  const { data, error } = await supabase.storage
+  const client = checkSupabase();
+  const { data, error } = await client.storage
     .from(bucket)
     .download(filePath);
   
@@ -166,21 +226,40 @@ export const downloadFile = async (bucket: string, filePath: string): Promise<Bl
 };
 
 // Generic delete function
-export const deleteFile = async (bucket: string, filePath: string): Promise<void> => {
-  const { error } = await supabase.storage
-    .from(bucket)
+export async function deleteFitsFile(filePath: string): Promise<void> {
+  const client = checkSupabase();
+  const { error } = await client.storage
+    .from('fits-files')
     .remove([filePath]);
-  
-  if (error) throw error;
-};
+
+  if (error) {
+    throw new Error(`Failed to delete file: ${error.message}`);
+  }
+}
 
 // List files in a project folder
-export const listProjectFiles = async (bucket: string, projectId: string): Promise<string[]> => {
-  const { data, error } = await supabase.storage
-    .from(bucket)
+export async function listProjectFiles(projectId: string): Promise<string[]> {
+  const client = checkSupabase();
+  const { data, error } = await client.storage
+    .from('fits-files')
     .list(projectId);
-  
-  if (error) throw error;
-  
-  return data.map(file => file.name);
-}; 
+
+  if (error) {
+    throw new Error(`Failed to list files: ${error.message}`);
+  }
+
+  return data.map(file => `${projectId}/${file.name}`);
+}
+
+export async function getFitsFileUrl(filePath: string): Promise<string> {
+  const client = checkSupabase();
+  const { data } = await client.storage
+    .from('fits-files')
+    .createSignedUrl(filePath, 3600); // URL expires in 1 hour
+
+  if (!data?.signedUrl) {
+    throw new Error('Failed to generate signed URL');
+  }
+
+  return data.signedUrl;
+}

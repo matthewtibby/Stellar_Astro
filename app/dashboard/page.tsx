@@ -1,14 +1,38 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { useUserStore } from '@/src/store/user';
-import { User, Plus, Grid, List, Image, Settings, Share2, CheckCircle, ChevronRight, ChevronDown, FolderOpen, Upload, Layers, Sliders, Share, LogOut, X } from 'lucide-react';
+import { 
+  User, 
+  Plus, 
+  Grid, 
+  List, 
+  Image, 
+  Settings, 
+  Share2, 
+  CheckCircle, 
+  ChevronRight, 
+  ChevronDown, 
+  FolderOpen, 
+  Upload, 
+  Layers, 
+  Sliders, 
+  Share, 
+  LogOut, 
+  X, 
+  FileText, 
+  Camera as CameraIcon, 
+  Star,
+  LucideIcon 
+} from 'lucide-react';
 import Link from 'next/link';
 import TargetAutocomplete from '@/components/TargetAutocomplete';
 import { AstronomicalTarget } from '@/src/data/astronomicalTargets';
-import { Telescope, Camera, Filter } from '@/src/data/equipmentDatabase';
+import { Telescope, Camera as CameraType, Filter } from '@/src/data/equipmentDatabase';
 import EquipmentAutocomplete from '@/src/components/EquipmentAutocomplete';
+import FitsFileUpload from '@/src/components/FitsFileUpload';
+import StepsIndicator from '@/src/components/StepsIndicator';
 
 // Add these interfaces before the mockProjects array
 interface Project {
@@ -16,7 +40,7 @@ interface Project {
   name: string;
   target: AstronomicalTarget;
   telescope?: Telescope;
-  camera?: Camera;
+  camera?: CameraType;
   filters?: Filter[];
   createdAt: Date;
   updatedAt: Date;
@@ -30,9 +54,9 @@ interface Project {
 }
 
 interface WorkflowStep {
-  id: string;
+  id: number;
   name: string;
-  icon: React.ElementType;
+  icon: LucideIcon;
 }
 
 // Add this interface before the Project interface
@@ -171,13 +195,31 @@ const mockProjects: Project[] = [
 
 // Workflow steps
 const workflowSteps: WorkflowStep[] = [
-  { id: 'project-details', name: 'Project Details', icon: FolderOpen },
-  { id: 'file-upload', name: 'File Upload', icon: Upload },
-  { id: 'calibration', name: 'Calibration', icon: Layers },
-  { id: 'registration', name: 'Registration', icon: Layers },
-  { id: 'stacking', name: 'Stacking', icon: Layers },
-  { id: 'post-processing', name: 'Post-Processing', icon: Sliders },
-  { id: 'export', name: 'Export & Share', icon: Share }
+  {
+    id: 0,
+    name: 'Project Details',
+    icon: FileText,
+  },
+  {
+    id: 1,
+    name: 'Equipment Selection',
+    icon: CameraIcon,
+  },
+  {
+    id: 2,
+    name: 'File Upload',
+    icon: Upload,
+  },
+  {
+    id: 3,
+    name: 'Processing',
+    icon: Settings,
+  },
+  {
+    id: 4,
+    name: 'Results',
+    icon: Star,
+  },
 ];
 
 // Add this after the mockProjects array
@@ -186,13 +228,118 @@ const mockUserSubscription: UserSubscription = {
   projectLimit: 5
 };
 
-export default function DashboardPage() {
+const FileUploadSection = ({ projectId }: { projectId: string }) => {
+  const [uploadedFiles, setUploadedFiles] = useState<Record<string, string[]>>({
+    light: [],
+    dark: [],
+    flat: [],
+    bias: [],
+  });
+
+  const handleUploadComplete = (fileType: string, filePaths: string[]) => {
+    setUploadedFiles(prev => ({
+      ...prev,
+      [fileType]: [...prev[fileType], ...filePaths],
+    }));
+  };
+
+  const handleUploadError = (error: string) => {
+    console.error('Upload error:', error);
+    // You can add toast notification here if needed
+  };
+
+  return (
+    <div className="space-y-8">
+      <div className="space-y-4">
+        <h3 className="text-lg font-medium text-gray-200">Light Frames</h3>
+        <FitsFileUpload
+          projectId={projectId}
+          fileType="light"
+          onUploadComplete={(paths) => handleUploadComplete('light', paths)}
+          onError={handleUploadError}
+        />
+        {uploadedFiles.light.length > 0 && (
+          <div className="mt-2">
+            <p className="text-sm text-gray-400">Uploaded files:</p>
+            <ul className="mt-1 space-y-1">
+              {uploadedFiles.light.map((path, index) => (
+                <li key={index} className="text-sm text-gray-500">{path}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-4">
+        <h3 className="text-lg font-medium text-gray-200">Dark Frames</h3>
+        <FitsFileUpload
+          projectId={projectId}
+          fileType="dark"
+          onUploadComplete={(paths) => handleUploadComplete('dark', paths)}
+          onError={handleUploadError}
+        />
+        {uploadedFiles.dark.length > 0 && (
+          <div className="mt-2">
+            <p className="text-sm text-gray-400">Uploaded files:</p>
+            <ul className="mt-1 space-y-1">
+              {uploadedFiles.dark.map((path, index) => (
+                <li key={index} className="text-sm text-gray-500">{path}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-4">
+        <h3 className="text-lg font-medium text-gray-200">Flat Frames</h3>
+        <FitsFileUpload
+          projectId={projectId}
+          fileType="flat"
+          onUploadComplete={(paths) => handleUploadComplete('flat', paths)}
+          onError={handleUploadError}
+        />
+        {uploadedFiles.flat.length > 0 && (
+          <div className="mt-2">
+            <p className="text-sm text-gray-400">Uploaded files:</p>
+            <ul className="mt-1 space-y-1">
+              {uploadedFiles.flat.map((path, index) => (
+                <li key={index} className="text-sm text-gray-500">{path}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-4">
+        <h3 className="text-lg font-medium text-gray-200">Bias Frames</h3>
+        <FitsFileUpload
+          projectId={projectId}
+          fileType="bias"
+          onUploadComplete={(paths) => handleUploadComplete('bias', paths)}
+          onError={handleUploadError}
+        />
+        {uploadedFiles.bias.length > 0 && (
+          <div className="mt-2">
+            <p className="text-sm text-gray-400">Uploaded files:</p>
+            <ul className="mt-1 space-y-1">
+              {uploadedFiles.bias.map((path, index) => (
+                <li key={index} className="text-sm text-gray-500">{path}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const DashboardPage = () => {
   const router = useRouter();
   const { user } = useUserStore();
   const [activeView, setActiveView] = useState('grid');
   const [activeProject, setActiveProject] = useState<Project | null>(null);
   const [showNewProject, setShowNewProject] = useState(false);
-  const [currentStep, setCurrentStep] = useState('project-details');
+  const [currentStep, setCurrentStep] = useState(0);
   const [showSidebar, setShowSidebar] = useState(false);
   const [showLimitWarning, setShowLimitWarning] = useState(false);
   
@@ -201,8 +348,17 @@ export default function DashboardPage() {
   const [projectDescription, setProjectDescription] = useState('');
   const [selectedTarget, setSelectedTarget] = useState<AstronomicalTarget | null>(null);
   const [selectedTelescope, setSelectedTelescope] = useState<Telescope | null>(null);
-  const [selectedCamera, setSelectedCamera] = useState<Camera | null>(null);
+  const [selectedCamera, setSelectedCamera] = useState<CameraType | null>(null);
   const [selectedFilters, setSelectedFilters] = useState<Filter[]>([]);
+  const [uploadedFiles, setUploadedFiles] = useState<Record<string, string[]>>({
+    light: [],
+    dark: [],
+    flat: [],
+    bias: []
+  });
+  const [uploadErrors, setUploadErrors] = useState<Record<string, string>>({});
+  const params = useParams();
+  const currentProjectId = Array.isArray(params.projectId) ? params.projectId[0] : params.projectId;
 
   useEffect(() => {
     // Redirect to login if not authenticated
@@ -221,11 +377,11 @@ export default function DashboardPage() {
       case 'dashboard':
         setActiveProject(null);
         setShowNewProject(false);
-        setCurrentStep('project-details');
+        setCurrentStep(0);
         break;
       case 'project':
         setShowNewProject(false);
-        setCurrentStep('project-details');
+        setCurrentStep(0);
         break;
       default:
         break;
@@ -254,7 +410,7 @@ export default function DashboardPage() {
       return;
     }
     setShowNewProject(true);
-    setCurrentStep('project-details');
+    setCurrentStep(0);
   };
 
   const handleProjectClick = (project: Project) => {
@@ -263,7 +419,10 @@ export default function DashboardPage() {
   };
 
   const handleStepClick = (stepId: string) => {
-    setCurrentStep(stepId);
+    const stepNumber = parseInt(stepId.split('-')[1]);
+    if (!isNaN(stepNumber)) {
+      setCurrentStep(stepNumber);
+    }
   };
 
   const renderProjectGrid = () => {
@@ -348,8 +507,8 @@ export default function DashboardPage() {
         <h3 className="text-lg font-semibold text-white mb-4">Workflow Steps</h3>
         <div className="space-y-2">
           {workflowSteps.map((step, index) => {
-            const isActive = currentStep === step.id;
-            const isCompleted = workflowSteps.findIndex(s => s.id === currentStep) > index;
+            const isActive = currentStep === index;
+            const isCompleted = currentStep > index;
             const Icon = step.icon;
             
             return (
@@ -359,7 +518,7 @@ export default function DashboardPage() {
                   isActive ? 'bg-blue-600/20 border-l-4 border-blue-500' : 
                   isCompleted ? 'bg-gray-700/30' : 'hover:bg-gray-700/30'
                 }`}
-                onClick={() => handleStepClick(step.id)}
+                onClick={() => handleStepClick(step.id.toString())}
               >
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-3 ${
                   isActive ? 'bg-blue-600' : 
@@ -410,8 +569,9 @@ export default function DashboardPage() {
       // In a real app, we would save this to the database
       console.log('Creating new project:', newProject);
       
-      // For demo purposes, we'll just close the form
-      setShowNewProject(false);
+      // Set the active project and move to the file upload step
+      setActiveProject(newProject);
+      setCurrentStep(1);
       
       // Reset form fields
       setProjectName('');
@@ -464,7 +624,7 @@ export default function DashboardPage() {
             </label>
             <EquipmentAutocomplete
               type="camera"
-              onSelect={(item) => setSelectedCamera(item as Camera)}
+              onSelect={(item) => setSelectedCamera(item as CameraType)}
               placeholder="Search for a camera..."
             />
           </div>
@@ -512,72 +672,145 @@ export default function DashboardPage() {
   };
 
   const renderFileUpload = () => {
+    const handleUploadComplete = (fileType: string, filePaths: string[]) => {
+      setUploadedFiles(prev => ({
+        ...prev,
+        [fileType]: [...prev[fileType], ...filePaths]
+      }));
+    };
+
+    const handleUploadError = (fileType: string, error: string) => {
+      setUploadErrors(prev => ({
+        ...prev,
+        [fileType]: error
+      }));
+    };
+
     return (
       <div className="bg-gray-800/50 rounded-lg p-6 shadow-lg border border-gray-700">
         <h3 className="text-xl font-semibold text-white mb-6">Upload Files</h3>
         <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-700 border-dashed">
-              <div className="flex flex-col items-center justify-center py-8">
-                <Upload size={32} className="text-gray-500 mb-3" />
-                <h4 className="text-lg font-medium text-white mb-1">Light Frames</h4>
-                <p className="text-sm text-gray-400 text-center mb-4">
-                  Upload your light frame FITS files
-                </p>
-                <button className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
-                  Select Files
-                </button>
-              </div>
+            <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-700">
+              <h4 className="text-lg font-medium text-white mb-4">Light Frames</h4>
+              <FitsFileUpload
+                projectId={currentProjectId || 'temp-project'}
+                fileType="light"
+                onUploadComplete={(filePaths) => handleUploadComplete('light', filePaths)}
+                onError={(error) => handleUploadError('light', error)}
+              />
+              {uploadedFiles.light.length > 0 && (
+                <div className="mt-4">
+                  <p className="text-sm text-green-500 mb-2">
+                    {uploadedFiles.light.length} light frames uploaded
+                  </p>
+                  <div className="max-h-32 overflow-y-auto">
+                    {uploadedFiles.light.map((path, index) => (
+                      <div key={index} className="text-xs text-gray-400 truncate">
+                        {path.split('/').pop()}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {uploadErrors.light && (
+                <p className="mt-2 text-sm text-red-500">{uploadErrors.light}</p>
+              )}
             </div>
-            <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-700 border-dashed">
-              <div className="flex flex-col items-center justify-center py-8">
-                <Upload size={32} className="text-gray-500 mb-3" />
-                <h4 className="text-lg font-medium text-white mb-1">Dark Frames</h4>
-                <p className="text-sm text-gray-400 text-center mb-4">
-                  Upload your dark frame FITS files
-                </p>
-                <button className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
-                  Select Files
-                </button>
-              </div>
+            
+            <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-700">
+              <h4 className="text-lg font-medium text-white mb-4">Dark Frames</h4>
+              <FitsFileUpload
+                projectId={currentProjectId || 'temp-project'}
+                fileType="dark"
+                onUploadComplete={(filePaths) => handleUploadComplete('dark', filePaths)}
+                onError={(error) => handleUploadError('dark', error)}
+              />
+              {uploadedFiles.dark.length > 0 && (
+                <div className="mt-4">
+                  <p className="text-sm text-green-500 mb-2">
+                    {uploadedFiles.dark.length} dark frames uploaded
+                  </p>
+                  <div className="max-h-32 overflow-y-auto">
+                    {uploadedFiles.dark.map((path, index) => (
+                      <div key={index} className="text-xs text-gray-400 truncate">
+                        {path.split('/').pop()}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {uploadErrors.dark && (
+                <p className="mt-2 text-sm text-red-500">{uploadErrors.dark}</p>
+              )}
             </div>
-            <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-700 border-dashed">
-              <div className="flex flex-col items-center justify-center py-8">
-                <Upload size={32} className="text-gray-500 mb-3" />
-                <h4 className="text-lg font-medium text-white mb-1">Flat Frames</h4>
-                <p className="text-sm text-gray-400 text-center mb-4">
-                  Upload your flat frame FITS files
-                </p>
-                <button className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
-                  Select Files
-                </button>
-              </div>
+            
+            <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-700">
+              <h4 className="text-lg font-medium text-white mb-4">Flat Frames</h4>
+              <FitsFileUpload
+                projectId={currentProjectId || 'temp-project'}
+                fileType="flat"
+                onUploadComplete={(filePaths) => handleUploadComplete('flat', filePaths)}
+                onError={(error) => handleUploadError('flat', error)}
+              />
+              {uploadedFiles.flat.length > 0 && (
+                <div className="mt-4">
+                  <p className="text-sm text-green-500 mb-2">
+                    {uploadedFiles.flat.length} flat frames uploaded
+                  </p>
+                  <div className="max-h-32 overflow-y-auto">
+                    {uploadedFiles.flat.map((path, index) => (
+                      <div key={index} className="text-xs text-gray-400 truncate">
+                        {path.split('/').pop()}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {uploadErrors.flat && (
+                <p className="mt-2 text-sm text-red-500">{uploadErrors.flat}</p>
+              )}
             </div>
-            <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-700 border-dashed">
-              <div className="flex flex-col items-center justify-center py-8">
-                <Upload size={32} className="text-gray-500 mb-3" />
-                <h4 className="text-lg font-medium text-white mb-1">Bias Frames</h4>
-                <p className="text-sm text-gray-400 text-center mb-4">
-                  Upload your bias frame FITS files
-                </p>
-                <button className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
-                  Select Files
-                </button>
-              </div>
+            
+            <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-700">
+              <h4 className="text-lg font-medium text-white mb-4">Bias Frames</h4>
+              <FitsFileUpload
+                projectId={currentProjectId || 'temp-project'}
+                fileType="bias"
+                onUploadComplete={(filePaths) => handleUploadComplete('bias', filePaths)}
+                onError={(error) => handleUploadError('bias', error)}
+              />
+              {uploadedFiles.bias.length > 0 && (
+                <div className="mt-4">
+                  <p className="text-sm text-green-500 mb-2">
+                    {uploadedFiles.bias.length} bias frames uploaded
+                  </p>
+                  <div className="max-h-32 overflow-y-auto">
+                    {uploadedFiles.bias.map((path, index) => (
+                      <div key={index} className="text-xs text-gray-400 truncate">
+                        {path.split('/').pop()}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {uploadErrors.bias && (
+                <p className="mt-2 text-sm text-red-500">{uploadErrors.bias}</p>
+              )}
             </div>
           </div>
           <div className="flex justify-end space-x-3 pt-4">
             <button
               className="px-4 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600 transition-colors"
-              onClick={() => setCurrentStep('project-details')}
+              onClick={() => setCurrentStep(0)}
             >
               Back
             </button>
             <button
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-              onClick={() => setCurrentStep('calibration')}
+              onClick={() => setCurrentStep(2)}
             >
-              Continue
+              Next: Calibration
             </button>
           </div>
         </div>
@@ -585,47 +818,69 @@ export default function DashboardPage() {
     );
   };
 
-  const renderStepContent = () => {
+  const renderStepContent = (projectId: string) => {
+    const currentStepIndex = Math.min(currentStep, workflowSteps.length - 1);
+    const step = workflowSteps[currentStepIndex];
+
+    const renderStepNavigation = () => (
+      <div className="flex justify-end space-x-3 pt-4">
+        <button
+          className="px-4 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600 transition-colors"
+          onClick={() => {
+            if (currentStep > 0) {
+              setCurrentStep(currentStep - 1);
+            }
+          }}
+        >
+          Back
+        </button>
+        <button
+          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+          onClick={() => {
+            if (currentStep < workflowSteps.length - 1) {
+              setCurrentStep(currentStep + 1);
+            }
+          }}
+        >
+          Continue
+        </button>
+      </div>
+    );
+
     switch (currentStep) {
-      case 'project-details':
+      case 0:
         return renderNewProjectForm();
-      case 'file-upload':
+      case 1:
         return renderFileUpload();
-      default:
+      case 2:
+        return (
+          <div className="space-y-6">
+            <div className="bg-gray-800/50 rounded-lg p-6 shadow-lg border border-gray-700">
+              <h3 className="text-xl font-semibold text-white mb-4">Upload FITS Files</h3>
+              <p className="text-gray-400 mb-4">
+                Upload your FITS files for processing. You can upload multiple files at once.
+                <br />
+                Supported formats: .fits, .fit, .FIT, .FITS, .RAW
+              </p>
+              <FileUploadSection projectId={projectId} />
+            </div>
+          </div>
+        );
+      case 3:
+      case 4:
         return (
           <div className="bg-gray-800/50 rounded-lg p-6 shadow-lg border border-gray-700">
             <h3 className="text-xl font-semibold text-white mb-6">
-              {workflowSteps.find(step => step.id === currentStep)?.name || 'Step'}
+              {step?.name || 'Step'}
             </h3>
             <p className="text-gray-400">
               This step is under development. In a real application, this would contain the specific workflow for this step.
             </p>
-            <div className="flex justify-end space-x-3 pt-4">
-              <button
-                className="px-4 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600 transition-colors"
-                onClick={() => {
-                  const currentIndex = workflowSteps.findIndex(step => step.id === currentStep);
-                  if (currentIndex > 0) {
-                    setCurrentStep(workflowSteps[currentIndex - 1].id);
-                  }
-                }}
-              >
-                Back
-              </button>
-              <button
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-                onClick={() => {
-                  const currentIndex = workflowSteps.findIndex(step => step.id === currentStep);
-                  if (currentIndex < workflowSteps.length - 1) {
-                    setCurrentStep(workflowSteps[currentIndex + 1].id);
-                  }
-                }}
-              >
-                Continue
-              </button>
-            </div>
+            {renderStepNavigation()}
           </div>
         );
+      default:
+        return null;
     }
   };
 
@@ -734,7 +989,7 @@ export default function DashboardPage() {
                     </button>
                     <ChevronRight size={16} className="text-gray-500" />
                     <span className="text-white">
-                      {workflowSteps.find(step => step.id === currentStep)?.name || 'Step'}
+                      {workflowSteps.find(step => step.id.toString() === `step-${currentProjectId}-${currentStep}`)?.name || 'Step'}
                     </span>
                   </>
                 ) : activeProject ? (
@@ -747,7 +1002,7 @@ export default function DashboardPage() {
                     </button>
                     <ChevronRight size={16} className="text-gray-500" />
                     <span className="text-white">
-                      {workflowSteps.find(step => step.id === currentStep)?.name || 'Step'}
+                      {workflowSteps.find(step => step.id.toString() === `step-${currentProjectId}-${currentStep}`)?.name || 'Step'}
                     </span>
                   </>
                 ) : (
@@ -767,7 +1022,7 @@ export default function DashboardPage() {
 
               {/* Projects or Workflow */}
               {showNewProject || activeProject ? (
-                renderStepContent()
+                renderStepContent(currentProjectId)
               ) : (
                 <>
                   <div className="flex justify-between items-center mb-6">
@@ -785,4 +1040,6 @@ export default function DashboardPage() {
       </div>
     </div>
   );
-} 
+};
+
+export default DashboardPage; 
