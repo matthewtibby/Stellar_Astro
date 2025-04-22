@@ -63,12 +63,16 @@ const checkSupabase = () => {
 // Profile picture functions
 export const uploadProfilePicture = async (userId: string, file: File): Promise<string> => {
   const client = checkSupabase();
-  const fileExt = file.name.split('.').pop();
-  const filePath = `${userId}/profile.${fileExt}`;
+  const filePath = `${userId}/profile.${file.name.split('.').pop()}`;
   
   const { data, error } = await client.storage
     .from(STORAGE_BUCKETS.PROFILE_PICTURES)
-    .upload(filePath, file, { upsert: true });
+    .upload(filePath, file, {
+      upsert: true,
+      metadata: {
+        owner: userId
+      }
+    });
   
   if (error) throw error;
   
@@ -82,6 +86,61 @@ export const uploadProfilePicture = async (userId: string, file: File): Promise<
 // Raw frames functions
 export type UploadProgressCallback = (progress: number) => void;
 
+export async function listRawFrames(projectId: string): Promise<string[]> {
+  try {
+    const client = checkSupabase();
+    const { data: { user }, error: authError } = await client.auth.getUser();
+    
+    if (authError || !user) {
+      throw new Error('User must be authenticated to list files');
+    }
+
+    const { data, error } = await client.storage
+      .from(STORAGE_BUCKETS.RAW_FRAMES)
+      .list(`${user.id}/${projectId}`);
+
+    if (error) {
+      console.error('Error listing files:', error);
+      throw error;
+    }
+
+    return data.map(file => file.name);
+  } catch (error) {
+    console.error('Error listing raw frames:', error);
+    throw error;
+  }
+}
+
+export async function checkBucketContents(): Promise<void> {
+  try {
+    const client = checkSupabase();
+    const { data: { user }, error: authError } = await client.auth.getUser();
+    
+    if (authError || !user) {
+      console.error('Auth error:', authError);
+      throw new Error('User must be authenticated to check bucket contents');
+    }
+
+    // List all files in the raw-frames bucket
+    const { data, error } = await client.storage
+      .from(STORAGE_BUCKETS.RAW_FRAMES)
+      .list();
+
+    if (error) {
+      console.error('Error listing bucket contents:', error);
+      throw error;
+    }
+
+    console.log('All files in raw-frames bucket:', data.map(file => ({
+      name: file.name,
+      size: file.metadata?.size,
+      created_at: file.created_at
+    })));
+  } catch (error) {
+    console.error('Error checking bucket contents:', error);
+  }
+}
+
 export async function uploadRawFrame(
   projectId: string,
   fileType: FileType,
@@ -90,26 +149,90 @@ export async function uploadRawFrame(
 ): Promise<string> {
   try {
     const client = checkSupabase();
-    const filePath = `${projectId}/${FILE_TYPE_FOLDERS[fileType]}/${file.name}`;
+    
+    // Get the current user from Supabase auth
+    const { data: { user }, error: authError } = await client.auth.getUser();
+    
+    if (authError || !user) {
+      console.error('Auth error:', authError);
+      throw new Error('User must be authenticated to upload files');
+    }
+
+    // Sanitize the file name by replacing special characters
+    const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const filePath = `${user.id}/${projectId}/${FILE_TYPE_FOLDERS[fileType]}/${sanitizedFileName}`;
+    
+    // Check if file already exists
+    const { data: existingFiles, error: listError } = await client.storage
+      .from(STORAGE_BUCKETS.RAW_FRAMES)
+      .list(`${user.id}/${projectId}/${FILE_TYPE_FOLDERS[fileType]}`);
+    
+    if (listError) {
+      console.error('Error checking for existing files:', listError);
+      throw new Error('Failed to check for existing files');
+    }
+    
+    const fileExists = existingFiles?.some(existingFile => existingFile.name === sanitizedFileName);
+    if (fileExists) {
+      throw new Error(`A file named "${sanitizedFileName}" already exists in this project. Please rename the file or choose a different one.`);
+    }
+    
+    console.log('Attempting to upload file:', {
+      originalName: file.name,
+      sanitizedName: sanitizedFileName,
+      filePath,
+      fileSize: file.size,
+      fileType: file.type,
+      userId: user.id,
+      bucketName: STORAGE_BUCKETS.RAW_FRAMES,
+      contentType: file.type
+    });
     
     const { error: uploadError, data } = await client.storage
       .from(STORAGE_BUCKETS.RAW_FRAMES)
       .upload(filePath, file, {
         cacheControl: '3600',
         upsert: false,
+        contentType: file.type
       });
 
     if (uploadError) {
-      throw uploadError;
+      console.error('Upload error details:', {
+        error: uploadError,
+        message: uploadError.message,
+        name: uploadError.name
+      });
+      
+      // Provide user-friendly error messages for common issues
+      if (uploadError.message.includes('already exists')) {
+        throw new Error(`A file named "${sanitizedFileName}" already exists in this project. Please rename the file or choose a different one.`);
+      } else if (uploadError.message.includes('quota')) {
+        throw new Error('Storage quota exceeded. Please contact support or upgrade your plan.');
+      } else if (uploadError.message.includes('size')) {
+        throw new Error('File size exceeds the maximum allowed size. Please choose a smaller file.');
+      } else {
+        throw new Error(`Upload failed: ${uploadError.message}`);
+      }
     }
 
     if (!data?.path) {
       throw new Error('Upload failed: No file path returned');
     }
 
+    // Check bucket contents after successful upload
+    await checkBucketContents();
+
     return data.path;
   } catch (error) {
     console.error('Error uploading raw frame:', error);
+    if (error instanceof Error) {
+      console.error('Error details:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+        cause: error.cause
+      });
+    }
     throw error;
   }
 }
@@ -121,12 +244,15 @@ export const uploadMasterFrame = async (
   file: File
 ): Promise<string> => {
   const client = checkSupabase();
-  const fileExt = file.name.split('.').pop();
   const filePath = `${projectId}/${masterType}/${file.name}`;
   
   const { data, error } = await client.storage
     .from(STORAGE_BUCKETS.MASTER_FRAMES)
-    .upload(filePath, file);
+    .upload(filePath, file, {
+      metadata: {
+        owner: (await client.auth.getUser()).data.user?.id
+      }
+    });
   
   if (error) throw error;
   
@@ -139,12 +265,15 @@ export const uploadCalibratedFrame = async (
   file: File
 ): Promise<string> => {
   const client = checkSupabase();
-  const fileExt = file.name.split('.').pop();
-  const filePath = `${projectId}/${FILE_TYPE_FOLDERS.calibrated}/${file.name}`;
+  const filePath = `${projectId}/calibrated/${file.name}`;
   
   const { data, error } = await client.storage
     .from(STORAGE_BUCKETS.CALIBRATED_FRAMES)
-    .upload(filePath, file);
+    .upload(filePath, file, {
+      metadata: {
+        owner: (await client.auth.getUser()).data.user?.id
+      }
+    });
   
   if (error) throw error;
   
@@ -157,12 +286,15 @@ export const uploadStackedFrame = async (
   file: File
 ): Promise<string> => {
   const client = checkSupabase();
-  const fileExt = file.name.split('.').pop();
-  const filePath = `${projectId}/${FILE_TYPE_FOLDERS.stacked}/${file.name}`;
+  const filePath = `${projectId}/stacked/${file.name}`;
   
   const { data, error } = await client.storage
     .from(STORAGE_BUCKETS.STACKED_FRAMES)
-    .upload(filePath, file);
+    .upload(filePath, file, {
+      metadata: {
+        owner: (await client.auth.getUser()).data.user?.id
+      }
+    });
   
   if (error) throw error;
   
@@ -175,20 +307,19 @@ export const uploadPreProcessedImage = async (
   file: File
 ): Promise<string> => {
   const client = checkSupabase();
-  const fileExt = file.name.split('.').pop();
-  const filePath = `${projectId}/${FILE_TYPE_FOLDERS['pre-processed']}/${file.name}`;
+  const filePath = `${projectId}/pre-processed/${file.name}`;
   
   const { data, error } = await client.storage
     .from(STORAGE_BUCKETS.PRE_PROCESSED)
-    .upload(filePath, file, { upsert: true });
+    .upload(filePath, file, {
+      metadata: {
+        owner: (await client.auth.getUser()).data.user?.id
+      }
+    });
   
   if (error) throw error;
   
-  const { data: { publicUrl } } = client.storage
-    .from(STORAGE_BUCKETS.PRE_PROCESSED)
-    .getPublicUrl(filePath);
-  
-  return publicUrl;
+  return filePath;
 };
 
 // Post-processed image functions
@@ -197,20 +328,19 @@ export const uploadPostProcessedImage = async (
   file: File
 ): Promise<string> => {
   const client = checkSupabase();
-  const fileExt = file.name.split('.').pop();
-  const filePath = `${projectId}/${FILE_TYPE_FOLDERS['post-processed']}/${file.name}`;
+  const filePath = `${projectId}/post-processed/${file.name}`;
   
   const { data, error } = await client.storage
     .from(STORAGE_BUCKETS.POST_PROCESSED)
-    .upload(filePath, file, { upsert: true });
+    .upload(filePath, file, {
+      metadata: {
+        owner: (await client.auth.getUser()).data.user?.id
+      }
+    });
   
   if (error) throw error;
   
-  const { data: { publicUrl } } = client.storage
-    .from(STORAGE_BUCKETS.POST_PROCESSED)
-    .getPublicUrl(filePath);
-  
-  return publicUrl;
+  return filePath;
 };
 
 // Generic download function
@@ -262,4 +392,65 @@ export async function getFitsFileUrl(filePath: string): Promise<string> {
   }
 
   return data.signedUrl;
+}
+
+export interface StorageFile {
+  name: string;
+  path: string;
+  size: number;
+  created_at: string;
+  type: FileType;
+}
+
+export async function getFilesByType(projectId: string): Promise<Record<FileType, StorageFile[]>> {
+  try {
+    const client = checkSupabase();
+    const { data: { user }, error: authError } = await client.auth.getUser();
+    
+    if (authError || !user) {
+      throw new Error('User must be authenticated to fetch files');
+    }
+
+    const result: Record<FileType, StorageFile[]> = {
+      'light': [],
+      'dark': [],
+      'bias': [],
+      'flat': [],
+      'master-dark': [],
+      'master-bias': [],
+      'master-flat': [],
+      'calibrated': [],
+      'stacked': [],
+      'aligned': [],
+      'pre-processed': [],
+      'post-processed': []
+    };
+
+    // Fetch files for each type
+    for (const [type, folder] of Object.entries(FILE_TYPE_FOLDERS)) {
+      const { data, error } = await client.storage
+        .from(STORAGE_BUCKETS.RAW_FRAMES)
+        .list(`${user.id}/${projectId}/${folder}`);
+      
+      if (error) {
+        console.error(`Error fetching ${type} files:`, error);
+        continue;
+      }
+      
+      if (data) {
+        result[type as FileType] = data.map(file => ({
+          name: file.name,
+          path: `${user.id}/${projectId}/${folder}/${file.name}`,
+          size: file.metadata?.size || 0,
+          created_at: file.created_at,
+          type: type as FileType
+        }));
+      }
+    }
+
+    return result;
+  } catch (error) {
+    console.error('Error fetching files by type:', error);
+    throw error;
+  }
 }
