@@ -158,24 +158,18 @@ export async function uploadRawFrame(
       throw new Error('User must be authenticated to upload files');
     }
 
-    // Sanitize the file name by replacing special characters
-    const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-    const targetFilePath = `${user.id}/${projectId}/${FILE_TYPE_FOLDERS[fileType]}/${sanitizedFileName}`;
+    // Generate a unique identifier with timestamp
+    const timestamp = new Date().getTime();
+    const randomString = Math.random().toString(36).substring(2, 8);
+    const uniqueId = `${timestamp}_${randomString}`;
     
-    // Check if file already exists
-    const { data: existingFiles, error: listError } = await client.storage
-      .from(STORAGE_BUCKETS.RAW_FRAMES)
-      .list(`${user.id}/${projectId}/${FILE_TYPE_FOLDERS[fileType]}`);
+    // Sanitize the file name and add unique identifier
+    const fileExtension = file.name.split('.').pop()?.toLowerCase() || '';
+    const baseFileName = file.name.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9.-]/g, '_');
+    const sanitizedFileName = `${baseFileName}_${uniqueId}.${fileExtension}`;
     
-    if (listError) {
-      console.error('Error checking for existing files:', listError);
-      throw new Error('Failed to check for existing files');
-    }
-    
-    const fileExists = existingFiles?.some(existingFile => existingFile.name === sanitizedFileName);
-    if (fileExists) {
-      throw new Error(`A file named "${sanitizedFileName}" already exists in this project. Please rename the file or choose a different one.`);
-    }
+    // Create a more unique path structure
+    const targetFilePath = `${user.id}/${projectId}/${FILE_TYPE_FOLDERS[fileType]}/${uniqueId}/${sanitizedFileName}`;
     
     console.log('Attempting to upload file:', {
       originalName: file.name,
@@ -188,79 +182,103 @@ export async function uploadRawFrame(
       contentType: file.type
     });
     
-    // Create a custom upload function that tracks progress
-    const uploadWithProgress = async () => {
-      // Create a FileReader to read the file in chunks
-      const reader = new FileReader();
-      const chunkSize = 1024 * 1024; // 1MB chunks
-      const totalChunks = Math.ceil(file.size / chunkSize);
-      let uploadedChunks = 0;
-      
-      return new Promise<string>((resolve, reject) => {
-        // Create a custom upload function that uses fetch API
-        const uploadChunk = async (chunk: Blob, start: number) => {
-          try {
-            // Create a FormData object for the chunk
-            const formData = new FormData();
-            formData.append('file', chunk);
-            
-            // Get a signed URL for the upload
-            const { data: signedUrlData, error: signedUrlError } = await client.storage
-              .from(STORAGE_BUCKETS.RAW_FRAMES)
-              .createSignedUploadUrl(targetFilePath);
-              
-            if (signedUrlError) {
-              throw signedUrlError;
-            }
-            
-            // Upload the chunk using fetch
-            const response = await fetch(signedUrlData.signedUrl, {
-              method: 'PUT',
-              body: chunk,
-              headers: {
-                'Content-Type': file.type,
-                'Content-Range': `bytes ${start}-${start + chunk.size - 1}/${file.size}`
-              }
-            });
-            
-            if (!response.ok) {
-              throw new Error(`Upload failed with status: ${response.status}`);
-            }
-            
-            // Update progress
-            uploadedChunks++;
-            const progress = uploadedChunks / totalChunks;
-            if (onProgress) {
-              onProgress(progress);
-            }
-            
-            // If there are more chunks, upload the next one
-            if (uploadedChunks < totalChunks) {
-              const nextStart = start + chunk.size;
-              const nextChunk = file.slice(nextStart, nextStart + chunkSize);
-              await uploadChunk(nextChunk, nextStart);
-            } else {
-              // All chunks uploaded, resolve the promise
-              resolve(targetFilePath);
-            }
-          } catch (error) {
-            reject(error);
-          }
-        };
+    // Try to upload with a simple approach first
+    try {
+      const { data, error } = await client.storage
+        .from(STORAGE_BUCKETS.RAW_FRAMES)
+        .upload(targetFilePath, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
         
-        // Start uploading the first chunk
-        const firstChunk = file.slice(0, chunkSize);
-        uploadChunk(firstChunk, 0);
-      });
-    };
-    
-    // Use the custom upload function
-    const uploadedFilePath = await uploadWithProgress();
-    
-    // Check bucket contents after successful upload
-    await checkBucketContents();
+      if (error) {
+        console.error('Simple upload failed:', error);
+        throw error;
+      }
+      
+      if (!data?.path) {
+        throw new Error('Upload failed: No file path returned');
+      }
+      
+      return data.path;
+    } catch (simpleUploadError) {
+      console.error('Simple upload failed, trying chunked upload:', simpleUploadError);
+      
+      // If simple upload fails, try the chunked approach
+      // Create a custom upload function that tracks progress
+      const uploadWithProgress = async () => {
+        // Create a FileReader to read the file in chunks
+        const reader = new FileReader();
+        const chunkSize = 1024 * 1024; // 1MB chunks
+        const totalChunks = Math.ceil(file.size / chunkSize);
+        let uploadedChunks = 0;
+        
+        return new Promise<string>((resolve, reject) => {
+          // Create a custom upload function that uses fetch API
+          const uploadChunk = async (chunk: Blob, start: number) => {
+            try {
+              // Create a FormData object for the chunk
+              const formData = new FormData();
+              formData.append('file', chunk);
+              
+              // Get a signed URL for the upload
+              const { data: signedUrlData, error: signedUrlError } = await client.storage
+                .from(STORAGE_BUCKETS.RAW_FRAMES)
+                .createSignedUploadUrl(targetFilePath);
+                
+              if (signedUrlError) {
+                throw signedUrlError;
+              }
+              
+              // Upload the chunk using fetch
+              const response = await fetch(signedUrlData.signedUrl, {
+                method: 'PUT',
+                body: chunk,
+                headers: {
+                  'Content-Type': file.type,
+                  'Content-Range': `bytes ${start}-${start + chunk.size - 1}/${file.size}`
+                }
+              });
+              
+              if (!response.ok) {
+                throw new Error(`Upload failed with status: ${response.status}`);
+              }
+              
+              // Update progress
+              uploadedChunks++;
+              const progress = uploadedChunks / totalChunks;
+              if (onProgress) {
+                onProgress(progress);
+              }
+              
+              // If there are more chunks, upload the next one
+              if (uploadedChunks < totalChunks) {
+                const nextStart = start + chunk.size;
+                const nextChunk = file.slice(nextStart, nextStart + chunkSize);
+                await uploadChunk(nextChunk, nextStart);
+              } else {
+                // All chunks uploaded, resolve the promise
+                resolve(targetFilePath);
+              }
+            } catch (error) {
+              reject(error);
+            }
+          };
+          
+          // Start uploading the first chunk
+          const firstChunk = file.slice(0, chunkSize);
+          uploadChunk(firstChunk, 0);
+        });
+      };
+      
+      // Use the custom upload function
+      const uploadedFilePath = await uploadWithProgress();
+      
+      // Check bucket contents after successful upload
+      await checkBucketContents();
 
-    return uploadedFilePath;
+      return uploadedFilePath;
+    }
   } catch (error) {
     console.error('Error uploading raw frame:', error);
     if (error instanceof Error) {

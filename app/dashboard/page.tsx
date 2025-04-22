@@ -24,7 +24,9 @@ import {
   FileText, 
   Camera as CameraIcon, 
   Star,
-  LucideIcon 
+  LucideIcon,
+  File,
+  Folder
 } from 'lucide-react';
 import Link from 'next/link';
 import TargetAutocomplete from '@/components/TargetAutocomplete';
@@ -344,6 +346,11 @@ const DashboardPage = () => {
   const [currentStep, setCurrentStep] = useState(0);
   const [showSidebar, setShowSidebar] = useState(false);
   const [showLimitWarning, setShowLimitWarning] = useState(false);
+  // Add state for collapsible sections
+  const [isViewExpanded, setIsViewExpanded] = useState(true);
+  const [isWorkflowExpanded, setIsWorkflowExpanded] = useState(true);
+  const [isFilesExpanded, setIsFilesExpanded] = useState(true);
+  const [hasUploadedFiles, setHasUploadedFiles] = useState(false);
   
   // Add these state variables at the top level
   const [projectName, setProjectName] = useState('');
@@ -508,43 +515,53 @@ const DashboardPage = () => {
   const renderWorkflowSteps = () => {
     return (
       <div className="bg-gray-800/50 rounded-lg p-4 shadow-lg border border-gray-700">
-        <h3 className="text-lg font-semibold text-white mb-4">Workflow Steps</h3>
-        <div className="space-y-2">
-          {workflowSteps.map((step, index) => {
-            const isActive = currentStep === index;
-            const isCompleted = currentStep > index;
-            const Icon = step.icon;
-            
-            return (
-              <div 
-                key={step.id}
-                className={`flex items-center p-3 rounded-md cursor-pointer transition-colors ${
-                  isActive ? 'bg-blue-600/20 border-l-4 border-blue-500' : 
-                  isCompleted ? 'bg-gray-700/30' : 'hover:bg-gray-700/30'
-                }`}
-                onClick={() => handleStepClick(step.id.toString())}
-              >
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-3 ${
-                  isActive ? 'bg-blue-600' : 
-                  isCompleted ? 'bg-green-600' : 'bg-gray-700'
-                }`}>
-                  {isCompleted ? (
-                    <CheckCircle size={16} className="text-white" />
-                  ) : (
-                    <Icon size={16} className="text-white" />
-                  )}
-                </div>
-                <span className={`flex-1 ${
-                  isActive ? 'text-white font-medium' : 
-                  isCompleted ? 'text-gray-300' : 'text-gray-400'
-                }`}>
-                  {step.name}
-                </span>
-                {isActive && <ChevronDown size={16} className="text-gray-400" />}
-              </div>
-            );
-          })}
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-semibold text-white">Workflow Steps</h3>
+          <button 
+            onClick={() => setIsWorkflowExpanded(!isWorkflowExpanded)}
+            className="text-gray-400 hover:text-white transition-colors"
+          >
+            {isWorkflowExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+          </button>
         </div>
+        {isWorkflowExpanded && (
+          <div className="space-y-2">
+            {workflowSteps.map((step, index) => {
+              const isActive = currentStep === index;
+              const isCompleted = currentStep > index;
+              const Icon = step.icon;
+              
+              return (
+                <div 
+                  key={step.id}
+                  className={`flex items-center p-3 rounded-md cursor-pointer transition-colors ${
+                    isActive ? 'bg-blue-600/20 border-l-4 border-blue-500' : 
+                    isCompleted ? 'bg-gray-700/30' : 'hover:bg-gray-700/30'
+                  }`}
+                  onClick={() => handleStepClick(step.id.toString())}
+                >
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-3 ${
+                    isActive ? 'bg-blue-600' : 
+                    isCompleted ? 'bg-green-600' : 'bg-gray-700'
+                  }`}>
+                    {isCompleted ? (
+                      <CheckCircle size={16} className="text-white" />
+                    ) : (
+                      <Icon size={16} className="text-white" />
+                    )}
+                  </div>
+                  <span className={`flex-1 ${
+                    isActive ? 'text-white font-medium' : 
+                    isCompleted ? 'text-gray-300' : 'text-gray-400'
+                  }`}>
+                    {step.name}
+                  </span>
+                  {isActive && <ChevronDown size={16} className="text-gray-400" />}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     );
   };
@@ -676,14 +693,29 @@ const DashboardPage = () => {
   };
 
   const renderFileUpload = () => {
-    const handleUploadComplete = (fileType: string, filePaths: string[]) => {
+    // Define the handleUploadComplete function at the component level
+    const handleUploadComplete = (filePaths: string[]) => {
+      // Since we don't have the fileType here, we'll need to determine it
+      // For now, we'll assume it's a light frame
+      const fileType = 'light';
+      
       setUploadedFiles(prev => ({
         ...prev,
         [fileType]: [...prev[fileType], ...filePaths]
       }));
+      
+      // Force refresh of file list
+      if (fileListRef.current) {
+        fileListRef.current.refresh();
+      }
+      
+      // Check for uploaded files and update UI accordingly
+      checkForUploadedFiles();
     };
 
-    const handleUploadError = (fileType: string, error: string) => {
+    const handleUploadError = (error: string) => {
+      // Since we don't have the fileType here, we'll use a default
+      const fileType = 'light';
       setUploadErrors(prev => ({
         ...prev,
         [fileType]: error
@@ -693,131 +725,12 @@ const DashboardPage = () => {
     return (
       <div className="bg-gray-800/50 rounded-lg p-6 shadow-lg border border-gray-700">
         <h3 className="text-xl font-semibold text-white mb-6">Upload Files</h3>
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-700">
-              <h4 className="text-lg font-medium text-white mb-4">Light Frames</h4>
-              <FitsFileUpload
-                projectId={currentProjectId || 'temp-project'}
-                fileType="light"
-                onUploadComplete={(filePaths) => handleUploadComplete('light', filePaths)}
-                onError={(error) => handleUploadError('light', error)}
-              />
-              {uploadedFiles.light.length > 0 && (
-                <div className="mt-4">
-                  <p className="text-sm text-green-500 mb-2">
-                    {uploadedFiles.light.length} light frames uploaded
-                  </p>
-                  <div className="max-h-32 overflow-y-auto">
-                    {uploadedFiles.light.map((path, index) => (
-                      <div key={index} className="text-xs text-gray-400 truncate">
-                        {path.split('/').pop()}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {uploadErrors.light && (
-                <p className="mt-2 text-sm text-red-500">{uploadErrors.light}</p>
-              )}
-            </div>
-            
-            <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-700">
-              <h4 className="text-lg font-medium text-white mb-4">Dark Frames</h4>
-              <FitsFileUpload
-                projectId={currentProjectId || 'temp-project'}
-                fileType="dark"
-                onUploadComplete={(filePaths) => handleUploadComplete('dark', filePaths)}
-                onError={(error) => handleUploadError('dark', error)}
-              />
-              {uploadedFiles.dark.length > 0 && (
-                <div className="mt-4">
-                  <p className="text-sm text-green-500 mb-2">
-                    {uploadedFiles.dark.length} dark frames uploaded
-                  </p>
-                  <div className="max-h-32 overflow-y-auto">
-                    {uploadedFiles.dark.map((path, index) => (
-                      <div key={index} className="text-xs text-gray-400 truncate">
-                        {path.split('/').pop()}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {uploadErrors.dark && (
-                <p className="mt-2 text-sm text-red-500">{uploadErrors.dark}</p>
-              )}
-            </div>
-            
-            <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-700">
-              <h4 className="text-lg font-medium text-white mb-4">Flat Frames</h4>
-              <FitsFileUpload
-                projectId={currentProjectId || 'temp-project'}
-                fileType="flat"
-                onUploadComplete={(filePaths) => handleUploadComplete('flat', filePaths)}
-                onError={(error) => handleUploadError('flat', error)}
-              />
-              {uploadedFiles.flat.length > 0 && (
-                <div className="mt-4">
-                  <p className="text-sm text-green-500 mb-2">
-                    {uploadedFiles.flat.length} flat frames uploaded
-                  </p>
-                  <div className="max-h-32 overflow-y-auto">
-                    {uploadedFiles.flat.map((path, index) => (
-                      <div key={index} className="text-xs text-gray-400 truncate">
-                        {path.split('/').pop()}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {uploadErrors.flat && (
-                <p className="mt-2 text-sm text-red-500">{uploadErrors.flat}</p>
-              )}
-            </div>
-            
-            <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-700">
-              <h4 className="text-lg font-medium text-white mb-4">Bias Frames</h4>
-              <FitsFileUpload
-                projectId={currentProjectId || 'temp-project'}
-                fileType="bias"
-                onUploadComplete={(filePaths) => handleUploadComplete('bias', filePaths)}
-                onError={(error) => handleUploadError('bias', error)}
-              />
-              {uploadedFiles.bias.length > 0 && (
-                <div className="mt-4">
-                  <p className="text-sm text-green-500 mb-2">
-                    {uploadedFiles.bias.length} bias frames uploaded
-                  </p>
-                  <div className="max-h-32 overflow-y-auto">
-                    {uploadedFiles.bias.map((path, index) => (
-                      <div key={index} className="text-xs text-gray-400 truncate">
-                        {path.split('/').pop()}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {uploadErrors.bias && (
-                <p className="mt-2 text-sm text-red-500">{uploadErrors.bias}</p>
-              )}
-            </div>
-          </div>
-          <div className="flex justify-end space-x-3 pt-4">
-            <button
-              className="px-4 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600 transition-colors"
-              onClick={() => setCurrentStep(0)}
-            >
-              Back
-            </button>
-            <button
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-              onClick={() => setCurrentStep(2)}
-            >
-              Next: Calibration
-            </button>
-          </div>
-        </div>
+        <FitsFileUpload 
+          projectId={currentProjectId || 'temp-project'} 
+          fileType="light"
+          onUploadComplete={handleUploadComplete}
+          onError={handleUploadError}
+        />
       </div>
     );
   };
@@ -893,11 +806,68 @@ const DashboardPage = () => {
     // TODO: Implement file viewing logic
   };
 
-  const handleUploadComplete = () => {
-    // Force refresh of file list
-    if (fileListRef.current) {
-      fileListRef.current.refresh();
+  // Add this function to check if there are any uploaded files
+  const checkForUploadedFiles = () => {
+    const hasFiles = Object.values(uploadedFiles).some(files => files.length > 0);
+    setHasUploadedFiles(hasFiles);
+    
+    // If files are uploaded, collapse other sections
+    if (hasFiles) {
+      setIsViewExpanded(false);
+      setIsWorkflowExpanded(false);
+      setIsFilesExpanded(true);
     }
+  };
+
+  // Add this effect to check for uploaded files on component mount
+  useEffect(() => {
+    checkForUploadedFiles();
+  }, []);
+
+  // Add this function to render the Files box
+  const renderFilesBox = () => {
+    if (!hasUploadedFiles) return null;
+
+    return (
+      <div className="bg-gray-800/50 rounded-lg p-4 shadow-lg border border-gray-700 mb-6">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-semibold text-white">Files</h3>
+          <button 
+            onClick={() => setIsFilesExpanded(!isFilesExpanded)}
+            className="text-gray-400 hover:text-white transition-colors"
+          >
+            {isFilesExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+          </button>
+        </div>
+        {isFilesExpanded && (
+          <div className="space-y-4">
+            {Object.entries(uploadedFiles).map(([type, files]) => {
+              if (files.length === 0) return null;
+              
+              return (
+                <div key={type} className="space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <Folder className="h-4 w-4 text-gray-400" />
+                    <h4 className="text-sm font-medium text-gray-300 capitalize">{type} Frames</h4>
+                    <span className="ml-auto bg-gray-700 text-gray-300 text-xs px-2 py-0.5 rounded-full">
+                      {files.length}
+                    </span>
+                  </div>
+                  <div className="pl-6 space-y-1 max-h-32 overflow-y-auto">
+                    {files.map((file, index) => (
+                      <div key={index} className="flex items-center space-x-2 text-sm text-gray-400">
+                        <File className="h-3 w-3" />
+                        <span className="truncate">{file.split('/').pop()}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -947,38 +917,51 @@ const DashboardPage = () => {
             {/* Sidebar */}
             <div className="lg:col-span-1">
               <div className="sticky top-24">
+                {/* Files Box - Add this before the View box */}
+                {renderFilesBox()}
+                
                 <div className="bg-gray-800/50 rounded-lg p-4 shadow-lg border border-gray-700 mb-6">
                   <div className="flex justify-between items-center mb-4">
                     <h3 className="text-lg font-semibold text-white">View</h3>
-                    <div className="flex space-x-2">
-                      <button
-                        className={`p-2 rounded-md ${activeView === 'grid' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-400'}`}
-                        onClick={() => setActiveView('grid')}
+                    <div className="flex items-center space-x-2">
+                      <div className="flex space-x-2">
+                        <button
+                          className={`p-2 rounded-md ${activeView === 'grid' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-400'}`}
+                          onClick={() => setActiveView('grid')}
+                        >
+                          <Grid size={18} />
+                        </button>
+                        <button
+                          className={`p-2 rounded-md ${activeView === 'list' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-400'}`}
+                          onClick={() => setActiveView('list')}
+                        >
+                          <List size={18} />
+                        </button>
+                      </div>
+                      <button 
+                        onClick={() => setIsViewExpanded(!isViewExpanded)}
+                        className="text-gray-400 hover:text-white transition-colors ml-2"
                       >
-                        <Grid size={18} />
-                      </button>
-                      <button
-                        className={`p-2 rounded-md ${activeView === 'list' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-400'}`}
-                        onClick={() => setActiveView('list')}
-                      >
-                        <List size={18} />
+                        {isViewExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
                       </button>
                     </div>
                   </div>
-                  <div className="space-y-2">
-                    <button className="w-full flex items-center p-2 rounded-md hover:bg-gray-700/50 text-gray-300 hover:text-white transition-colors">
-                      <FolderOpen size={18} className="mr-2" />
-                      <span>All Projects</span>
-                    </button>
-                    <button className="w-full flex items-center p-2 rounded-md hover:bg-gray-700/50 text-gray-300 hover:text-white transition-colors">
-                      <CheckCircle size={18} className="mr-2" />
-                      <span>Completed</span>
-                    </button>
-                    <button className="w-full flex items-center p-2 rounded-md hover:bg-gray-700/50 text-gray-300 hover:text-white transition-colors">
-                      <Settings size={18} className="mr-2" />
-                      <span>In Progress</span>
-                    </button>
-                  </div>
+                  {isViewExpanded && (
+                    <div className="space-y-2">
+                      <button className="w-full flex items-center p-2 rounded-md hover:bg-gray-700/50 text-gray-300 hover:text-white transition-colors">
+                        <FolderOpen size={18} className="mr-2" />
+                        <span>All Projects</span>
+                      </button>
+                      <button className="w-full flex items-center p-2 rounded-md hover:bg-gray-700/50 text-gray-300 hover:text-white transition-colors">
+                        <CheckCircle size={18} className="mr-2" />
+                        <span>Completed</span>
+                      </button>
+                      <button className="w-full flex items-center p-2 rounded-md hover:bg-gray-700/50 text-gray-300 hover:text-white transition-colors">
+                        <Settings size={18} className="mr-2" />
+                        <span>In Progress</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
                 {renderWorkflowSteps()}
               </div>
