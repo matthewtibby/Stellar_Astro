@@ -1,20 +1,23 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { getFilesByType, type StorageFile } from '@/src/utils/storage';
-import { File, Trash2, Download, Eye, RefreshCw, FolderOpen } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { getFilesByType, type StorageFile, validateFitsFile, uploadRawFrame } from '@/src/utils/storage';
+import { File, Trash2, Download, Eye, RefreshCw, FolderOpen, Upload, AlertCircle } from 'lucide-react';
 import { type FileType } from '@/src/types/store';
+import { useDropzone } from 'react-dropzone';
 
 interface FileManagementPanelProps {
   projectId: string;
   onFileSelect?: (file: StorageFile) => void;
   onRefresh?: () => void;
+  onValidationError?: (error: string) => void;
 }
 
 export function FileManagementPanel({ 
   projectId, 
   onFileSelect,
-  onRefresh 
+  onRefresh,
+  onValidationError
 }: FileManagementPanelProps) {
   const [filesByType, setFilesByType] = useState<Record<FileType, StorageFile[]>>({
     'light': [],
@@ -34,6 +37,11 @@ export function FileManagementPanel({
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<FileType>('light');
   const [searchTerm, setSearchTerm] = useState('');
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [currentFile, setCurrentFile] = useState<string>('');
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
 
   const loadFiles = async () => {
     try {
@@ -67,6 +75,68 @@ export function FileManagementPanel({
   const handleRefresh = () => {
     loadFiles();
     if (onRefresh) onRefresh();
+  };
+
+  const onDrop = useCallback(async (acceptedFiles: File[]) => {
+    setUploadError(null);
+    const validFiles: File[] = [];
+    const errors: string[] = [];
+
+    for (const file of acceptedFiles) {
+      try {
+        const validationResult = await validateFitsFile(file, activeTab);
+        if (!validationResult.valid) {
+          errors.push(`${file.name}: ${validationResult.message}`);
+        } else {
+          validFiles.push(file);
+        }
+      } catch (error) {
+        errors.push(`${file.name}: ${error instanceof Error ? error.message : 'Validation failed'}`);
+      }
+    }
+
+    if (errors.length > 0) {
+      const errorMessage = errors.join('\n');
+      setUploadError(errorMessage);
+      onValidationError?.(errorMessage);
+    }
+
+    setSelectedFiles(validFiles);
+  }, [activeTab, onValidationError]);
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: {
+      'application/fits': ['.fits', '.fit', '.FIT', '.FITS', '.RAW'],
+    },
+    multiple: true,
+  });
+
+  const handleUpload = async () => {
+    if (selectedFiles.length === 0) return;
+
+    setIsUploading(true);
+    setUploadError(null);
+
+    for (const file of selectedFiles) {
+      setCurrentFile(file.name);
+      try {
+        await uploadRawFrame(projectId, activeTab, file, (progress) => {
+          setUploadProgress(progress * 100);
+        });
+        loadFiles(); // Refresh the file list
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Upload failed';
+        setUploadError(errorMessage);
+        onValidationError?.(errorMessage);
+        break;
+      }
+    }
+
+    setIsUploading(false);
+    setSelectedFiles([]);
+    setUploadProgress(0);
+    setCurrentFile('');
   };
 
   const filteredFiles = filesByType[activeTab].filter(file => 
@@ -107,14 +177,86 @@ export function FileManagementPanel({
     <div className="bg-gray-900/50 rounded-lg border border-gray-700 overflow-hidden">
       <div className="p-4 border-b border-gray-700 flex justify-between items-center">
         <h3 className="text-lg font-semibold text-white">File Management</h3>
-        <button 
-          onClick={handleRefresh}
-          className="p-2 text-gray-400 hover:text-white transition-colors rounded-full hover:bg-gray-800"
-          title="Refresh files"
-        >
-          <RefreshCw className="h-5 w-5" />
-        </button>
+        <div className="flex items-center space-x-4">
+          <div
+            {...getRootProps()}
+            className={`px-4 py-2 rounded-md cursor-pointer transition-colors ${
+              isDragActive ? 'bg-blue-600/20 border border-blue-500' : 'bg-blue-600 hover:bg-blue-700'
+            }`}
+          >
+            <input {...getInputProps()} />
+            <div className="flex items-center space-x-2">
+              <Upload className="h-4 w-4" />
+              <span className="text-white">Upload FITS</span>
+            </div>
+          </div>
+          <button 
+            onClick={handleRefresh}
+            className="p-2 text-gray-400 hover:text-white transition-colors rounded-full hover:bg-gray-800"
+            title="Refresh files"
+          >
+            <RefreshCw className="h-5 w-5" />
+          </button>
+        </div>
       </div>
+
+      {uploadError && (
+        <div className="p-4 bg-red-900/50 text-red-200 border-b border-red-800">
+          <div className="flex items-start space-x-2">
+            <AlertCircle className="text-red-500 mt-1" size={16} />
+            <div className="text-sm whitespace-pre-line">{uploadError}</div>
+          </div>
+        </div>
+      )}
+
+      {selectedFiles.length > 0 && (
+        <div className="p-4 border-b border-gray-700">
+          <div className="space-y-2">
+            <h4 className="text-sm font-medium text-gray-400">Selected Files</h4>
+            {selectedFiles.map((file, index) => (
+              <div
+                key={index}
+                className="flex items-center justify-between p-2 bg-gray-800/50 rounded-md"
+              >
+                <div className="flex items-center space-x-2">
+                  <File className="h-4 w-4 text-gray-400" />
+                  <span className="text-sm text-gray-300">{file.name}</span>
+                </div>
+                <button
+                  onClick={() => setSelectedFiles(files => files.filter((_, i) => i !== index))}
+                  className="p-1 hover:bg-gray-700 rounded-md transition-colors"
+                >
+                  <Trash2 className="h-4 w-4 text-gray-400 hover:text-red-500" />
+                </button>
+              </div>
+            ))}
+            <button
+              onClick={handleUpload}
+              disabled={isUploading}
+              className="w-full mt-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isUploading ? 'Uploading...' : 'Upload Selected Files'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {isUploading && (
+        <div className="p-4 border-b border-gray-700">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-300">{currentFile}</span>
+              <span className="text-gray-400">{Math.round(uploadProgress)}%</span>
+            </div>
+            <div className="w-full bg-gray-700 rounded-full h-2">
+              <div
+                className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                style={{ width: `${uploadProgress}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-col md:flex-row">
         {/* Tabs sidebar */}

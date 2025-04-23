@@ -141,6 +141,33 @@ export async function checkBucketContents(): Promise<void> {
   }
 }
 
+// Add this new function for FITS validation
+export async function validateFitsFile(file: File, expectedType?: FileType): Promise<{ valid: boolean; message: string; actualType: string | null }> {
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (expectedType) {
+      formData.append('expectedType', expectedType);
+    }
+
+    const response = await fetch('/api/validate-fits', {
+      method: 'POST',
+      body: formData
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Validation failed');
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Error validating FITS file:', error);
+    throw error;
+  }
+}
+
+// Update the uploadRawFrame function to include validation
 export async function uploadRawFrame(
   projectId: string,
   fileType: FileType,
@@ -148,6 +175,12 @@ export async function uploadRawFrame(
   onProgress?: UploadProgressCallback
 ): Promise<string> {
   try {
+    // First validate the FITS file
+    const validationResult = await validateFitsFile(file, fileType);
+    if (!validationResult.valid) {
+      throw new Error(validationResult.message);
+    }
+
     const client = checkSupabase();
     
     // Get the current user from Supabase auth
