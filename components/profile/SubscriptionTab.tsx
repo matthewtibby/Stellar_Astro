@@ -6,13 +6,14 @@ import { UserState } from '@/src/types/store';
 import { useCurrency } from '@/components/CurrencyProvider';
 import { formatPrice } from '@/lib/currency';
 import { Check, AlertTriangle, CreditCard, Calendar, Pause, Play } from 'lucide-react';
+import { User } from '@supabase/supabase-js';
 
 interface SubscriptionTabProps {
   user: UserState | null;
 }
 
 export default function SubscriptionTab({ user }: SubscriptionTabProps) {
-  const { setUser } = useUserStore();
+  const { setUser, user: supabaseUser } = useUserStore();
   const { currency } = useCurrency();
   const [isPaused, setIsPaused] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
@@ -36,12 +37,16 @@ export default function SubscriptionTab({ user }: SubscriptionTabProps) {
       
       // For demo purposes, we'll just update the local state
       const updatedUser = {
-        ...user,
-        subscription: {
-          type: 'pro',
-          projectLimit: 50
+        ...supabaseUser,
+        id: supabaseUser?.id || '',
+        user_metadata: {
+          ...supabaseUser?.user_metadata,
+          subscription: {
+            type: 'pro',
+            projectLimit: 50
+          }
         }
-      } as UserState;
+      } as User;
       
       setUser(updatedUser);
       setMessage({ type: 'success', text: `Successfully upgraded to ${plan}` });
@@ -77,12 +82,16 @@ export default function SubscriptionTab({ user }: SubscriptionTabProps) {
     try {
       // Here you would typically make an API call to cancel the subscription
       const updatedUser = {
-        ...user,
-        subscription: {
-          type: 'free',
-          projectLimit: 3
+        ...supabaseUser,
+        id: supabaseUser?.id || '',
+        user_metadata: {
+          ...supabaseUser?.user_metadata,
+          subscription: {
+            type: 'free',
+            projectLimit: 3
+          }
         }
-      } as UserState;
+      } as User;
       
       setUser(updatedUser);
       setShowCancelConfirm(false);

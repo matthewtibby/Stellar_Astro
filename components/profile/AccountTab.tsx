@@ -5,13 +5,14 @@ import { useUserStore } from '@/src/store/user';
 import { UserState } from '@/src/types/store';
 import { Camera, Check, X } from 'lucide-react';
 import Image from 'next/image';
+import { User } from '@supabase/supabase-js';
 
 interface AccountTabProps {
   user: UserState | null;
 }
 
 export default function AccountTab({ user }: AccountTabProps) {
-  const { setUser } = useUserStore();
+  const { setUser, user: supabaseUser } = useUserStore();
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
     username: user?.username || '',
@@ -67,17 +68,21 @@ export default function AccountTab({ user }: AccountTabProps) {
 
       // Update user data
       const updatedUser = {
-        ...user,
-        username: formData.username,
-        fullName: formData.fullName,
-        // Don't update email here as it typically requires verification
-      } as UserState;
+        ...supabaseUser,
+        id: supabaseUser?.id || '',
+        user_metadata: {
+          ...supabaseUser?.user_metadata,
+          username: formData.username,
+          full_name: formData.fullName,
+          avatar_url: avatarPreview || supabaseUser?.user_metadata?.avatar_url
+        }
+      } as User;
 
       // If avatar was changed, upload it
       if (avatarFile) {
         // Here you would upload the file to your storage service
         // For now, we'll just use the preview URL
-        updatedUser.avatarUrl = avatarPreview || '';
+        updatedUser.user_metadata.avatar_url = avatarPreview || supabaseUser?.user_metadata?.avatar_url;
       }
 
       setUser(updatedUser);
