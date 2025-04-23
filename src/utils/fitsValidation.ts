@@ -19,16 +19,29 @@ export async function validateFitsFile(
     const response = await fetch('http://localhost:8001/validate-fits', {
       method: 'POST',
       body: formData,
+      headers: {
+        'Accept': 'application/json',
+      }
     });
 
+    const data = await response.json();
+    
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Failed to validate FITS file');
+      // If the response is not ok but contains our custom error format
+      if (data.valid !== undefined) {
+        return data;
+      }
+      throw new Error(data.detail || 'Failed to validate FITS file');
     }
 
-    return await response.json();
+    return data;
   } catch (error) {
     console.error('Error validating FITS file:', error);
-    throw error;
+    return {
+      valid: false,
+      message: error instanceof Error ? error.message : 'Failed to validate FITS file',
+      actual_type: null,
+      expected_type: expectedType
+    };
   }
 } 

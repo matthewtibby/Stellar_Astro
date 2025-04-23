@@ -1,8 +1,9 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from astropy.io import fits
 import uvicorn
-from typing import Dict, Optional
+from typing import Optional
 import tempfile
 import os
 
@@ -11,7 +12,7 @@ app = FastAPI()
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with your frontend URL
+    allow_origins=["http://localhost:3000"],  # Frontend URL
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -56,21 +57,29 @@ def get_frame_type_from_header(header: fits.header.Header) -> str:
 async def validate_fits_file(
     file: UploadFile = File(...),
     expected_type: Optional[str] = None
-) -> Dict:
+) -> JSONResponse:
     """
     Validate a FITS file and determine its frame type.
     If expected_type is provided, verify that the file matches the expected type.
     """
     if not file.filename.lower().endswith(('.fits', '.fit', '.fts')):
-        raise HTTPException(status_code=400, detail="File must be a FITS file")
+        return JSONResponse(
+            status_code=400,
+            content={
+                "valid": False,
+                "message": "File must be a FITS file",
+                "actual_type": None,
+                "expected_type": expected_type
+            }
+        )
     
     # Create a temporary file to store the upload
     with tempfile.NamedTemporaryFile(delete=False) as temp_file:
-        content = await file.read()
-        temp_file.write(content)
-        temp_file.flush()
-        
         try:
+            content = await file.read()
+            temp_file.write(content)
+            temp_file.flush()
+            
             # Open the FITS file
             with fits.open(temp_file.name) as hdul:
                 # Get the primary header
@@ -80,31 +89,60 @@ async def validate_fits_file(
                 actual_type = get_frame_type_from_header(header)
                 
                 if actual_type is None:
-                    return {
-                        "valid": False,
-                        "message": "Could not determine frame type from FITS header",
-                        "actual_type": None,
-                        "expected_type": expected_type
-                    }
+                    return JSONResponse(
+                        status_code=400,
+                        content={
+                            "valid": False,
+                            "message": "Could not determine frame type from FITS header. Please check if the file is a valid FITS file.",
+                            "actual_type": None,
+                            "expected_type": expected_type
+                        }
+                    )
                 
                 # If expected_type is provided, verify it matches
                 if expected_type and actual_type != expected_type:
-                    return {
-                        "valid": False,
-                        "message": f"Frame type mismatch. Expected {expected_type}, got {actual_type}",
+                    return JSONResponse(
+                        status_code=400,
+                        content={
+                            "valid": False,
+                            "message": f"Frame type mismatch. Expected {expected_type}, got {actual_type}",
+                            "actual_type": actual_type,
+                            "expected_type": expected_type
+                        }
+                    )
+                
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "valid": True,
+                        "message": "Frame type validated successfully",
                         "actual_type": actual_type,
                         "expected_type": expected_type
                     }
-                
-                return {
-                    "valid": True,
-                    "message": "Frame type validated successfully",
-                    "actual_type": actual_type,
-                    "expected_type": expected_type
-                }
+                )
                 
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Error processing FITS file: {str(e)}")
+            error_message = str(e)
+            if "Not a FITS file" in error_message:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "valid": False,
+                        "message": "The file is not a valid FITS file. Please check the file format.",
+                        "actual_type": None,
+                        "expected_type": expected_type
+                    }
+                )
+            else:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "valid": False,
+                        "message": f"Error processing FITS file: {error_message}",
+                        "actual_type": None,
+                        "expected_type": expected_type
+                    }
+                )
         finally:
             # Clean up the temporary file
             os.unlink(temp_file.name)

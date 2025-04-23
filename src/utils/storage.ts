@@ -170,7 +170,7 @@ export async function validateFitsFile(file: File, expectedType?: FileType): Pro
       formData.append('expectedType', expectedType);
     }
 
-    const response = await fetch('/api/validate-fits', {
+    const response = await fetch('http://localhost:8001/validate-fits', {
       method: 'POST',
       body: formData
     });
