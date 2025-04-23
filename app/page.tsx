@@ -1,73 +1,44 @@
-'use client';
-
 import Image from 'next/image'
-import Link from 'next/link'
-import Hero from '@/components/Hero'
-import PricingSection from '@/components/PricingSection'
-import WhyChooseUs from '../components/WhyChooseUs'
-import CommunitySection from '../components/CommunitySection'
 
-export default function Home() {
+export default function HoldingPage() {
   return (
-    <div className="relative min-h-screen">
-      {/* Hero Section */}
-      <div className="relative h-screen">
-        <div className="absolute inset-0">
-          <Image
-            src="/images/nebula-hero.jpg"
-            alt="Nebula background"
-            fill
-            className="object-cover brightness-75"
-            priority
-            quality={100}
-          />
-          <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/20 to-black/90" />
-        </div>
-        <div className="relative h-full flex items-center justify-center">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-            <h1 className="text-6xl md:text-7xl lg:text-8xl font-bold mb-6 bg-clip-text text-transparent bg-gradient-to-r from-white to-purple-300">
-              Process Your<br />
-              Astrophotography<br />
-              Online
-            </h1>
-            <p className="mt-6 text-lg leading-8 text-gray-300">
-              Upload, process, and store your astrophotography projects securely in the cosmos.
+    <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 text-white">
+      <div className="container mx-auto px-4 py-16">
+        <div className="max-w-3xl mx-auto text-center">
+          <h1 className="text-5xl font-bold mb-6">Stellar Astro</h1>
+          <p className="text-xl mb-8 text-gray-300">
+            Coming Soon - A revolutionary platform for astrophotography enthusiasts
+          </p>
+          <div className="mb-12">
+            <Image
+              src="/images/placeholder.jpg"
+              alt="Stellar Astro"
+              width={600}
+              height={400}
+              className="rounded-lg shadow-xl mx-auto"
+            />
+          </div>
+          <div className="space-y-4">
+            <p className="text-lg text-gray-300">
+              We're working on something amazing. Stay tuned for updates!
             </p>
-            <div className="flex gap-4 justify-center mt-12">
-              <Link
-                href="/dashboard"
-                className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3 rounded-lg text-lg transition-all duration-200 transform hover:scale-105"
+            <div className="flex justify-center space-x-4">
+              <a
+                href="https://twitter.com/yourhandle"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-gray-300 hover:text-white transition-colors"
               >
-                Get Started
-              </Link>
-              <Link
-                href="/community"
-                className="bg-transparent border border-gray-300 hover:bg-gray-800 text-white px-8 py-3 rounded-lg text-lg transition-all duration-200 transform hover:scale-105"
+                Twitter
+              </a>
+              <a
+                href="mailto:contact@stellar-astro.co.uk"
+                className="text-gray-300 hover:text-white transition-colors"
               >
-                Explore Community
-              </Link>
+                Contact Us
+              </a>
             </div>
           </div>
-        </div>
-      </div>
-
-      {/* Main Content with Unified Background */}
-      <div className="relative bg-gradient-to-b from-slate-950 to-slate-900">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(56,189,248,0.15),transparent_50%)]" />
-        
-        {/* Why Choose Us Section */}
-        <div className="relative">
-          <WhyChooseUs />
-        </div>
-
-        {/* Pricing Section */}
-        <div className="relative">
-          <PricingSection />
-        </div>
-
-        {/* Community Section */}
-        <div className="relative">
-          <CommunitySection />
         </div>
       </div>
     </div>
