@@ -24,7 +24,7 @@ sleep 2
 # Start Next.js development server
 echo "Starting Next.js development server..."
 cd ..
-npm run dev
+npx next dev
 
 # If Next.js server exits, cleanup Python worker
 cleanup 
