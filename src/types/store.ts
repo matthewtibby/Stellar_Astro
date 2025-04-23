@@ -1,3 +1,5 @@
+import { User } from '@supabase/supabase-js';
+
 export type ProcessingStatus = 'pending' | 'processing' | 'completed' | 'failed';
 export type FileType = 'light' | 'dark' | 'bias' | 'flat' | 'master-dark' | 'master-bias' | 'master-flat' | 'calibrated' | 'stacked' | 'aligned' | 'pre-processed' | 'post-processed';
 
@@ -60,8 +62,8 @@ export interface UserState {
 }
 
 export interface UserStore extends UserState {
-  user: UserState | null;
-  setUser: (user: Partial<UserState>) => void;
+  user: User | null;
+  setUser: (user: User) => void;
   setLoading: (isLoading: boolean) => void;
   setError: (error: string | null) => void;
   logout: () => void;
