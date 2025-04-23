@@ -240,16 +240,22 @@ const FileUploadSection = ({ projectId }: { projectId: string }) => {
     bias: [],
   });
   const [activeTab, setActiveTab] = useState<string>('light');
+  const [validationError, setValidationError] = useState<string | null>(null);
 
-  const handleUploadComplete = (fileType: string, filePaths: string[]) => {
+  const handleUploadComplete = (file: StorageFile) => {
     setUploadedFiles(prev => ({
       ...prev,
-      [fileType]: [...prev[fileType], ...filePaths],
+      [file.type]: [...prev[file.type], file.path],
     }));
   };
 
   const handleUploadError = (error: string) => {
     console.error('Upload error:', error);
+    setValidationError(error);
+  };
+
+  const handleValidationError = (error: string) => {
+    setValidationError(error);
     // You can add toast notification here if needed
   };
 
@@ -261,58 +267,17 @@ const FileUploadSection = ({ projectId }: { projectId: string }) => {
   ];
 
   return (
-    <div className="space-y-6">
-      {/* Tab Navigation */}
-      <div className="border-b border-gray-700">
-        <nav className="flex space-x-1" aria-label="File type tabs">
-          {fileTypes.map((type) => (
-            <button
-              key={type.id}
-              onClick={() => setActiveTab(type.id)}
-              className={`
-                py-2 px-4 text-sm font-medium rounded-t-lg
-                ${activeTab === type.id
-                  ? 'bg-blue-600 text-white'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
-                }
-              `}
-            >
-              {type.label}
-            </button>
-          ))}
-        </nav>
-      </div>
-
-      {/* Tab Content */}
-      <div className="pt-4">
-        {fileTypes.map((type) => (
-          <div
-            key={type.id}
-            className={activeTab === type.id ? 'block' : 'hidden'}
-          >
-            <FitsFileUpload
-              projectId={projectId}
-              fileType={type.id as any}
-              onUploadComplete={(paths) => handleUploadComplete(type.id, paths)}
-              onError={handleUploadError}
-            />
-            
-            {uploadedFiles[type.id].length > 0 && (
-              <div className="mt-4 p-3 bg-gray-800/50 rounded-lg border border-gray-700">
-                <p className="text-sm font-medium text-gray-300 mb-2">Uploaded files:</p>
-                <ul className="space-y-1 max-h-40 overflow-y-auto">
-                  {uploadedFiles[type.id].map((path, index) => (
-                    <li key={index} className="text-sm text-gray-400 flex items-center">
-                      <File size={14} className="mr-2 text-gray-500" />
-                      <span className="truncate">{path.split('/').pop()}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
+    <div className="space-y-4">
+      {validationError && (
+        <div className="p-4 bg-red-900/50 text-red-200 rounded-md border border-red-800">
+          {validationError}
+        </div>
+      )}
+      <FileManagementPanel 
+        projectId={projectId}
+        onFileSelect={handleUploadComplete}
+        onValidationError={handleValidationError}
+      />
     </div>
   );
 };
