@@ -11,11 +11,23 @@ let supabaseError: string | null = null;
 
 try {
   if (!supabaseUrl) {
+    console.error('Supabase URL is missing. Current value:', supabaseUrl);
     throw new Error('NEXT_PUBLIC_SUPABASE_URL is not configured in environment variables.');
   }
   
   if (!supabaseAnonKey) {
+    console.error('Supabase Anon Key is missing. Current value:', supabaseAnonKey);
     throw new Error('NEXT_PUBLIC_SUPABASE_ANON_KEY is not configured in environment variables.');
+  }
+
+  // Validate the Supabase URL format
+  try {
+    console.log('Attempting to validate Supabase URL:', supabaseUrl);
+    new URL(supabaseUrl);
+    console.log('Supabase URL validation successful');
+  } catch (e) {
+    console.error('Supabase URL validation failed:', e);
+    throw new Error('Invalid Supabase URL format. Please check your NEXT_PUBLIC_SUPABASE_URL environment variable.');
   }
   
   supabase = createClient(supabaseUrl, supabaseAnonKey);
@@ -23,6 +35,14 @@ try {
 } catch (error) {
   console.error('Failed to initialize Supabase client:', error);
   supabaseError = error instanceof Error ? error.message : 'Unknown error initializing Supabase';
+}
+
+// Export a function to get the Supabase client with error handling
+export function getSupabaseClient(): SupabaseClient {
+  if (!supabase) {
+    throw new Error(supabaseError || 'Supabase client not initialized');
+  }
+  return supabase;
 }
 
 // Storage bucket names
@@ -181,7 +201,7 @@ export async function uploadRawFrame(
       throw new Error(validationResult.message);
     }
 
-    const client = checkSupabase();
+    const client = getSupabaseClient();
     
     // Get the current user from Supabase auth
     const { data: { user }, error: authError } = await client.auth.getUser();

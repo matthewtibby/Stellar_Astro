@@ -177,27 +177,13 @@ export function FileManagementPanel({
     <div className="bg-gray-900/50 rounded-lg border border-gray-700 overflow-hidden">
       <div className="p-4 border-b border-gray-700 flex justify-between items-center">
         <h3 className="text-lg font-semibold text-white">File Management</h3>
-        <div className="flex items-center space-x-4">
-          <div
-            {...getRootProps()}
-            className={`px-4 py-2 rounded-md cursor-pointer transition-colors ${
-              isDragActive ? 'bg-blue-600/20 border border-blue-500' : 'bg-blue-600 hover:bg-blue-700'
-            }`}
-          >
-            <input {...getInputProps()} />
-            <div className="flex items-center space-x-2">
-              <Upload className="h-4 w-4" />
-              <span className="text-white">Upload FITS</span>
-            </div>
-          </div>
-          <button 
-            onClick={handleRefresh}
-            className="p-2 text-gray-400 hover:text-white transition-colors rounded-full hover:bg-gray-800"
-            title="Refresh files"
-          >
-            <RefreshCw className="h-5 w-5" />
-          </button>
-        </div>
+        <button 
+          onClick={handleRefresh}
+          className="p-2 text-gray-400 hover:text-white transition-colors rounded-full hover:bg-gray-800"
+          title="Refresh files"
+        >
+          <RefreshCw className="h-5 w-5" />
+        </button>
       </div>
 
       {uploadError && (
@@ -208,6 +194,26 @@ export function FileManagementPanel({
           </div>
         </div>
       )}
+
+      <div
+        {...getRootProps()}
+        className={`p-6 border-b border-gray-700 transition-colors ${
+          isDragActive ? 'bg-blue-600/20 border border-blue-500' : 'bg-gray-800/30'
+        }`}
+      >
+        <input {...getInputProps()} />
+        <div className="flex flex-col items-center justify-center">
+          <Upload className="h-10 w-10 text-gray-400 mb-2" />
+          <p className="text-sm text-gray-400">
+            {isDragActive
+              ? 'Drop the files here...'
+              : 'Drag & drop files here, or click to select files'}
+          </p>
+          <p className="text-xs text-gray-500 mt-1">
+            Supported formats: .fits, .fit, .FIT, .FITS, .RAW
+          </p>
+        </div>
+      </div>
 
       {selectedFiles.length > 0 && (
         <div className="p-4 border-b border-gray-700">

@@ -4,12 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useUserStore } from '@/src/store/user';
-import { createClient } from '@supabase/supabase-js';
-
-// Initialize Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+import { getSupabaseClient } from '@/src/utils/storage';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -18,47 +13,28 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   
-  const { setUser, setLoading, setError: setStoreError } = useUserStore();
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
     setIsLoading(true);
-    setLoading(true);
+    setError(null);
 
     try {
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (signInError) {
-        throw signInError;
-      }
+      if (error) throw error;
 
-      if (data.user) {
-        // Set user data in store
-        setUser({
-          id: data.user.id,
-          email: data.user.email!,
-          fullName: data.user.user_metadata?.full_name || '',
-          isAuthenticated: true,
-          subscription: {
-            type: 'free',
-            projectLimit: 5
-          }
-        });
-        
-        // Redirect to dashboard
+      if (data?.user) {
+        useUserStore.getState().setUser(data.user);
         router.push('/dashboard');
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'An error occurred during login';
-      setError(errorMessage);
-      setStoreError(errorMessage);
+      setError(err instanceof Error ? err.message : 'An error occurred during login');
     } finally {
       setIsLoading(false);
-      setLoading(false);
     }
   };
 
