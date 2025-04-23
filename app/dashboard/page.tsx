@@ -284,7 +284,7 @@ const FileUploadSection = ({ projectId }: { projectId: string }) => {
 
 const DashboardPage = () => {
   const router = useRouter();
-  const { user } = useUserStore();
+  const { user, isAuthenticated, subscription, fullName } = useUserStore();
   const [activeView, setActiveView] = useState('grid');
   const [activeProject, setActiveProject] = useState<Project | null>(null);
   const [showNewProject, setShowNewProject] = useState(false);
@@ -336,12 +336,12 @@ const DashboardPage = () => {
 
   useEffect(() => {
     // Redirect to login if not authenticated
-    if (!user?.isAuthenticated) {
+    if (!isAuthenticated) {
       router.push('/login');
     }
-  }, [user, router]);
+  }, [isAuthenticated, router]);
 
-  if (!user?.isAuthenticated) {
+  if (!isAuthenticated) {
     return null; // Don't render anything while redirecting
   }
 
@@ -365,7 +365,7 @@ const DashboardPage = () => {
   // Add this function to check project limits
   const checkProjectLimits = () => {
     const projectCount = mockProjects.length;
-    const userSubscription = user?.subscription || mockUserSubscription;
+    const userSubscription = subscription || mockUserSubscription;
     
     if (projectCount >= userSubscription.projectLimit) {
       return false;
@@ -792,20 +792,20 @@ const DashboardPage = () => {
             <div className="flex items-center space-x-4">
               <div className="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center">
                 <span className="text-white text-xl font-medium">
-                  {user?.fullName ? user.fullName.charAt(0).toUpperCase() : <User size={24} />}
+                  {fullName ? fullName.charAt(0).toUpperCase() : <User size={24} />}
                 </span>
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-white">Welcome, {user?.fullName || 'User'}!</h1>
+                <h1 className="text-2xl font-bold text-white">Welcome, {fullName || 'User'}!</h1>
                 <p className="text-gray-400">{user?.email}</p>
               </div>
             </div>
             <div className="flex items-center space-x-4">
               <button
                 onClick={handleNewProject}
-                disabled={mockProjects.length >= (user?.subscription || mockUserSubscription).projectLimit}
+                disabled={mockProjects.length >= (subscription || mockUserSubscription).projectLimit}
                 className={`flex items-center space-x-2 px-4 py-2 rounded-md transition-colors ${
-                  mockProjects.length >= (user?.subscription || mockUserSubscription).projectLimit
+                  mockProjects.length >= (subscription || mockUserSubscription).projectLimit
                     ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
                     : 'bg-blue-600 text-white hover:bg-blue-700'
                 }`}

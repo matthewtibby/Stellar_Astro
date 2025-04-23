@@ -11,7 +11,7 @@ import SettingsTab from '@/components/profile/SettingsTab';
 
 export default function ProfilePage() {
   const router = useRouter();
-  const { user, isAuthenticated } = useUserStore();
+  const { user, isAuthenticated, id, email, username, fullName, avatarUrl, subscription, isLoading, error } = useUserStore();
   const [activeTab, setActiveTab] = useState('account');
 
   // Redirect to login if not authenticated
@@ -55,11 +55,11 @@ export default function ProfilePage() {
             </TabsList>
             
             <TabsContent value="account">
-              <AccountTab user={user} />
+              <AccountTab user={{ id, email, username, fullName, avatarUrl, isAuthenticated, subscription, isLoading, error }} />
             </TabsContent>
             
             <TabsContent value="subscription">
-              <SubscriptionTab user={user} />
+              <SubscriptionTab user={{ id, email, username, fullName, avatarUrl, isAuthenticated, subscription, isLoading, error }} />
             </TabsContent>
             
             <TabsContent value="settings">

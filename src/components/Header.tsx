@@ -7,7 +7,7 @@ import { useUserStore } from "@/src/store/user";
 
 export default function Header() {
   const router = useRouter();
-  const { user, logout } = useUserStore();
+  const { user, isAuthenticated, isLoading, fullName, logout } = useUserStore();
 
   const handleLogout = () => {
     logout();
@@ -24,7 +24,7 @@ export default function Header() {
             </Link>
           </div>
           <div className="hidden md:flex items-center space-x-8">
-            {user?.isAuthenticated ? (
+            {isAuthenticated ? (
               <Link href="/dashboard" className="text-gray-300 hover:text-white transition-colors">
                 Dashboard
               </Link>
@@ -43,19 +43,19 @@ export default function Header() {
             </Link>
           </div>
           <div className="flex items-center space-x-4">
-            {user?.isLoading ? (
+            {isLoading ? (
               <div className="h-9 w-20 bg-gray-700 rounded-md animate-pulse"></div>
-            ) : user?.isAuthenticated ? (
+            ) : isAuthenticated ? (
               <div className="flex items-center space-x-4">
                 <div className="flex items-center space-x-2">
                   <Link href="/profile" className="flex items-center space-x-2 hover:opacity-80 transition-opacity">
                     <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center">
                       <span className="text-white text-sm font-medium">
-                        {user.fullName ? user.fullName.charAt(0).toUpperCase() : <User size={16} />}
+                        {fullName ? fullName.charAt(0).toUpperCase() : <User size={16} />}
                       </span>
                     </div>
                     <span className="text-white text-sm hidden sm:inline-block">
-                      {user.fullName || 'User'}
+                      {fullName || 'User'}
                     </span>
                   </Link>
                 </div>
