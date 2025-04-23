@@ -206,21 +206,16 @@ const workflowSteps: WorkflowStep[] = [
   },
   {
     id: 1,
-    name: 'Equipment Selection',
-    icon: CameraIcon,
-  },
-  {
-    id: 2,
     name: 'File Upload',
     icon: Upload,
   },
   {
-    id: 3,
+    id: 2,
     name: 'Processing',
     icon: Settings,
   },
   {
-    id: 4,
+    id: 3,
     name: 'Results',
     icon: Star,
   },
@@ -697,8 +692,6 @@ const DashboardPage = () => {
       case 0:
         return renderNewProjectForm();
       case 1:
-        return renderFileUpload();
-      case 2:
         return (
           <div className="space-y-6">
             <div className="bg-gray-800/50 rounded-lg p-6 shadow-lg border border-gray-700">
@@ -712,8 +705,8 @@ const DashboardPage = () => {
             </div>
           </div>
         );
+      case 2:
       case 3:
-      case 4:
         return (
           <div className="bg-gray-800/50 rounded-lg p-6 shadow-lg border border-gray-700">
             <h3 className="text-xl font-semibold text-white mb-6">
