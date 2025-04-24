@@ -27,9 +27,7 @@ const nextConfig = {
   },
   env: {
     // Add any environment variables that need to be exposed to the browser
-  },
-  // Server Actions are now available by default in Next.js 14
-  // No need to enable them in experimental
+  }
 }
 
 module.exports = nextConfig 
