@@ -53,3 +53,9 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+
+# Ignore ZIP archives
+*.zip
+
+# Ignore FITS files
+*.fits
