@@ -46,10 +46,48 @@ __pycache__/
 *$py.class
 *.so
 .Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
 .env
 .venv
-env/
 venv/
 ENV/
-env.bak/
-venv.bak/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Deployment artifacts
+*.zip
+*.tar.gz
+.elasticbeanstalk/
+
+# Test files
+test.fits
+*.fits
+*.fit
+*.fts
+
+# Logs
+*.log
+
+# Local development
+node_modules/
+.next/
