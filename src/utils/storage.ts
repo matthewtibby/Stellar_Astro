@@ -170,7 +170,7 @@ export async function validateFitsFile(file: File, expectedType?: FileType): Pro
       formData.append('expectedType', expectedType);
     }
 
-    const response = await fetch('http://localhost:8001/validate-fits', {
+    const response = await fetch('http://localhost:8000/validate-fits', {
       method: 'POST',
       body: formData
     });
@@ -192,7 +192,8 @@ export async function uploadRawFrame(
   projectId: string,
   fileType: FileType,
   file: File,
-  onProgress?: UploadProgressCallback
+  onProgress?: UploadProgressCallback,
+  signal?: AbortSignal
 ): Promise<string> {
   try {
     // First validate the FITS file
@@ -211,6 +212,18 @@ export async function uploadRawFrame(
       throw new Error('User must be authenticated to upload files');
     }
 
+    // Get project details to include project name in path
+    const { data: project, error: projectError } = await client
+      .from('projects')
+      .select('title')
+      .eq('id', projectId)
+      .single();
+
+    if (projectError || !project) {
+      console.error('Error fetching project:', projectError);
+      throw new Error('Project not found');
+    }
+
     // Generate a unique identifier with timestamp
     const timestamp = new Date().getTime();
     const randomString = Math.random().toString(36).substring(2, 8);
@@ -221,8 +234,9 @@ export async function uploadRawFrame(
     const baseFileName = file.name.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9.-]/g, '_');
     const sanitizedFileName = `${baseFileName}_${uniqueId}.${fileExtension}`;
     
-    // Create a more unique path structure
-    const targetFilePath = `${user.id}/${projectId}/${FILE_TYPE_FOLDERS[fileType]}/${uniqueId}/${sanitizedFileName}`;
+    // Create a more unique path structure with project name
+    const sanitizedProjectName = project.title.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const targetFilePath = `${user.id}/${sanitizedProjectName}/${FILE_TYPE_FOLDERS[fileType]}/${uniqueId}/${sanitizedFileName}`;
     
     console.log('Attempting to upload file:', {
       originalName: file.name,
@@ -231,6 +245,7 @@ export async function uploadRawFrame(
       fileSize: file.size,
       fileType: file.type,
       userId: user.id,
+      projectName: sanitizedProjectName,
       bucketName: STORAGE_BUCKETS.RAW_FRAMES,
       contentType: file.type
     });
@@ -241,7 +256,15 @@ export async function uploadRawFrame(
         .from(STORAGE_BUCKETS.RAW_FRAMES)
         .upload(targetFilePath, file, {
           cacheControl: '3600',
-          upsert: false
+          upsert: false,
+          metadata: {
+            size: file.size.toString(),
+            originalName: file.name,
+            contentType: file.type,
+            fileType: fileType,
+            uploadedAt: new Date().toISOString(),
+            lastModified: file.lastModified.toString()
+          }
         });
         
       if (error) {
@@ -253,12 +276,18 @@ export async function uploadRawFrame(
         throw new Error('Upload failed: No file path returned');
       }
       
+      // Verify the upload by getting the file metadata
+      const { data: uploadedFile } = await client.storage
+        .from(STORAGE_BUCKETS.RAW_FRAMES)
+        .list(`${user.id}/${projectId}/${FILE_TYPE_FOLDERS[fileType]}/${uniqueId}`);
+      
+      console.log('Upload verification:', uploadedFile);
+      
       return data.path;
     } catch (simpleUploadError) {
       console.error('Simple upload failed, trying chunked upload:', simpleUploadError);
       
       // If simple upload fails, try the chunked approach
-      // Create a custom upload function that tracks progress
       const uploadWithProgress = async () => {
         // Create a FileReader to read the file in chunks
         const reader = new FileReader();
@@ -267,9 +296,21 @@ export async function uploadRawFrame(
         let uploadedChunks = 0;
         
         return new Promise<string>((resolve, reject) => {
+          // Check for abort signal
+          if (signal?.aborted) {
+            reject(new Error('Upload aborted'));
+            return;
+          }
+          
           // Create a custom upload function that uses fetch API
           const uploadChunk = async (chunk: Blob, start: number) => {
             try {
+              // Check for abort signal
+              if (signal?.aborted) {
+                reject(new Error('Upload aborted'));
+                return;
+              }
+              
               // Create a FormData object for the chunk
               const formData = new FormData();
               formData.append('file', chunk);
@@ -289,8 +330,15 @@ export async function uploadRawFrame(
                 body: chunk,
                 headers: {
                   'Content-Type': file.type,
-                  'Content-Range': `bytes ${start}-${start + chunk.size - 1}/${file.size}`
-                }
+                  'Content-Range': `bytes ${start}-${start + chunk.size - 1}/${file.size}`,
+                  'x-amz-meta-size': file.size.toString(),
+                  'x-amz-meta-originalName': file.name,
+                  'x-amz-meta-contentType': file.type,
+                  'x-amz-meta-fileType': fileType,
+                  'x-amz-meta-uploadedAt': new Date().toISOString(),
+                  'x-amz-meta-lastModified': file.lastModified.toString()
+                },
+                signal // Pass the abort signal to fetch
               });
               
               if (!response.ok) {
@@ -539,7 +587,11 @@ export async function getFilesByType(projectId: string): Promise<Record<FileType
     for (const [type, folder] of Object.entries(FILE_TYPE_FOLDERS)) {
       const { data, error } = await client.storage
         .from(STORAGE_BUCKETS.RAW_FRAMES)
-        .list(`${user.id}/${projectId}/${folder}`);
+        .list(`${user.id}/${projectId}/${folder}`, {
+          limit: 100,
+          offset: 0,
+          sortBy: { column: 'name', order: 'asc' }
+        });
       
       if (error) {
         console.error(`Error fetching ${type} files:`, error);
@@ -547,13 +599,40 @@ export async function getFilesByType(projectId: string): Promise<Record<FileType
       }
       
       if (data) {
-        result[type as FileType] = data.map(file => ({
-          name: file.name,
-          path: `${user.id}/${projectId}/${folder}/${file.name}`,
-          size: file.metadata?.size || 0,
-          created_at: file.created_at,
-          type: type as FileType
-        }));
+        console.log(`Found ${data.length} files for type ${type}:`, data);
+        
+        // Get detailed metadata for each file
+        const filesWithMetadata = await Promise.all(
+          data.map(async (file) => {
+            console.log('Processing file:', file);
+            
+            const { data: metadata } = await client.storage
+              .from(STORAGE_BUCKETS.RAW_FRAMES)
+              .getPublicUrl(`${user.id}/${projectId}/${folder}/${file.name}`);
+            
+            // Get the file size from the file object
+            const size = file.metadata?.size || 0;
+            const created_at = file.created_at || new Date().toISOString();
+            
+            console.log('File metadata:', {
+              name: file.name,
+              size,
+              created_at,
+              metadata: file.metadata
+            });
+            
+            return {
+              name: file.name,
+              path: `${user.id}/${projectId}/${folder}/${file.name}`,
+              size: typeof size === 'string' ? parseInt(size, 10) : size,
+              created_at,
+              type: type as FileType,
+              url: metadata?.publicUrl
+            };
+          })
+        );
+        
+        result[type as FileType] = filesWithMetadata;
       }
     }
 

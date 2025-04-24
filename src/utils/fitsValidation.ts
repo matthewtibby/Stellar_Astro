@@ -16,11 +16,12 @@ export async function validateFitsFile(
   }
 
   try {
-    const response = await fetch('http://localhost:8001/validate-fits', {
+    const response = await fetch('http://localhost:8000/validate-fits', {
       method: 'POST',
       body: formData,
       headers: {
         'Accept': 'application/json',
+        'Content-Type': 'multipart/form-data'
       }
     });
 
