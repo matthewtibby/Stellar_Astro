@@ -81,4 +81,13 @@ export interface AppStore extends AppState {
   toggleSidebar: () => void;
   setNotifications: (enabled: boolean) => void;
   setLanguage: (language: string) => void;
+}
+
+export interface StorageFile {
+  name: string;
+  path: string;
+  size: number;
+  created_at: string;
+  type: FileType;
+  url?: string;
 } 
