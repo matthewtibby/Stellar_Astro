@@ -12,7 +12,11 @@ app = FastAPI()
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Frontend URL
+    allow_origins=[
+        "http://localhost:3000",  # Local development
+        "https://stellar-astro.co.uk",  # Production domain
+        "http://stellar-astro-env.eba-ymkmkjmx.us-east-1.elasticbeanstalk.com"  # Elastic Beanstalk domain
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -56,11 +60,11 @@ def get_frame_type_from_header(header: fits.header.Header) -> str:
 @app.post("/validate-fits")
 async def validate_fits_file(
     file: UploadFile = File(...),
-    expected_type: Optional[str] = None
+    expectedType: Optional[str] = None
 ) -> JSONResponse:
     """
     Validate a FITS file and determine its frame type.
-    If expected_type is provided, verify that the file matches the expected type.
+    If expectedType is provided, verify that the file matches the expected type.
     """
     if not file.filename.lower().endswith(('.fits', '.fit', '.fts')):
         return JSONResponse(
@@ -69,7 +73,7 @@ async def validate_fits_file(
                 "valid": False,
                 "message": "File must be a FITS file",
                 "actual_type": None,
-                "expected_type": expected_type
+                "expected_type": expectedType
             }
         )
     
@@ -95,19 +99,19 @@ async def validate_fits_file(
                             "valid": False,
                             "message": "Could not determine frame type from FITS header. Please check if the file is a valid FITS file.",
                             "actual_type": None,
-                            "expected_type": expected_type
+                            "expected_type": expectedType
                         }
                     )
                 
-                # If expected_type is provided, verify it matches
-                if expected_type and actual_type != expected_type:
+                # If expectedType is provided, verify it matches
+                if expectedType and actual_type != expectedType:
                     return JSONResponse(
                         status_code=400,
                         content={
                             "valid": False,
-                            "message": f"Frame type mismatch. Expected {expected_type}, got {actual_type}",
+                            "message": f"Frame type mismatch. Expected {expectedType}, got {actual_type}",
                             "actual_type": actual_type,
-                            "expected_type": expected_type
+                            "expected_type": expectedType
                         }
                     )
                 
@@ -117,7 +121,7 @@ async def validate_fits_file(
                         "valid": True,
                         "message": "Frame type validated successfully",
                         "actual_type": actual_type,
-                        "expected_type": expected_type
+                        "expected_type": expectedType
                     }
                 )
                 
@@ -130,7 +134,7 @@ async def validate_fits_file(
                         "valid": False,
                         "message": "The file is not a valid FITS file. Please check the file format.",
                         "actual_type": None,
-                        "expected_type": expected_type
+                        "expected_type": expectedType
                     }
                 )
             else:
@@ -140,7 +144,7 @@ async def validate_fits_file(
                         "valid": False,
                         "message": f"Error processing FITS file: {error_message}",
                         "actual_type": None,
-                        "expected_type": expected_type
+                        "expected_type": expectedType
                     }
                 )
         finally:

@@ -15,8 +15,10 @@ export async function validateFitsFile(
     formData.append('expected_type', expectedType);
   }
 
+  const API_URL = process.env.NEXT_PUBLIC_PYTHON_WORKER_URL || 'http://localhost:8001';
+
   try {
-    const response = await fetch('http://localhost:8001/validate-fits', {
+    const response = await fetch(`${API_URL}/validate-fits`, {
       method: 'POST',
       body: formData,
       headers: {
@@ -24,16 +26,17 @@ export async function validateFitsFile(
       }
     });
 
-    const data = await response.json();
-    
     if (!response.ok) {
-      // If the response is not ok but contains our custom error format
-      if (data.valid !== undefined) {
-        return data;
-      }
-      throw new Error(data.detail || 'Failed to validate FITS file');
+      const errorData = await response.json();
+      return {
+        valid: false,
+        message: errorData.message || 'Failed to validate FITS file',
+        actual_type: null,
+        expected_type: expectedType
+      };
     }
 
+    const data = await response.json();
     return data;
   } catch (error) {
     console.error('Error validating FITS file:', error);

@@ -1,5 +1,6 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { FileType } from '@/src/types/store';
+import { validateFitsFile as validateFits } from './fitsValidation';
 
 // Get environment variables
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -163,28 +164,12 @@ export async function checkBucketContents(): Promise<void> {
 
 // Add this new function for FITS validation
 export async function validateFitsFile(file: File, expectedType?: FileType): Promise<{ valid: boolean; message: string; actualType: string | null }> {
-  try {
-    const formData = new FormData();
-    formData.append('file', file);
-    if (expectedType) {
-      formData.append('expectedType', expectedType);
-    }
-
-    const response = await fetch('http://localhost:8001/validate-fits', {
-      method: 'POST',
-      body: formData
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Validation failed');
-    }
-
-    return await response.json();
-  } catch (error) {
-    console.error('Error validating FITS file:', error);
-    throw error;
-  }
+  const result = await validateFits(file, expectedType || null);
+  return {
+    valid: result.valid,
+    message: result.message,
+    actualType: result.actual_type
+  };
 }
 
 // Update the uploadRawFrame function to include validation
