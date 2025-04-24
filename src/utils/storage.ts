@@ -196,16 +196,23 @@ export async function uploadRawFrame(
   signal?: AbortSignal
 ): Promise<string> {
   try {
+    console.log('Starting uploadRawFrame:', { projectId, fileType, fileName: file.name });
+    
     // First validate the FITS file
+    console.log('Validating FITS file...');
     const validationResult = await validateFitsFile(file, fileType);
+    console.log('Validation result:', validationResult);
+    
     if (!validationResult.valid) {
       throw new Error(validationResult.message);
     }
 
     const client = getSupabaseClient();
+    console.log('Got Supabase client');
     
     // Get the current user from Supabase auth
     const { data: { user }, error: authError } = await client.auth.getUser();
+    console.log('Auth check result:', { user: user?.id, error: authError });
     
     if (authError || !user) {
       console.error('Auth error:', authError);
@@ -218,6 +225,7 @@ export async function uploadRawFrame(
       .select('title')
       .eq('id', projectId)
       .single();
+    console.log('Project lookup result:', { project, error: projectError });
 
     if (projectError || !project) {
       console.error('Error fetching project:', projectError);
@@ -238,7 +246,7 @@ export async function uploadRawFrame(
     const sanitizedProjectName = project.title.replace(/[^a-zA-Z0-9.-]/g, '_');
     const targetFilePath = `${user.id}/${sanitizedProjectName}/${FILE_TYPE_FOLDERS[fileType]}/${uniqueId}/${sanitizedFileName}`;
     
-    console.log('Attempting to upload file:', {
+    console.log('Prepared upload details:', {
       originalName: file.name,
       sanitizedName: sanitizedFileName,
       filePath: targetFilePath,
@@ -252,6 +260,7 @@ export async function uploadRawFrame(
     
     // Try to upload with a simple approach first
     try {
+      console.log('Attempting simple upload...');
       const { data, error } = await client.storage
         .from(STORAGE_BUCKETS.RAW_FRAMES)
         .upload(targetFilePath, file, {
@@ -266,6 +275,7 @@ export async function uploadRawFrame(
             lastModified: file.lastModified.toString()
           }
         });
+      console.log('Simple upload result:', { data, error });
         
       if (error) {
         console.error('Simple upload failed:', error);
@@ -277,6 +287,7 @@ export async function uploadRawFrame(
       }
       
       // Verify the upload by getting the file metadata
+      console.log('Verifying upload...');
       const { data: uploadedFile } = await client.storage
         .from(STORAGE_BUCKETS.RAW_FRAMES)
         .list(`${user.id}/${projectId}/${FILE_TYPE_FOLDERS[fileType]}/${uniqueId}`);
@@ -288,12 +299,15 @@ export async function uploadRawFrame(
       console.error('Simple upload failed, trying chunked upload:', simpleUploadError);
       
       // If simple upload fails, try the chunked approach
+      console.log('Starting chunked upload...');
       const uploadWithProgress = async () => {
         // Create a FileReader to read the file in chunks
         const reader = new FileReader();
         const chunkSize = 1024 * 1024; // 1MB chunks
         const totalChunks = Math.ceil(file.size / chunkSize);
         let uploadedChunks = 0;
+        
+        console.log('Chunked upload details:', { totalChunks, chunkSize });
         
         return new Promise<string>((resolve, reject) => {
           // Check for abort signal
@@ -302,9 +316,11 @@ export async function uploadRawFrame(
             return;
           }
           
-          // Create a custom upload function that uses fetch API
+          // Create upload chunk function
           const uploadChunk = async (chunk: Blob, start: number) => {
             try {
+              console.log(`Uploading chunk ${uploadedChunks + 1}/${totalChunks}...`);
+              
               // Check for abort signal
               if (signal?.aborted) {
                 reject(new Error('Upload aborted'));
@@ -338,7 +354,7 @@ export async function uploadRawFrame(
                   'x-amz-meta-uploadedAt': new Date().toISOString(),
                   'x-amz-meta-lastModified': file.lastModified.toString()
                 },
-                signal // Pass the abort signal to fetch
+                signal
               });
               
               if (!response.ok) {
@@ -348,6 +364,7 @@ export async function uploadRawFrame(
               // Update progress
               uploadedChunks++;
               const progress = uploadedChunks / totalChunks;
+              console.log(`Upload progress: ${Math.round(progress * 100)}%`);
               if (onProgress) {
                 onProgress(progress);
               }
@@ -359,21 +376,26 @@ export async function uploadRawFrame(
                 await uploadChunk(nextChunk, nextStart);
               } else {
                 // All chunks uploaded, resolve the promise
+                console.log('All chunks uploaded successfully');
                 resolve(targetFilePath);
               }
             } catch (error) {
+              console.error('Chunk upload error:', error);
               reject(error);
             }
           };
           
-          // Start uploading the first chunk
+          // Start with the first chunk
+          console.log('Starting first chunk upload...');
           const firstChunk = file.slice(0, chunkSize);
           uploadChunk(firstChunk, 0);
         });
       };
       
       // Use the custom upload function
+      console.log('Starting chunked upload process...');
       const uploadedFilePath = await uploadWithProgress();
+      console.log('Chunked upload completed:', uploadedFilePath);
       
       // Check bucket contents after successful upload
       await checkBucketContents();
@@ -386,8 +408,7 @@ export async function uploadRawFrame(
       console.error('Error details:', {
         name: error.name,
         message: error.message,
-        stack: error.stack,
-        cause: error.cause
+        stack: error.stack
       });
     }
     throw error;

@@ -32,18 +32,23 @@ const FitsFileUpload: React.FC<FitsFileUploadProps> = ({
     setUploadProgress(0);
 
     try {
+      console.log('Starting file validation...');
       // Validate the FITS file
       const validationResult = await validateFitsFile(file, fileType);
+      console.log('Validation result:', validationResult);
       
       if (!validationResult.valid) {
         throw new Error(validationResult.message || 'Invalid FITS file');
       }
 
+      console.log('Starting file upload...');
       // Upload the file with progress tracking
       await uploadRawFrame(projectId, fileType, file, (progress: number) => {
+        console.log('Upload progress:', progress);
         setUploadProgress(progress);
       });
 
+      console.log('Upload completed successfully');
       addToast('success', 'File uploaded successfully');
 
       if (onUploadComplete) {

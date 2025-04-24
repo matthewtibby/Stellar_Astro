@@ -20,21 +20,16 @@ export async function validateFitsFile(
       method: 'POST',
       body: formData,
       headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'multipart/form-data'
+        'Accept': 'application/json'
       }
     });
 
-    const data = await response.json();
-    
     if (!response.ok) {
-      // If the response is not ok but contains our custom error format
-      if (data.valid !== undefined) {
-        return data;
-      }
-      throw new Error(data.detail || 'Failed to validate FITS file');
+      const errorData = await response.json();
+      throw new Error(errorData.message || 'Failed to validate FITS file');
     }
 
+    const data = await response.json();
     return data;
   } catch (error) {
     console.error('Error validating FITS file:', error);
