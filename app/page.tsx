@@ -1,47 +1,24 @@
-import Image from 'next/image'
+"use client";
 
-export default function HoldingPage() {
+import Hero from './components/Hero'
+import Features from './components/Features'
+import Pricing from './components/Pricing'
+import CommunityWall from './components/CommunityWall'
+
+export default function Home() {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 text-white">
-      <div className="container mx-auto px-4 py-16">
-        <div className="max-w-3xl mx-auto text-center">
-          <h1 className="text-5xl font-bold mb-6">Stellar Astro</h1>
-          <p className="text-xl mb-8 text-gray-300">
-            Coming Soon - A revolutionary platform for astrophotography enthusiasts
-          </p>
-          <div className="mb-12">
-            <Image
-              src="/images/placeholder.jpg"
-              alt="Stellar Astro"
-              width={600}
-              height={400}
-              className="rounded-lg shadow-xl mx-auto"
-            />
-          </div>
-          <div className="space-y-4">
-            <p className="text-lg text-gray-300">
-              We're working on something amazing. Stay tuned for updates!
-            </p>
-            <div className="flex justify-center space-x-4">
-              <a
-                href="https://twitter.com/yourhandle"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-gray-300 hover:text-white transition-colors"
-              >
-                Twitter
-              </a>
-              <a
-                href="mailto:contact@stellar-astro.co.uk"
-                className="text-gray-300 hover:text-white transition-colors"
-              >
-                Contact Us
-              </a>
-            </div>
-          </div>
+    <main className="min-h-screen">
+      <Hero />
+      <div className="relative">
+        <div className="absolute inset-0 bg-gradient-to-b from-slate-950 to-slate-900">
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(56,189,248,0.15),transparent_50%)]" />
+        </div>
+        <div className="relative">
+          <Features />
+          <Pricing />
+          <CommunityWall />
         </div>
       </div>
-    </div>
-  )
+    </main>
+  );
 } 
- 

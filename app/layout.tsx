@@ -1,36 +1,31 @@
 import type { Metadata } from 'next'
-import { Inter, Plus_Jakarta_Sans } from 'next/font/google'
+import { Inter } from 'next/font/google'
 import './globals.css'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
-import { CurrencyProvider } from '@/components/CurrencyProvider'
 
-const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
-const plusJakartaSans = Plus_Jakarta_Sans({ 
-  subsets: ['latin'],
-  variable: '--font-plus-jakarta-sans'
-})
+const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Stellar Astro - AI-Powered Image Processing',
-  description: 'Transform your images with advanced AI processing and cloud integration.',
+  title: 'Stellar Astro - Online Astrophotography Processing',
+  description: 'Web-based software for calibrating, stacking, and enhancing your astrophotos.',
 }
 
 export default function RootLayout({
   children,
-}: {
-  children: React.ReactNode
-}) {
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
   return (
-    <html lang="en" className={`${inter.variable} ${plusJakartaSans.variable} h-full`}>
-      <body className={`${inter.className} min-h-full flex flex-col font-sans bg-black`}>
-        <CurrencyProvider>
+    <html lang="en">
+      <body className={inter.className}>
+        <div className="flex flex-col min-h-screen">
           <Header />
           <main className="flex-grow">
             {children}
           </main>
           <Footer />
-        </CurrencyProvider>
+        </div>
       </body>
     </html>
   )
