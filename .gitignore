@@ -53,3 +53,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+
+# Temporary files
+*.zip
+test*.fits
