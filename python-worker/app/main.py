@@ -46,7 +46,7 @@ signal.signal(signal.SIGTERM, handle_sigterm)
 async def timeout_middleware(request, call_next):
     try:
         start_time = time.time()
-        response = await call_next(request)
+        response = await asyncio.wait_for(call_next(request), timeout=30.0)
         process_time = time.time() - start_time
         response.headers["X-Process-Time"] = str(process_time)
         return response
@@ -54,6 +54,11 @@ async def timeout_middleware(request, call_next):
         return JSONResponse(
             status_code=504,
             content={"detail": "Request timeout"}
+        )
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"Server error: {str(e)}"}
         )
 
 def get_frame_type_from_header(header: fits.header.Header) -> str:
@@ -101,106 +106,135 @@ async def validate_fits_file(
     If expected_type is provided, verify that the file matches the expected type.
     """
     try:
-        # Set a timeout for the entire operation
-        async with asyncio.timeout(30):  # 30 second timeout
-            # Check file extension
-            if not file.filename.lower().endswith(('.fits', '.fit', '.fts', '.raw')):
-                return JSONResponse(
-                    status_code=400,
-                    content={
-                        "valid": False,
-                        "message": "File must be a FITS file",
-                        "actual_type": None,
-                        "expected_type": expected_type
-                    }
-                )
-            
-            # Create a temporary file to store the upload
-            with tempfile.NamedTemporaryFile(delete=False) as temp_file:
-                try:
-                    # Read the file content as binary
-                    content = await file.read()
-                    temp_file.write(content)
-                    temp_file.flush()
-                    
-                    # Open the FITS file
-                    with fits.open(temp_file.name) as hdul:
-                        # Get the primary header
-                        header = hdul[0].header
-                        
-                        # Determine the frame type
-                        actual_type = get_frame_type_from_header(header)
-                        
-                        if actual_type is None:
-                            return JSONResponse(
-                                status_code=400,
-                                content={
-                                    "valid": False,
-                                    "message": "Could not determine frame type from FITS header. Please check if the file is a valid FITS file.",
-                                    "actual_type": None,
-                                    "expected_type": expected_type
-                                }
-                            )
-                        
-                        # If expected_type is provided, verify it matches
-                        if expected_type and actual_type != expected_type:
-                            return JSONResponse(
-                                status_code=400,
-                                content={
-                                    "valid": False,
-                                    "message": f"Frame type mismatch. Expected {expected_type}, got {actual_type}",
-                                    "actual_type": actual_type,
-                                    "expected_type": expected_type
-                                }
-                            )
-                        
-                        return JSONResponse(
-                            status_code=200,
-                            content={
-                                "valid": True,
-                                "message": "Frame type validated successfully",
-                                "actual_type": actual_type,
-                                "expected_type": expected_type
-                            }
-                        )
-                        
-                except Exception as e:
-                    error_message = str(e)
-                    if "Not a FITS file" in error_message:
-                        return JSONResponse(
-                            status_code=400,
-                            content={
-                                "valid": False,
-                                "message": "The file is not a valid FITS file",
-                                "actual_type": None,
-                                "expected_type": expected_type
-                            }
-                        )
-                    return JSONResponse(
-                        status_code=500,
-                        content={
-                            "valid": False,
-                            "message": f"Error processing FITS file: {error_message}",
-                            "actual_type": None,
-                            "expected_type": expected_type
-                        }
-                    )
-                finally:
-                    # Clean up the temporary file
-                    try:
-                        os.unlink(temp_file.name)
-                    except:
-                        pass
-    except asyncio.TimeoutError:
+        # Create a timeout task and the main task
+        timeout_task = asyncio.create_task(asyncio.sleep(30))
+        main_task = asyncio.create_task(process_fits_file(file, expected_type))
+        
+        # Wait for either task to complete
+        done, pending = await asyncio.wait(
+            [timeout_task, main_task],
+            return_when=asyncio.FIRST_COMPLETED
+        )
+        
+        # Cancel any pending tasks
+        for task in pending:
+            task.cancel()
+        
+        # Check if we timed out
+        if timeout_task in done:
+            return JSONResponse(
+                status_code=504,
+                content={
+                    "valid": False,
+                    "message": "Validation timed out after 30 seconds",
+                    "actual_type": None,
+                    "expected_type": expected_type
+                }
+            )
+        
+        # Return the result from the main task
+        return main_task.result()
+        
+    except Exception as e:
         return JSONResponse(
-            status_code=504,
+            status_code=500,
             content={
                 "valid": False,
-                "message": "Validation request timed out",
+                "message": f"Server error: {str(e)}",
                 "actual_type": None,
                 "expected_type": expected_type
             }
         )
+
+async def process_fits_file(file: UploadFile, expected_type: Optional[str]) -> JSONResponse:
+    # Check file extension
+    if not file.filename.lower().endswith(('.fits', '.fit', '.fts', '.raw')):
+        return JSONResponse(
+            status_code=400,
+            content={
+                "valid": False,
+                "message": "File must be a FITS file",
+                "actual_type": None,
+                "expected_type": expected_type
+            }
+        )
+    
+    # Create a temporary file to store the upload
+    with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+        try:
+            # Read the file content as binary
+            content = await file.read()
+            temp_file.write(content)
+            temp_file.flush()
+            
+            # Open the FITS file
+            with fits.open(temp_file.name) as hdul:
+                # Get the primary header
+                header = hdul[0].header
+                
+                # Determine the frame type
+                actual_type = get_frame_type_from_header(header)
+                
+                if actual_type is None:
+                    return JSONResponse(
+                        status_code=400,
+                        content={
+                            "valid": False,
+                            "message": "Could not determine frame type from FITS header. Please check if the file is a valid FITS file.",
+                            "actual_type": None,
+                            "expected_type": expected_type
+                        }
+                    )
+                
+                # If expected_type is provided, verify it matches
+                if expected_type and actual_type != expected_type:
+                    return JSONResponse(
+                        status_code=400,
+                        content={
+                            "valid": False,
+                            "message": f"Frame type mismatch. Expected {expected_type}, got {actual_type}",
+                            "actual_type": actual_type,
+                            "expected_type": expected_type
+                        }
+                    )
+                
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "valid": True,
+                        "message": "Frame type validated successfully",
+                        "actual_type": actual_type,
+                        "expected_type": expected_type
+                    }
+                )
+                
+        except Exception as e:
+            error_message = str(e)
+            if "Not a FITS file" in error_message:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "valid": False,
+                        "message": "The file is not a valid FITS file",
+                        "actual_type": None,
+                        "expected_type": expected_type
+                    }
+                )
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "valid": False,
+                    "message": f"Error processing FITS file: {error_message}",
+                    "actual_type": None,
+                    "expected_type": expected_type
+                }
+            )
+        finally:
+            # Clean up the temporary file
+            try:
+                os.unlink(temp_file.name)
+            except:
+                pass
 
 @app.get("/")
 async def root():
