@@ -3,13 +3,10 @@
 # Function to cleanup processes on exit
 cleanup() {
     echo "Shutting down servers..."
-    # Kill all Python processes that might be using port 8000
     pkill -f "uvicorn" || true
     pkill -f "python" || true
-    # Kill Next.js process
     pkill -f "next dev" || true
     sleep 2
-    # Force kill any remaining processes
     pkill -9 -f "uvicorn" || true
     pkill -9 -f "python" || true
     pkill -9 -f "next dev" || true

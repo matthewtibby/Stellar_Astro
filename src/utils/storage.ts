@@ -154,29 +154,24 @@ export async function validateFitsFile(
     if (!projectId || !userId) {
       throw new Error('projectId and userId are required');
     }
-
     const formData = new FormData();
     formData.append('file', file);
     formData.append('project_id', projectId);
     formData.append('user_id', userId);
-    
     if (expectedType) {
       formData.append('expected_type', expectedType);
     }
-
-    const response = await fetch('http://localhost:8000/validate-fits', {
+    const response = await fetch('http://localhost:8001/validate-fits', {
       method: 'POST',
       body: formData,
       headers: {
         'Accept': 'application/json'
       }
     });
-
     if (!response.ok) {
       const errorData = await response.json();
       throw new Error(errorData.message || errorData.details || 'Validation failed');
     }
-
     const data = await response.json();
     return data;
   } catch (error) {
@@ -187,90 +182,80 @@ export async function validateFitsFile(
 
 // Add a function to ensure project exists
 export async function ensureProjectExists(projectId: string): Promise<void> {
-  const client = createBrowserClient(supabaseUrl, supabaseAnonKey);
-  
-  // Check if projectId is a valid UUID
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  if (!uuidRegex.test(projectId)) {
-    throw new Error('Invalid project ID format. Must be a valid UUID.');
-  }
+  const client = checkSupabase();
+  const { data: project, error } = await client
+    .from('projects')
+    .select('*')
+    .eq('id', projectId)
+    .single();
 
+  if (error || !project) {
+    // Create a default project if it doesn't exist
+    const { data: { user } } = await client.auth.getUser();
+    if (!user) {
+      throw new Error('User must be authenticated');
+    }
+
+    await client
+      .from('projects')
+      .insert([
+        {
+          id: projectId,
+          user_id: user.id,
+          title: 'Default Project',
+          description: 'Created automatically for file uploads',
+          created_at: new Date().toISOString()
+        }
+      ]);
+  }
+}
+
+// Update the uploadRawFrame function to include validation
+export async function uploadRawFrame(
+  projectId: string,
+  fileType: FileType,
+  file: File,
+  onProgress?: UploadProgressCallback,
+  signal?: AbortSignal
+): Promise<string> {
   try {
-    const { data: project, error } = await client
+    console.log('[uploadRawFrame] Starting upload for file:', file.name);
+    // Ensure project exists
+    console.log('[uploadRawFrame] Ensuring project exists...');
+    await ensureProjectExists(projectId);
+    // Initialize Supabase client
+    const client = checkSupabase();
+    // Authenticate user
+    console.log('[uploadRawFrame] Checking user authentication...');
+    const { data: { user }, error: authError } = await client.auth.getUser();
+    if (authError || !user) {
+      throw new Error('User must be authenticated to upload files');
+    }
+    console.log('[uploadRawFrame] User authenticated:', user.id);
+    // Validate the FITS file
+    console.log('[uploadRawFrame] Validating FITS file...');
+    const validationResult = await validateFitsFile(file, projectId, user.id, fileType);
+    console.log('[uploadRawFrame] Validation result:', validationResult);
+    if (!validationResult.valid) {
+      throw new Error(validationResult.message);
+    }
+    // Get project details to include project name in path
+    const { data: project, error: projectError } = await client
       .from('projects')
       .select('*')
       .eq('id', projectId)
       .single();
-
-    if (error) {
-      console.error('Error fetching project:', error);
-      throw new Error(`Failed to fetch project: ${error.message}`);
+    if (projectError) {
+      console.error('Error fetching project:', projectError);
+      throw new Error(`Failed to fetch project: ${projectError.message}`);
     }
-
     if (!project) {
       throw new Error('Project not found. Please create a project first.');
     }
-  } catch (error) {
-    console.error('Error in ensureProjectExists:', error);
-    throw error;
-  }
-}
-
-// Define a maximum number of retries
-const MAX_RETRIES = 3;
-
-// Update the uploadRawFrame function to include validation and retry logic
-export async function uploadRawFrame(
-  file: File,
-  projectId: string,
-  fileType: FileType,
-  onProgress?: (progress: number) => void
-): Promise<void> {
-  console.log('uploadRawFrame called with:', { file, projectId, fileType });
-  console.log('Starting upload for file:', file.name);
-  try {
-    if (!createBrowserClient(supabaseUrl, supabaseAnonKey)) {
-      throw new Error('Supabase client not initialized');
-    }
-    // Get authenticated user first
-    const { data: { user }, error: userError } = await createBrowserClient(supabaseUrl, supabaseAnonKey).auth.getUser();
-    if (userError || !user) {
-      throw new Error('User not authenticated');
-    }
-    console.log('User authenticated:', user.id);
-    // Validate the FITS file with the user ID
-    const validationResult = await validateFitsFile(file, projectId, user.id, fileType);
-    if (!validationResult.valid) {
-      throw new Error(validationResult.message || 'Invalid FITS file');
-    }
-    // Extract tags from FITS header metadata
-    const tags = extractTagsFromFitsHeader(validationResult.metadata || {});
-    // Get the actual file type and path from validation
-    const actualFileType = validationResult.actual_type || fileType;
-    const filePath = `${user.id}/${projectId}/${actualFileType}/${file.name}`;
-    console.log('File type determined:', actualFileType);
-    console.log('File path:', filePath);
-    if (!filePath) {
-      throw new Error('No file path returned from validation');
-    }
-    // Check if file already exists in this project
-    const { data: existingFiles, error: listError } = await createBrowserClient(supabaseUrl, supabaseAnonKey)
-      .storage
-      .from('raw-frames')
-      .list(`${user.id}/${projectId}/${actualFileType}`);
-    if (listError) {
-      console.error('Error checking for existing files:', listError);
-      throw new Error('Failed to check for existing files');
-    }
-    const fileExists = existingFiles?.some(existingFile => existingFile.name === file.name);
-    if (fileExists) {
-      throw new Error(`A file with the name "${file.name}" already exists in this project. Please rename the file or choose a different project.`);
-    }
-    // Upload the file with metadata using the .upload() method
-    console.log('Uploading with metadata:', validationResult.metadata);
-    const { data: uploadData, error: uploadError } = await createBrowserClient(supabaseUrl, supabaseAnonKey)
-      .storage
-      .from('raw-frames')
+    // Upload the file to Supabase Storage
+    const filePath = validationResult.file_path || `${user.id}/${projectId}/${fileType}/${file.name}`;
+    const { data: uploadData, error: uploadError } = await client.storage
+      .from(STORAGE_BUCKETS.RAW_FRAMES)
       .upload(filePath, file, {
         metadata: validationResult.metadata || {},
         upsert: false
@@ -280,55 +265,7 @@ export async function uploadRawFrame(
       throw new Error('Failed to upload file');
     }
     console.log('File uploaded successfully to:', filePath);
-    // Insert file record into project_files with tags
-    const { error: insertError } = await createBrowserClient(supabaseUrl, supabaseAnonKey)
-      .from('project_files')
-      .insert({
-        project_id: projectId,
-        user_id: user.id,
-        filename: file.name,
-        file_type: actualFileType,
-        file_path: filePath,
-        file_size: file.size,
-        metadata: validationResult.metadata,
-        tags: tags,
-        created_at: new Date().toISOString(),
-      });
-    if (insertError) {
-      throw new Error('Failed to insert file record: ' + insertError.message);
-    }
-    // --- NEW: Update project target if missing ---
-    // After upload, check fits_metadata for this project and set target from the most relevant FITS metadata
-    const { data: project, error: fetchError } = await createBrowserClient(supabaseUrl, supabaseAnonKey)
-      .from('projects')
-      .select('id, target')
-      .eq('id', projectId)
-      .single();
-    if (!fetchError && project && (!project.target || Object.keys(project.target).length === 0)) {
-      // Query fits_metadata for this project
-      const { data: fitsMetaRows, error: fitsMetaError } = await createBrowserClient(supabaseUrl, supabaseAnonKey)
-        .from('fits_metadata')
-        .select('metadata')
-        .eq('project_id', projectId);
-      if (!fitsMetaError && fitsMetaRows && fitsMetaRows.length > 0) {
-        // Find the first non-empty object name
-        const metaWithObject = fitsMetaRows.find(row => row.metadata && row.metadata.object);
-        if (metaWithObject) {
-          const newTarget: any = {
-            name: metaWithObject.metadata.object,
-            coordinates: {
-              ra: metaWithObject.metadata.ra || '',
-              dec: metaWithObject.metadata.dec || '',
-            },
-            category: metaWithObject.metadata.category || undefined,
-          };
-          await createBrowserClient(supabaseUrl, supabaseAnonKey)
-            .from('projects')
-            .update({ target: newTarget })
-            .eq('id', projectId);
-        }
-      }
-    }
+    return filePath;
   } catch (error) {
     console.error('Error in uploadRawFrame:', error);
     throw error;

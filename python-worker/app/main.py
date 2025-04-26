@@ -121,6 +121,8 @@ async def validate_fits_file(
     user_id: str = Form(...)
 ) -> JSONResponse:
     try:
+        print(f"Received file: {file.filename}")
+        print(f"Expected type: {expected_type}")
         if not file:
             return JSONResponse(
                 status_code=422,
@@ -196,6 +198,7 @@ async def validate_fits_file(
             except:
                 pass
     except Exception as e:
+        print(f"Error in validate_fits_file: {str(e)}")
         return JSONResponse(
             status_code=500,
             content={
