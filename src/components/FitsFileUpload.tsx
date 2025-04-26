@@ -28,6 +28,7 @@ const FitsFileUpload: React.FC<FitsFileUploadProps> = ({
     if (acceptedFiles.length === 0) return;
 
     const file = acceptedFiles[0];
+    console.log('File selected:', file);
     setIsUploading(true);
     setUploadProgress(0);
 

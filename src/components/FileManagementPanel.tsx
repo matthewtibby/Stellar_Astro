@@ -78,29 +78,36 @@ export function FileManagementPanel({
   };
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
+    console.log('onDrop triggered with files:', acceptedFiles);
     setUploadError(null);
     const validFiles: File[] = [];
     const errors: string[] = [];
 
     for (const file of acceptedFiles) {
       try {
+        console.log('Validating file:', file.name);
         const validationResult = await validateFitsFile(file, activeTab);
+        console.log('Validation result:', validationResult);
+        
         if (!validationResult.valid) {
           errors.push(`${file.name}: ${validationResult.message}`);
         } else {
           validFiles.push(file);
         }
       } catch (error) {
+        console.error('Validation error:', error);
         errors.push(`${file.name}: ${error instanceof Error ? error.message : 'Validation failed'}`);
       }
     }
 
     if (errors.length > 0) {
       const errorMessage = errors.join('\n');
+      console.error('Validation errors:', errorMessage);
       setUploadError(errorMessage);
       onValidationError?.(errorMessage);
     }
 
+    console.log('Valid files:', validFiles);
     setSelectedFiles(validFiles);
   }, [activeTab, onValidationError]);
 
@@ -113,7 +120,11 @@ export function FileManagementPanel({
   });
 
   const handleUpload = async () => {
-    if (selectedFiles.length === 0) return;
+    console.log('handleUpload called with selectedFiles:', selectedFiles);
+    if (selectedFiles.length === 0) {
+      console.log('No files selected, returning');
+      return;
+    }
 
     setIsUploading(true);
     setUploadError(null);
@@ -121,11 +132,15 @@ export function FileManagementPanel({
     for (const file of selectedFiles) {
       setCurrentFile(file.name);
       try {
+        console.log('Starting upload for file:', file.name);
         await uploadRawFrame(projectId, activeTab, file, (progress) => {
+          console.log(`Upload progress for ${file.name}:`, progress * 100);
           setUploadProgress(progress * 100);
         });
+        console.log('Upload completed for file:', file.name);
         loadFiles(); // Refresh the file list
       } catch (error) {
+        console.error('Upload error for file:', file.name, error);
         const errorMessage = error instanceof Error ? error.message : 'Upload failed';
         setUploadError(errorMessage);
         onValidationError?.(errorMessage);
@@ -265,6 +280,36 @@ export function FileManagementPanel({
                   : 'Drag and drop files here, or click to select files'}
               </p>
             </div>
+
+            {/* Show upload button when files are selected */}
+            {selectedFiles.length > 0 && (
+              <div className="mb-4">
+                <button
+                  onClick={handleUpload}
+                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2"
+                  disabled={isUploading}
+                >
+                  {isUploading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                      <span>Uploading {currentFile}... ({Math.round(uploadProgress)}%)</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-4 w-4" />
+                      <span>Upload {selectedFiles.length} file{selectedFiles.length > 1 ? 's' : ''}</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+
+            {/* Show error if any */}
+            {uploadError && (
+              <div className="mb-4 p-4 bg-red-500/10 border border-red-500 rounded-md">
+                <p className="text-red-500 text-sm">{uploadError}</p>
+              </div>
+            )}
 
             {/* File list */}
             <div className="space-y-2">
