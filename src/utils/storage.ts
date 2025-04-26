@@ -162,28 +162,67 @@ export async function checkBucketContents(): Promise<void> {
 }
 
 // Add this new function for FITS validation
-export async function validateFitsFile(file: File, expectedType?: FileType): Promise<{ valid: boolean; message: string; actualType: string | null }> {
+export async function validateFitsFile(file: File, expectedType?: FileType): Promise<{ valid: boolean; message: string; actual_type: string | null; expected_type: string | null }> {
   try {
     const formData = new FormData();
     formData.append('file', file);
     if (expectedType) {
-      formData.append('expectedType', expectedType);
+      formData.append('expected_type', expectedType);
     }
 
-    const response = await fetch('http://localhost:8000/validate-fits', {
+    const response = await fetch('http://localhost:8001/validate-fits', {
       method: 'POST',
-      body: formData
+      body: formData,
+      headers: {
+        'Accept': 'application/json'
+      }
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Validation failed');
+      const errorData = await response.json();
+      throw new Error(errorData.message || errorData.detail || 'Validation failed');
     }
 
-    return await response.json();
+    const data = await response.json();
+    return {
+      valid: data.valid,
+      message: data.message,
+      actual_type: data.actual_type,
+      expected_type: data.expected_type
+    };
   } catch (error) {
     console.error('Error validating FITS file:', error);
     throw error;
+  }
+}
+
+// Add a function to ensure project exists
+export async function ensureProjectExists(projectId: string): Promise<void> {
+  const client = getSupabaseClient();
+  const { data: project, error } = await client
+    .from('projects')
+    .select('*')
+    .eq('id', projectId)
+    .single();
+
+  if (error || !project) {
+    // Create a default project if it doesn't exist
+    const { data: { user } } = await client.auth.getUser();
+    if (!user) {
+      throw new Error('User must be authenticated');
+    }
+
+    await client
+      .from('projects')
+      .insert([
+        {
+          id: projectId,
+          user_id: user.id,
+          title: 'Default Project',
+          description: 'Created automatically for file uploads',
+          created_at: new Date().toISOString()
+        }
+      ]);
   }
 }
 
@@ -196,28 +235,32 @@ export async function uploadRawFrame(
   signal?: AbortSignal
 ): Promise<string> {
   try {
-    console.log('Starting uploadRawFrame:', { projectId, fileType, fileName: file.name });
+    console.log('[uploadRawFrame] Starting upload for file:', file.name);
     
-    // First validate the FITS file
-    console.log('Validating FITS file...');
+    // Ensure project exists
+    console.log('[uploadRawFrame] Ensuring project exists...');
+    await ensureProjectExists(projectId);
+    
+    // Validate the FITS file
+    console.log('[uploadRawFrame] Validating FITS file...');
     const validationResult = await validateFitsFile(file, fileType);
-    console.log('Validation result:', validationResult);
+    console.log('[uploadRawFrame] Validation result:', validationResult);
     
     if (!validationResult.valid) {
       throw new Error(validationResult.message);
     }
 
+    // Initialize Supabase client
+    console.log('[uploadRawFrame] Initializing Supabase client...');
     const client = getSupabaseClient();
-    console.log('Got Supabase client');
     
-    // Get the current user from Supabase auth
+    // Authenticate user
+    console.log('[uploadRawFrame] Checking user authentication...');
     const { data: { user }, error: authError } = await client.auth.getUser();
-    console.log('Auth check result:', { user: user?.id, error: authError });
-    
     if (authError || !user) {
-      console.error('Auth error:', authError);
       throw new Error('User must be authenticated to upload files');
     }
+    console.log('[uploadRawFrame] User authenticated:', user.id);
 
     // Get project details to include project name in path
     const { data: project, error: projectError } = await client
@@ -403,14 +446,7 @@ export async function uploadRawFrame(
       return uploadedFilePath;
     }
   } catch (error) {
-    console.error('Error uploading raw frame:', error);
-    if (error instanceof Error) {
-      console.error('Error details:', {
-        name: error.name,
-        message: error.message,
-        stack: error.stack
-      });
-    }
+    console.error('[uploadRawFrame] Error:', error);
     throw error;
   }
 }

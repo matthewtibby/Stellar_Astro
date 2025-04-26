@@ -106,6 +106,21 @@ async def validate_fits_file(
     If expected_type is provided, verify that the file matches the expected type.
     """
     try:
+        print(f"Received file: {file.filename}")
+        print(f"Expected type: {expected_type}")
+        
+        # Validate expected_type if provided
+        if expected_type and expected_type not in ['light', 'dark', 'flat', 'bias']:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "valid": False,
+                    "message": f"Invalid expected_type: {expected_type}. Must be one of: light, dark, flat, bias",
+                    "actual_type": None,
+                    "expected_type": expected_type
+                }
+            )
+        
         # Create a timeout task and the main task
         timeout_task = asyncio.create_task(asyncio.sleep(30))
         main_task = asyncio.create_task(process_fits_file(file, expected_type))
@@ -136,6 +151,7 @@ async def validate_fits_file(
         return main_task.result()
         
     except Exception as e:
+        print(f"Error in validate_fits_file: {str(e)}")
         return JSONResponse(
             status_code=500,
             content={
