@@ -37,6 +37,7 @@ import FitsFileUpload from '@/src/components/FitsFileUpload';
 import StepsIndicator from '@/src/components/StepsIndicator';
 import { FileManagementPanel } from '@/src/components/FileManagementPanel';
 import { type StorageFile } from '@/src/utils/storage';
+import { getSupabaseClient } from '../../src/utils/supabase';
 
 // Add these interfaces before the mockProjects array
 interface Project {
@@ -307,7 +308,7 @@ const DashboardPage = () => {
   });
   const [uploadErrors, setUploadErrors] = useState<Record<string, string>>({});
   const params = useParams();
-  const currentProjectId = Array.isArray(params.projectId) ? params.projectId[0] : params.projectId;
+  const currentProjectId = params?.projectId ? (Array.isArray(params.projectId) ? params.projectId[0] : params.projectId) : null;
   const [selectedFile, setSelectedFile] = useState<StorageFile | null>(null);
   const fileListRef = useRef<{ refresh: () => void }>(null);
 
@@ -525,40 +526,69 @@ const DashboardPage = () => {
   };
 
   const renderNewProjectForm = () => {
-    const handleCreateProject = () => {
-      if (!projectName || !selectedTarget) return;
-
-      const newProject: Project = {
-        id: `project-${Date.now()}`,
-        name: projectName,
-        target: selectedTarget,
-        telescope: selectedTelescope || undefined,
-        camera: selectedCamera || undefined,
-        filters: selectedFilters.length > 0 ? selectedFilters : undefined,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        status: 'draft',
-        steps: workflowSteps.map(step => ({
-          id: `step-${Date.now()}-${step.id}`,
-          name: step.name,
-          status: 'pending'
-        }))
-      };
-
-      // In a real app, we would save this to the database
-      console.log('Creating new project:', newProject);
+    const handleCreateProject = async () => {
+      if (!projectName) return;
       
-      // Set the active project and move to the file upload step
-      setActiveProject(newProject);
-      setCurrentStep(1);
-      
-      // Reset form fields
-      setProjectName('');
-      setProjectDescription('');
-      setSelectedTarget(null);
-      setSelectedTelescope(null);
-      setSelectedCamera(null);
-      setSelectedFilters([]);
+      try {
+        const supabase = getSupabaseClient();
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        
+        if (authError || !user) {
+          throw new Error('Authentication required');
+        }
+
+        const { data: project, error: projectError } = await supabase
+          .from('projects')
+          .insert([{
+            name: projectName,
+            description: projectDescription || '',
+            user_id: user.id,
+            created_at: new Date().toISOString(),
+            status: 'draft',
+            updated_at: new Date().toISOString(),
+            telescope_id: selectedTelescope?.id || null
+          }])
+          .select()
+          .single();
+
+        if (projectError || !project) {
+          throw new Error(projectError?.message || 'Failed to create project');
+        }
+
+        const newProject: Project = {
+          id: project.id,
+          name: project.name,
+          createdAt: project.created_at,
+          updatedAt: project.updated_at,
+          status: 'draft',
+          target: selectedTarget || {
+            id: '',
+            name: '',
+            catalogIds: [],
+            constellation: '',
+            category: 'other',
+            type: 'other',
+            commonNames: [],
+            coordinates: {
+              ra: '',
+              dec: ''
+            }
+          },
+          steps: []
+        };
+
+        setActiveProject(newProject);
+        setProjectName('');
+        setProjectDescription('');
+        setSelectedTarget(null);
+        setSelectedTelescope(null);
+        setSelectedCamera(null);
+        setSelectedFilters([]);
+        setShowNewProject(false);
+      } catch (error) {
+        console.error('Error creating project:', error);
+        // Here you might want to show an error message to the user
+      }
     };
 
     return (
@@ -925,7 +955,7 @@ const DashboardPage = () => {
 
               {/* Projects or Workflow */}
               {showNewProject || activeProject ? (
-                renderStepContent(currentProjectId)
+                renderStepContent(currentProjectId || 'new-project')
               ) : (
                 <>
                   <div className="flex justify-between items-center mb-6">
