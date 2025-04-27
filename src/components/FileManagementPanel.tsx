@@ -11,13 +11,20 @@ interface FileManagementPanelProps {
   onFileSelect?: (file: StorageFile) => void;
   onRefresh?: () => void;
   onValidationError?: (error: string) => void;
+  onProgress?: (progress: number) => void;
+}
+
+interface SelectedFile {
+  file: File;
+  type: FileType;
 }
 
 export function FileManagementPanel({ 
   projectId, 
   onFileSelect,
   onRefresh,
-  onValidationError
+  onValidationError,
+  onProgress
 }: FileManagementPanelProps) {
   const [filesByType, setFilesByType] = useState<Record<FileType, StorageFile[]>>({
     'light': [],
@@ -39,9 +46,9 @@ export function FileManagementPanel({
   const [searchTerm, setSearchTerm] = useState('');
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
   const [currentFile, setCurrentFile] = useState<string>('');
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [selectedFiles, setSelectedFiles] = useState<SelectedFile[]>([]);
 
   const loadFiles = async () => {
     try {
@@ -79,13 +86,14 @@ export function FileManagementPanel({
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     console.log('onDrop triggered with files:', acceptedFiles);
+    console.log('Current active tab:', activeTab);
     setUploadError(null);
     const validFiles: File[] = [];
     const errors: string[] = [];
 
     for (const file of acceptedFiles) {
       try {
-        console.log('Validating file:', file.name);
+        console.log('Validating file:', file.name, 'with type:', activeTab);
         const validationResult = await validateFitsFile(file, activeTab);
         console.log('Validation result:', validationResult);
         
@@ -108,7 +116,10 @@ export function FileManagementPanel({
     }
 
     console.log('Valid files:', validFiles);
-    setSelectedFiles(validFiles);
+    if (validFiles.length > 0) {
+      console.log('Setting selected files with type:', activeTab);
+      setSelectedFiles(validFiles.map(file => ({ file, type: activeTab })));
+    }
   }, [activeTab, onValidationError]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -121,61 +132,98 @@ export function FileManagementPanel({
 
   const handleUpload = async () => {
     console.log('handleUpload called with selectedFiles:', selectedFiles);
-    if (selectedFiles.length === 0) {
+    if (!selectedFiles.length) {
       console.log('No files selected, returning');
       return;
     }
 
-    setIsUploading(true);
-    setUploadError(null);
-    setUploadProgress(0);
-
-    for (const file of selectedFiles) {
-      setCurrentFile(file.name);
-      try {
-        console.log('Starting upload for file:', file.name);
-        const filePath = await uploadRawFrame(projectId, activeTab, file, (progress) => {
-          console.log(`Upload progress for ${file.name}:`, progress * 100);
-          setUploadProgress(Math.round(progress * 100));
-        });
-        console.log('Upload completed for file:', file.name);
-        
-        // Create a StorageFile object
-        const uploadedFile: StorageFile = {
-          name: file.name,
-          path: filePath,
-          size: file.size,
-          created_at: new Date().toISOString(),
-          type: activeTab
-        };
-        
-        // Update the filesByType state immediately
-        setFilesByType(prev => ({
-          ...prev,
-          [activeTab]: [...prev[activeTab], uploadedFile]
-        }));
-        
-        // Call onFileSelect callback if provided
-        if (onFileSelect) {
-          onFileSelect(uploadedFile);
+    try {
+      console.log('Starting upload process');
+      setIsUploading(true);
+      setError(null);
+      const uploadPromises = selectedFiles.map(async (selectedFile) => {
+        try {
+          console.log(`Starting upload for file: ${selectedFile.file.name} with type: ${selectedFile.type}`);
+          setCurrentFile(selectedFile.file.name);
+          const filePath = await uploadRawFrame(
+            projectId,
+            selectedFile.type,
+            selectedFile.file,
+            (progress) => {
+              console.log(`Progress for ${selectedFile.file.name}: ${progress * 100}%`);
+              setUploadProgress(prev => ({
+                ...prev,
+                [selectedFile.file.name]: progress
+              }));
+            }
+          );
+          console.log(`Upload completed for file: ${selectedFile.file.name}, path: ${filePath}`);
+          return filePath;
+        } catch (error) {
+          console.error(`Error uploading file ${selectedFile.file.name}:`, error);
+          throw error;
         }
-      } catch (error) {
-        console.error('Upload error for file:', file.name, error);
-        const errorMessage = error instanceof Error ? error.message : 'Upload failed';
-        setUploadError(errorMessage);
-        onValidationError?.(errorMessage);
-        break;
-      }
-    }
+      });
 
-    // Wait 1 second before refreshing to allow Supabase Storage to propagate the new file
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    await loadFiles();
-    
-    setIsUploading(false);
-    setSelectedFiles([]);
-    setUploadProgress(0);
-    setCurrentFile('');
+      const uploadedPaths = await Promise.all(uploadPromises);
+      console.log('All uploads completed, paths:', uploadedPaths);
+      
+      if (onProgress) onProgress(1);
+      
+      // Wait for Supabase to process the files
+      console.log('Upload complete, waiting for files to be available...');
+      
+      // Add multiple retries for file listing with exponential backoff
+      let retries = 5;
+      let delay = 2000; // Start with 2 seconds
+      let filesFound = false;
+      
+      while (retries > 0 && !filesFound) {
+        try {
+          console.log(`Attempting to fetch files (${retries} retries remaining, waiting ${delay}ms)`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          
+          const files = await getFilesByType(projectId);
+          console.log('Files after refresh:', files);
+          
+          // Check if our uploaded files are in the result
+          const uploadedFileNames = uploadedPaths.map(path => path.split('/').pop());
+          const foundFiles = Object.values(files).flat().some(file => 
+            uploadedFileNames.includes(file.name)
+          );
+          
+          if (foundFiles) {
+            console.log('Uploaded files found in the list');
+            setFilesByType(files);
+            filesFound = true;
+          } else {
+            console.log('Uploaded files not found yet, waiting before retry');
+            delay *= 2; // Exponential backoff
+            retries--;
+          }
+        } catch (error) {
+          console.error('Error fetching files:', error);
+          retries--;
+          if (retries > 0) {
+            delay *= 2;
+          }
+        }
+      }
+
+      if (!filesFound) {
+        console.warn('Uploaded files not found after all retries');
+        setError('Files uploaded but not immediately visible. They should appear after a refresh.');
+      }
+
+      setSelectedFiles([]);
+      setUploadProgress({});
+      if (onRefresh) onRefresh();
+    } catch (error) {
+      console.error('Error in handleUpload:', error);
+      setError('Failed to upload files. Please try again.');
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const handleDownload = async (file: StorageFile) => {
@@ -241,12 +289,12 @@ export function FileManagementPanel({
         <div className="p-4 bg-blue-900/50 text-blue-200 rounded-md border border-blue-800">
           <div className="flex items-center space-x-2">
             <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-200 border-t-transparent" />
-            <span>Uploading {currentFile}... {uploadProgress}%</span>
+            <span>Uploading {currentFile}... {uploadProgress[currentFile] ? Math.round(uploadProgress[currentFile] * 100) : 0}%</span>
           </div>
           <div className="mt-2 w-full bg-gray-700 rounded-full h-2">
             <div 
               className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-              style={{ width: `${uploadProgress}%` }}
+              style={{ width: `${uploadProgress[currentFile] ? Math.round(uploadProgress[currentFile] * 100) : 0}%` }}
             />
           </div>
         </div>
@@ -334,7 +382,7 @@ export function FileManagementPanel({
                     {isUploading ? (
                       <>
                         <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
-                        <span>Uploading {currentFile}... ({uploadProgress}%)</span>
+                        <span>Uploading {currentFile}... ({uploadProgress[currentFile] ? Math.round(uploadProgress[currentFile] * 100) : 0}%)</span>
                       </>
                     ) : (
                       <>
