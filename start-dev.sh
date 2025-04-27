@@ -3,63 +3,101 @@
 # Function to cleanup processes on exit
 cleanup() {
     echo "Shutting down servers..."
-    # Use more specific process identification and wait for graceful shutdown
+    # Kill all Python processes that might be using port 8000
+    pkill -f "uvicorn" || true
+    pkill -f "python" || true
+    # Kill Next.js process
     pkill -f "next dev" || true
-    pkill -f "uvicorn app.main:app" || true
     sleep 2
-    # Only force kill if processes are still running
-    if pgrep -f "next dev" > /dev/null; then
-        pkill -9 -f "next dev" || true
-    fi
-    if pgrep -f "uvicorn app.main:app" > /dev/null; then
-        pkill -9 -f "uvicorn app.main:app" || true
-    fi
+    # Force kill any remaining processes
+    pkill -9 -f "uvicorn" || true
+    pkill -9 -f "python" || true
+    pkill -9 -f "next dev" || true
     exit 0
 }
 
 # Set up cleanup on script exit
 trap cleanup SIGINT SIGTERM EXIT
 
+# Function to check if a port is in use
+is_port_in_use() {
+    lsof -i :$1 > /dev/null 2>&1
+    return $?
+}
+
+# Function to kill process using a port
+kill_port_process() {
+    local port=$1
+    local pids=$(lsof -ti :$port)
+    if [ ! -z "$pids" ]; then
+        echo "Killing processes using port $port: $pids"
+        for pid in $pids; do
+            kill $pid || true
+            sleep 1
+            if ps -p $pid > /dev/null; then
+                kill -9 $pid || true
+            fi
+        done
+    fi
+}
+
 # Clear any existing processes and ports
 echo "Cleaning up existing processes..."
-pkill -f "next dev" || true
-pkill -f "uvicorn app.main:app" || true
+kill_port_process 3000
+kill_port_process 8000
 sleep 2
-if pgrep -f "next dev" > /dev/null; then
-    pkill -9 -f "next dev" || true
-fi
-if pgrep -f "uvicorn app.main:app" > /dev/null; then
-    pkill -9 -f "uvicorn app.main:app" || true
+
+# Verify ports are available
+if is_port_in_use 8000; then
+    echo "Error: Port 8000 is still in use after cleanup. Please check for other running processes."
+    exit 1
 fi
 
-# Start Next.js development server
-echo "Starting Next.js development server..."
-PORT=3000 npx next dev &
-
-# Start Python worker server
+# Start Python worker server first
 echo "Starting Python worker server..."
 cd python-worker
 source venv/bin/activate
 export PYTHONPATH=$PYTHONPATH:$(pwd)
-# Run uvicorn in the background and capture its PID
+
+# Start uvicorn and wait for it to be ready
 uvicorn app.main:app --reload --port 8000 --host 0.0.0.0 &
 UVICORN_PID=$!
 
-# Wait for both servers to start
-sleep 5
+# Wait for Python server to start
+echo "Waiting for Python worker to start..."
+for i in {1..30}; do
+    if curl -s http://localhost:8000/health > /dev/null; then
+        echo "Python worker is ready"
+        break
+    fi
+    if [ $i -eq 30 ]; then
+        echo "Error: Python worker failed to start"
+        cleanup
+        exit 1
+    fi
+    sleep 1
+done
 
-# Check if servers are running
-if ! pgrep -f "next dev" > /dev/null; then
-    echo "Error: Next.js server failed to start"
-    cleanup
-    exit 1
-fi
+# Start Next.js development server
+echo "Starting Next.js development server..."
+cd ..
+PORT=3000 npx next dev &
+NEXT_PID=$!
 
-if ! pgrep -f "uvicorn app.main:app" > /dev/null; then
-    echo "Error: Python worker server failed to start"
-    cleanup
-    exit 1
-fi
+# Wait for Next.js to start
+echo "Waiting for Next.js to start..."
+for i in {1..30}; do
+    if curl -s http://localhost:3000 > /dev/null; then
+        echo "Next.js is ready"
+        break
+    fi
+    if [ $i -eq 30 ]; then
+        echo "Error: Next.js server failed to start"
+        cleanup
+        exit 1
+    fi
+    sleep 1
+done
 
 echo "Servers started successfully"
 echo "Next.js running on http://localhost:3000"

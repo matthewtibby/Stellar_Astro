@@ -263,6 +263,8 @@ export async function uploadRawFrame(
     const sanitizedFileName = `${baseFileName}_${uniqueId}.${fileExtension}`;
     const targetFilePath = `${user.id}/${projectId}/${FILE_TYPE_FOLDERS[fileType]}/${uniqueId}/${sanitizedFileName}`;
 
+    console.log('[uploadRawFrame] Target path:', targetFilePath);
+
     // 1. Get a signed upload URL from Supabase
     const { data: signedUrlData, error: signedUrlError } = await client.storage
       .from(STORAGE_BUCKETS.RAW_FRAMES)
@@ -270,6 +272,8 @@ export async function uploadRawFrame(
     if (signedUrlError || !signedUrlData?.signedUrl) {
       throw new Error('Failed to get signed upload URL');
     }
+
+    console.log('[uploadRawFrame] Got signed URL, starting upload');
 
     // 2. Upload the file using XMLHttpRequest for progress
     await new Promise<void>((resolve, reject) => {
@@ -299,7 +303,24 @@ export async function uploadRawFrame(
       xhr.send(file);
     });
 
-    // Optionally: check/upload metadata if needed (not required for progress)
+    console.log('[uploadRawFrame] Upload completed, verifying file exists');
+
+    // 3. Verify the file exists
+    const { data: fileData, error: fileError } = await client.storage
+      .from(STORAGE_BUCKETS.RAW_FRAMES)
+      .list(`${user.id}/${projectId}/${FILE_TYPE_FOLDERS[fileType]}/${uniqueId}`);
+
+    if (fileError) {
+      console.error('[uploadRawFrame] Error verifying file:', fileError);
+      throw new Error('Failed to verify file upload');
+    }
+
+    if (!fileData || !fileData.some(f => f.name === sanitizedFileName)) {
+      console.error('[uploadRawFrame] File not found after upload');
+      throw new Error('File not found after upload');
+    }
+
+    console.log('[uploadRawFrame] File verified, returning path:', targetFilePath);
     return targetFilePath;
   } catch (error) {
     console.error('[uploadRawFrame] Error:', error);
@@ -480,30 +501,37 @@ async function listAllFiles(client: SupabaseClient, bucket: string, path: string
     offset: 0,
     sortBy: { column: 'name', order: 'asc' }
   });
+  
   if (error) {
     console.error(`Error listing files in ${path}:`, error);
     return files;
   }
+  
   for (const item of data) {
     if (item.id && item.name && item.metadata && item.created_at) {
       // It's a file
       files.push({ ...item, fullPath: path ? `${path}/${item.name}` : item.name });
     } else if (item.name && item.id === undefined) {
-      // It's a folder
-      const subFiles = await listAllFiles(client, bucket, path ? `${path}/${item.name}` : item.name);
+      // It's a folder - recursively search
+      const subPath = path ? `${path}/${item.name}` : item.name;
+      console.log(`Found directory: ${subPath}, searching recursively`);
+      const subFiles = await listAllFiles(client, bucket, subPath);
       files = files.concat(subFiles);
     }
   }
+  
   return files;
 }
 
 export async function getFilesByType(projectId: string): Promise<Record<FileType, StorageFile[]>> {
   try {
+    console.log('[getFilesByType] Starting for project:', projectId);
     const client = checkSupabase();
     const { data: { user }, error: authError } = await client.auth.getUser();
     if (authError || !user) {
       throw new Error('User must be authenticated to fetch files');
     }
+
     const result: Record<FileType, StorageFile[]> = {
       'light': [],
       'dark': [],
@@ -518,36 +546,75 @@ export async function getFilesByType(projectId: string): Promise<Record<FileType
       'pre-processed': [],
       'post-processed': []
     };
-    // Fetch files for each type, recursively
+
+    // Fetch files for each type
     for (const [type, folder] of Object.entries(FILE_TYPE_FOLDERS)) {
-      const basePath = `${user.id}/${projectId}/${folder}`;
-      const files = await listAllFiles(client, STORAGE_BUCKETS.RAW_FRAMES, basePath);
-      console.log('Files found for type', type, files); // DEBUG LOG
-      if (files.length > 0) {
-        const filesWithMetadata = await Promise.all(
-          files.map(async (file) => {
-            const { data: metadata } = await client.storage
+      try {
+        const basePath = `${user.id}/${projectId}/${folder}`;
+        console.log(`[getFilesByType] Searching for files in path: ${basePath}`);
+        
+        // First, list the top-level directories
+        const { data: directories, error: dirError } = await client.storage
+          .from(STORAGE_BUCKETS.RAW_FRAMES)
+          .list(basePath);
+
+        if (dirError) {
+          console.error(`[getFilesByType] Error listing directories in ${basePath}:`, dirError);
+          continue;
+        }
+
+        // For each directory, list its files
+        for (const dir of directories) {
+          if (dir.name) {
+            const dirPath = `${basePath}/${dir.name}`;
+            const { data: files, error: fileError } = await client.storage
               .from(STORAGE_BUCKETS.RAW_FRAMES)
-              .getPublicUrl(file.fullPath);
-            const size = file.metadata?.size || 0;
-            const created_at = file.created_at || new Date().toISOString();
-            return {
-              name: file.name,
-              path: file.fullPath,
-              size: typeof size === 'string' ? parseInt(size, 10) : size,
-              created_at,
-              type: type as FileType,
-              url: metadata?.publicUrl
-            };
-          })
-        );
-        result[type as FileType] = filesWithMetadata;
+              .list(dirPath);
+
+            if (fileError) {
+              console.error(`[getFilesByType] Error listing files in ${dirPath}:`, fileError);
+              continue;
+            }
+
+            const filesWithMetadata = await Promise.all(
+              files.map(async (file) => {
+                try {
+                  const filePath = `${dirPath}/${file.name}`;
+                  const { data: metadata } = await client.storage
+                    .from(STORAGE_BUCKETS.RAW_FRAMES)
+                    .getPublicUrl(filePath);
+
+                  return {
+                    name: file.name,
+                    path: filePath,
+                    size: file.metadata?.size || 0,
+                    created_at: file.created_at || new Date().toISOString(),
+                    type: type as FileType,
+                    url: metadata?.publicUrl
+                  };
+                } catch (error) {
+                  console.error(`[getFilesByType] Error processing file ${file.name}:`, error);
+                  return null;
+                }
+              })
+            );
+
+            result[type as FileType] = [
+              ...result[type as FileType],
+              ...filesWithMetadata.filter(Boolean) as StorageFile[]
+            ];
+          }
+        }
+      } catch (error) {
+        console.error(`[getFilesByType] Error processing type ${type}:`, error);
+        // Continue with other types even if one fails
       }
     }
-    console.log('getFilesByType result:', result); // DEBUG LOG
+
+    console.log('[getFilesByType] Final result:', result);
     return result;
   } catch (error) {
-    console.error('Error fetching files by type:', error);
+    console.error('[getFilesByType] Error:', error);
     throw error;
   }
 }
