@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { getFilesByType, type StorageFile, validateFitsFile, uploadRawFrame, getFitsFileUrl, deleteFitsFile } from '@/src/utils/storage';
-import { File, Trash2, Download, Eye, RefreshCw, FolderOpen, Upload, AlertCircle } from 'lucide-react';
+import { getFilesByType, type StorageFile, validateFitsFile, uploadRawFrame, getFitsFileUrl, deleteFitsFile, type FitsValidationResult } from '@/src/utils/storage';
+import { File, Trash2, Download, Eye, RefreshCw, FolderOpen, Upload, AlertCircle, Info, ChevronDown, ChevronUp } from 'lucide-react';
 import { type FileType } from '@/src/types/store';
 import { useDropzone } from 'react-dropzone';
 
@@ -20,6 +20,94 @@ interface FileManagementPanelProps {
 interface SelectedFile {
   file: File;
   type: FileType;
+}
+
+interface FileMetadataProps {
+  metadata: NonNullable<FitsValidationResult['metadata']>;
+  isExpanded: boolean;
+  onToggle: () => void;
+}
+
+function FileMetadata({ metadata, isExpanded, onToggle }: FileMetadataProps) {
+  return (
+    <div className="mt-2">
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center justify-between p-2 bg-gray-800/50 rounded-md hover:bg-gray-800/70 transition-colors"
+      >
+        <div className="flex items-center space-x-2">
+          <Info className="h-4 w-4 text-gray-400" />
+          <span className="text-sm text-gray-400">File Metadata</span>
+        </div>
+        {isExpanded ? (
+          <ChevronUp className="h-4 w-4 text-gray-400" />
+        ) : (
+          <ChevronDown className="h-4 w-4 text-gray-400" />
+        )}
+      </button>
+      
+      {isExpanded && (
+        <div className="mt-1 p-2 bg-gray-800/50 rounded-md text-sm">
+          <div className="grid grid-cols-2 gap-2">
+            {metadata.exposure_time && (
+              <div>
+                <span className="text-gray-400">Exposure:</span>
+                <span className="ml-2 text-white">{metadata.exposure_time}s</span>
+              </div>
+            )}
+            {metadata.filter && (
+              <div>
+                <span className="text-gray-400">Filter:</span>
+                <span className="ml-2 text-white">{metadata.filter}</span>
+              </div>
+            )}
+            {metadata.object && (
+              <div>
+                <span className="text-gray-400">Object:</span>
+                <span className="ml-2 text-white">{metadata.object}</span>
+              </div>
+            )}
+            {metadata.date_obs && (
+              <div>
+                <span className="text-gray-400">Date:</span>
+                <span className="ml-2 text-white">{metadata.date_obs}</span>
+              </div>
+            )}
+            {metadata.instrument && (
+              <div>
+                <span className="text-gray-400">Instrument:</span>
+                <span className="ml-2 text-white">{metadata.instrument}</span>
+              </div>
+            )}
+            {metadata.telescope && (
+              <div>
+                <span className="text-gray-400">Telescope:</span>
+                <span className="ml-2 text-white">{metadata.telescope}</span>
+              </div>
+            )}
+            {metadata.gain && (
+              <div>
+                <span className="text-gray-400">Gain:</span>
+                <span className="ml-2 text-white">{metadata.gain}</span>
+              </div>
+            )}
+            {metadata.temperature && (
+              <div>
+                <span className="text-gray-400">Temp:</span>
+                <span className="ml-2 text-white">{metadata.temperature}°C</span>
+              </div>
+            )}
+            {metadata.binning && (
+              <div>
+                <span className="text-gray-400">Binning:</span>
+                <span className="ml-2 text-white">{metadata.binning}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function FileManagementPanel({ 
@@ -55,6 +143,8 @@ export function FileManagementPanel({
   const [selectedType, setSelectedType] = useState<FileType | null>(null);
   const [showCalibrationWarning, setShowCalibrationWarning] = useState(false);
   const [missingFrameTypes, setMissingFrameTypes] = useState<FileType[]>([]);
+  const [selectedFileMetadata, setSelectedFileMetadata] = useState<FitsValidationResult['metadata'] | null>(null);
+  const [fileWarnings, setFileWarnings] = useState<Record<string, string[]>>({});
   const fileInputRefs = useRef<Record<FileType, HTMLInputElement | null>>({
     light: null,
     dark: null,
@@ -69,6 +159,7 @@ export function FileManagementPanel({
     'pre-processed': null,
     'post-processed': null
   });
+  const [expandedFiles, setExpandedFiles] = useState<Record<string, boolean>>({});
 
   const loadFiles = async () => {
     try {
@@ -121,6 +212,16 @@ export function FileManagementPanel({
           errors.push(`${file.name}: ${validationResult.message}`);
         } else {
           validFiles.push(file);
+          // Store metadata and warnings
+          if (validationResult.metadata) {
+            setSelectedFileMetadata(validationResult.metadata);
+          }
+          if (validationResult.warnings.length > 0) {
+            setFileWarnings(prev => ({
+              ...prev,
+              [file.name]: validationResult.warnings
+            }));
+          }
         }
       } catch (error) {
         console.error('Validation error:', error);
@@ -312,14 +413,47 @@ export function FileManagementPanel({
     fileInputRefs.current[type]?.click();
   };
 
-  const handleFileChange = (type: FileType) => (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (type: FileType) => async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
-    if (files) {
-      const fileList = Array.from(files);
-      setFilesByType(prev => ({
-        ...prev,
-        [type]: [...(prev[type] || []), ...fileList]
-      }));
+    if (!files) return;
+
+    const fileList = Array.from(files);
+    const validFiles: File[] = [];
+    const errors: string[] = [];
+
+    for (const file of fileList) {
+      try {
+        const validationResult = await validateFitsFile(file, type);
+        
+        if (!validationResult.valid) {
+          errors.push(`${file.name}: ${validationResult.message}`);
+        } else {
+          validFiles.push(file);
+          // Store metadata and warnings
+          if (validationResult.metadata) {
+            setSelectedFileMetadata(validationResult.metadata);
+          }
+          if (validationResult.warnings.length > 0) {
+            setFileWarnings(prev => ({
+              ...prev,
+              [file.name]: validationResult.warnings
+            }));
+          }
+        }
+      } catch (error) {
+        console.error('Validation error:', error);
+        errors.push(`${file.name}: ${error instanceof Error ? error.message : 'Validation failed'}`);
+      }
+    }
+
+    if (errors.length > 0) {
+      const errorMessage = errors.join('\n');
+      setUploadError(errorMessage);
+      onValidationError?.(errorMessage);
+    }
+
+    if (validFiles.length > 0) {
+      setSelectedFiles(validFiles.map(file => ({ file, type })));
     }
   };
 
@@ -351,6 +485,13 @@ export function FileManagementPanel({
     setShowCalibrationWarning(false);
     // TODO: Implement navigation to calibration step
     console.log('Proceeding to calibration step despite missing frames...');
+  };
+
+  const toggleFileExpansion = (fileName: string) => {
+    setExpandedFiles(prev => ({
+      ...prev,
+      [fileName]: !prev[fileName]
+    }));
   };
 
   return (
@@ -447,9 +588,77 @@ export function FileManagementPanel({
                 </p>
               </div>
 
+              {/* File list */}
+              <div className="space-y-2">
+                {filteredFiles.map((file, index) => (
+                  <div
+                    key={index}
+                    className="flex flex-col p-3 bg-gray-800/50 rounded-lg border border-gray-700 hover:bg-gray-800/70 transition-colors"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        <File className="h-5 w-5 text-gray-400" />
+                        <div>
+                          <p className="text-sm text-white">{file.name}</p>
+                          <p className="text-xs text-gray-400">
+                            {formatFileSize(file.size)} • {formatDate(file.created_at)}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={() => onFileSelect?.(file)}
+                          className="p-1 text-gray-400 hover:text-white transition-colors"
+                          title="View file"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDownload(file)}
+                          className="p-1 text-gray-400 hover:text-white transition-colors"
+                          title="Download file"
+                        >
+                          <Download className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteFile(file)}
+                          className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                          title="Delete file"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                    
+                    {/* Show metadata if available */}
+                    {selectedFileMetadata && (
+                      <FileMetadata 
+                        metadata={selectedFileMetadata} 
+                        isExpanded={expandedFiles[file.name] || false}
+                        onToggle={() => toggleFileExpansion(file.name)}
+                      />
+                    )}
+                    
+                    {/* Show warnings if any */}
+                    {fileWarnings[file.name]?.length > 0 && (
+                      <div className="mt-2 p-2 bg-yellow-900/50 rounded-md text-sm">
+                        <div className="flex items-start space-x-2">
+                          <AlertCircle className="h-4 w-4 text-yellow-400 mt-0.5" />
+                          <div className="space-y-1">
+                            {fileWarnings[file.name].map((warning, i) => (
+                              <p key={i} className="text-yellow-400">{warning}</p>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
               {/* Show upload button when files are selected */}
               {selectedFiles.length > 0 && (
-                <div className="mb-4">
+                <div className="mt-4">
                   <button
                     onClick={handleUpload}
                     className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2"
@@ -472,79 +681,10 @@ export function FileManagementPanel({
 
               {/* Show error if any */}
               {uploadError && (
-                <div className="mb-4 p-4 bg-red-500/10 border border-red-500 rounded-md">
+                <div className="mt-4 p-4 bg-red-500/10 border border-red-500 rounded-md">
                   <p className="text-red-500 text-sm">{uploadError}</p>
                 </div>
               )}
-
-              {/* File list */}
-              <div className="space-y-2">
-                {filteredFiles.map((file, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center justify-between p-3 bg-gray-800/50 rounded-lg border border-gray-700 hover:bg-gray-800/70 transition-colors"
-                  >
-                    <div className="flex items-center space-x-3">
-                      <File className="h-5 w-5 text-gray-400" />
-                      <div>
-                        <p className="text-sm text-white">{file.name}</p>
-                        <p className="text-xs text-gray-400">
-                          {formatFileSize(file.size)} • {formatDate(file.created_at)}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <button
-                        onClick={() => onFileSelect?.(file)}
-                        className="p-1 text-gray-400 hover:text-white transition-colors"
-                        title="View file"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDownload(file)}
-                        className="p-1 text-gray-400 hover:text-white transition-colors"
-                        title="Download file"
-                      >
-                        <Download className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteFile(file)}
-                        className="p-1 text-gray-400 hover:text-red-500 transition-colors"
-                        title="Delete file"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* File upload section */}
-              <div className="p-4 border-t border-gray-700">
-                <h3 className="text-sm font-medium text-gray-400 mb-2">Upload Files</h3>
-                <div className="space-y-2">
-                  {INITIAL_FILE_TYPES.map((type) => (
-                    <div key={type} className="flex items-center space-x-2">
-                      <button
-                        onClick={() => handleUploadClick(type)}
-                        className="flex-1 flex items-center justify-center space-x-2 px-3 py-2 bg-gray-800 text-gray-400 rounded-md hover:bg-gray-700 transition-colors"
-                      >
-                        <Upload className="h-4 w-4" />
-                        <span>Upload {fileTypeLabels[type]}</span>
-                      </button>
-                      <input
-                        type="file"
-                        ref={(el) => { fileInputRefs.current[type] = el; }}
-                        onChange={(e) => handleFileChange(type)(e)}
-                        className="hidden"
-                        multiple
-                        accept=".fits,.fit"
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
             </div>
           </div>
         )}
