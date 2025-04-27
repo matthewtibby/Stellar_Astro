@@ -128,17 +128,37 @@ export function FileManagementPanel({
 
     setIsUploading(true);
     setUploadError(null);
+    setUploadProgress(0);
 
     for (const file of selectedFiles) {
       setCurrentFile(file.name);
       try {
         console.log('Starting upload for file:', file.name);
-        await uploadRawFrame(projectId, activeTab, file, (progress) => {
+        const filePath = await uploadRawFrame(projectId, activeTab, file, (progress) => {
           console.log(`Upload progress for ${file.name}:`, progress * 100);
-          setUploadProgress(progress * 100);
+          setUploadProgress(Math.round(progress * 100));
         });
         console.log('Upload completed for file:', file.name);
-        loadFiles(); // Refresh the file list
+        
+        // Create a StorageFile object
+        const uploadedFile: StorageFile = {
+          name: file.name,
+          path: filePath,
+          size: file.size,
+          created_at: new Date().toISOString(),
+          type: activeTab
+        };
+        
+        // Update the filesByType state immediately
+        setFilesByType(prev => ({
+          ...prev,
+          [activeTab]: [...prev[activeTab], uploadedFile]
+        }));
+        
+        // Call onFileSelect callback if provided
+        if (onFileSelect) {
+          onFileSelect(uploadedFile);
+        }
       } catch (error) {
         console.error('Upload error for file:', file.name, error);
         const errorMessage = error instanceof Error ? error.message : 'Upload failed';
@@ -148,6 +168,10 @@ export function FileManagementPanel({
       }
     }
 
+    // Wait 1 second before refreshing to allow Supabase Storage to propagate the new file
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await loadFiles();
+    
     setIsUploading(false);
     setSelectedFiles([]);
     setUploadProgress(0);
@@ -198,157 +222,176 @@ export function FileManagementPanel({
     'post-processed': <FolderOpen className="h-4 w-4" />
   };
 
+  // Add a useEffect to handle file count updates
+  useEffect(() => {
+    if (onRefresh) {
+      onRefresh();
+    }
+  }, [filesByType, onRefresh]);
+
   return (
-    <div className="bg-gray-900/50 rounded-lg border border-gray-700 overflow-hidden">
-      <div className="p-4 border-b border-gray-700 flex justify-between items-center">
-        <h3 className="text-lg font-semibold text-white">File Management</h3>
-        <button 
-          onClick={handleRefresh}
-          className="p-2 text-gray-400 hover:text-white transition-colors rounded-full hover:bg-gray-800"
-          title="Refresh files"
-        >
-          <RefreshCw className="h-5 w-5" />
-        </button>
-      </div>
-
-      {loading && (
-        <div className="p-4 text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
-          <p className="text-gray-400 mt-2">Loading files...</p>
+    <div className="space-y-4">
+      {error && (
+        <div className="p-4 bg-red-900/50 text-red-200 rounded-md border border-red-800">
+          {error}
         </div>
       )}
-
-      {!loading && error && (
-        <div className="p-4 bg-red-900/50 text-red-200">
-          <div className="flex items-start space-x-2">
-            <AlertCircle className="text-red-500 mt-1" size={16} />
-            <div className="text-sm">{error}</div>
+      
+      {isUploading && (
+        <div className="p-4 bg-blue-900/50 text-blue-200 rounded-md border border-blue-800">
+          <div className="flex items-center space-x-2">
+            <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-200 border-t-transparent" />
+            <span>Uploading {currentFile}... {uploadProgress}%</span>
+          </div>
+          <div className="mt-2 w-full bg-gray-700 rounded-full h-2">
+            <div 
+              className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+              style={{ width: `${uploadProgress}%` }}
+            />
           </div>
         </div>
       )}
-
-      {!loading && !error && (
-        <div className="flex">
-          {/* Left column with file types */}
-          <div className="w-64 border-r border-gray-700 p-4">
-            <div className="space-y-2">
-              {Object.entries(fileTypeLabels).map(([type, label]) => (
-                <button
-                  key={type}
-                  onClick={() => setActiveTab(type as FileType)}
-                  className={`w-full flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                    activeTab === type
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
-                  }`}
-                >
-                  {label}
-                  <span className="ml-auto text-xs">
-                    ({filesByType[type as FileType]?.length || 0})
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Right column with file list and upload area */}
-          <div className="flex-1 p-4">
-            <div className="mb-4">
-              <input
-                type="text"
-                placeholder="Search files..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-800/50 border border-gray-700 rounded-md text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            {/* Drag and drop area */}
-            <div
-              {...getRootProps()}
-              className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors mb-4 ${
-                isDragActive
-                  ? 'border-blue-500 bg-blue-500/10'
-                  : 'border-gray-700 hover:border-gray-600'
-              }`}
+      
+      <div className="bg-gray-900/50 rounded-lg border border-gray-700 overflow-hidden">
+        <div className="p-4 border-b border-gray-700 flex justify-between items-center">
+          <h3 className="text-lg font-semibold text-white">File Management</h3>
+          <div className="flex items-center space-x-2">
+            <span className="text-sm text-gray-400">
+              {filesByType[activeTab]?.length || 0} files
+            </span>
+            <button 
+              onClick={handleRefresh}
+              className="p-2 text-gray-400 hover:text-white transition-colors rounded-full hover:bg-gray-800"
+              title="Refresh files"
             >
-              <input {...getInputProps()} />
-              <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
-              <p className="text-sm text-gray-400">
-                {isDragActive
-                  ? 'Drop the files here...'
-                  : 'Drag and drop files here, or click to select files'}
-              </p>
+              <RefreshCw className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+
+        {!loading && !error && (
+          <div className="flex">
+            {/* Left column with file types */}
+            <div className="w-64 border-r border-gray-700 p-4">
+              <div className="space-y-2">
+                {Object.entries(fileTypeLabels).map(([type, label]) => (
+                  <button
+                    key={type}
+                    onClick={() => setActiveTab(type as FileType)}
+                    className={`w-full flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                      activeTab === type
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                    }`}
+                  >
+                    {label}
+                    <span className="ml-auto text-xs">
+                      ({filesByType[type as FileType]?.length || 0})
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
 
-            {/* Show upload button when files are selected */}
-            {selectedFiles.length > 0 && (
+            {/* Right column with file list and upload area */}
+            <div className="flex-1 p-4">
               <div className="mb-4">
-                <button
-                  onClick={handleUpload}
-                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2"
-                  disabled={isUploading}
-                >
-                  {isUploading ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
-                      <span>Uploading {currentFile}... ({Math.round(uploadProgress)}%)</span>
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="h-4 w-4" />
-                      <span>Upload {selectedFiles.length} file{selectedFiles.length > 1 ? 's' : ''}</span>
-                    </>
-                  )}
-                </button>
+                <input
+                  type="text"
+                  placeholder="Search files..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full px-3 py-2 bg-gray-800/50 border border-gray-700 rounded-md text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
               </div>
-            )}
 
-            {/* Show error if any */}
-            {uploadError && (
-              <div className="mb-4 p-4 bg-red-500/10 border border-red-500 rounded-md">
-                <p className="text-red-500 text-sm">{uploadError}</p>
+              {/* Drag and drop area */}
+              <div
+                {...getRootProps()}
+                className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors mb-4 ${
+                  isDragActive
+                    ? 'border-blue-500 bg-blue-500/10'
+                    : 'border-gray-700 hover:border-gray-600'
+                }`}
+              >
+                <input {...getInputProps()} />
+                <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                <p className="text-sm text-gray-400">
+                  {isDragActive
+                    ? 'Drop the files here...'
+                    : 'Drag and drop files here, or click to select files'}
+                </p>
               </div>
-            )}
 
-            {/* File list */}
-            <div className="space-y-2">
-              {filteredFiles.map((file, index) => (
-                <div
-                  key={index}
-                  className="flex items-center justify-between p-3 bg-gray-800/50 rounded-lg border border-gray-700 hover:bg-gray-800/70 transition-colors"
-                >
-                  <div className="flex items-center space-x-3">
-                    <File className="h-5 w-5 text-gray-400" />
-                    <div>
-                      <p className="text-sm text-white">{file.name}</p>
-                      <p className="text-xs text-gray-400">
-                        {formatFileSize(file.size)} • {formatDate(file.created_at)}
-                      </p>
+              {/* Show upload button when files are selected */}
+              {selectedFiles.length > 0 && (
+                <div className="mb-4">
+                  <button
+                    onClick={handleUpload}
+                    className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2"
+                    disabled={isUploading}
+                  >
+                    {isUploading ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                        <span>Uploading {currentFile}... ({uploadProgress}%)</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="h-4 w-4" />
+                        <span>Upload {selectedFiles.length} file{selectedFiles.length > 1 ? 's' : ''}</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+
+              {/* Show error if any */}
+              {uploadError && (
+                <div className="mb-4 p-4 bg-red-500/10 border border-red-500 rounded-md">
+                  <p className="text-red-500 text-sm">{uploadError}</p>
+                </div>
+              )}
+
+              {/* File list */}
+              <div className="space-y-2">
+                {filteredFiles.map((file, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center justify-between p-3 bg-gray-800/50 rounded-lg border border-gray-700 hover:bg-gray-800/70 transition-colors"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <File className="h-5 w-5 text-gray-400" />
+                      <div>
+                        <p className="text-sm text-white">{file.name}</p>
+                        <p className="text-xs text-gray-400">
+                          {formatFileSize(file.size)} • {formatDate(file.created_at)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => onFileSelect?.(file)}
+                        className="p-1 text-gray-400 hover:text-white transition-colors"
+                        title="View file"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDownload(file)}
+                        className="p-1 text-gray-400 hover:text-white transition-colors"
+                        title="Download file"
+                      >
+                        <Download className="h-4 w-4" />
+                      </button>
                     </div>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={() => onFileSelect?.(file)}
-                      className="p-1 text-gray-400 hover:text-white transition-colors"
-                      title="View file"
-                    >
-                      <Eye className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDownload(file)}
-                      className="p-1 text-gray-400 hover:text-white transition-colors"
-                      title="Download file"
-                    >
-                      <Download className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 } 
