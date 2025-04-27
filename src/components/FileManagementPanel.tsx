@@ -1,10 +1,13 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { getFilesByType, type StorageFile, validateFitsFile, uploadRawFrame, getFitsFileUrl } from '@/src/utils/storage';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { getFilesByType, type StorageFile, validateFitsFile, uploadRawFrame, getFitsFileUrl, deleteFitsFile } from '@/src/utils/storage';
 import { File, Trash2, Download, Eye, RefreshCw, FolderOpen, Upload, AlertCircle } from 'lucide-react';
 import { type FileType } from '@/src/types/store';
 import { useDropzone } from 'react-dropzone';
+
+// Add constant for initial file types
+const INITIAL_FILE_TYPES: FileType[] = ['light', 'dark', 'bias', 'flat'];
 
 interface FileManagementPanelProps {
   projectId: string;
@@ -49,6 +52,23 @@ export function FileManagementPanel({
   const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
   const [currentFile, setCurrentFile] = useState<string>('');
   const [selectedFiles, setSelectedFiles] = useState<SelectedFile[]>([]);
+  const [selectedType, setSelectedType] = useState<FileType | null>(null);
+  const [showCalibrationWarning, setShowCalibrationWarning] = useState(false);
+  const [missingFrameTypes, setMissingFrameTypes] = useState<FileType[]>([]);
+  const fileInputRefs = useRef<Record<FileType, HTMLInputElement | null>>({
+    light: null,
+    dark: null,
+    bias: null,
+    flat: null,
+    'master-dark': null,
+    'master-bias': null,
+    'master-flat': null,
+    calibrated: null,
+    stacked: null,
+    aligned: null,
+    'pre-processed': null,
+    'post-processed': null
+  });
 
   const loadFiles = async () => {
     try {
@@ -236,6 +256,17 @@ export function FileManagementPanel({
     }
   };
 
+  const handleDeleteFile = async (file: StorageFile) => {
+    try {
+      await deleteFitsFile(file.path);
+      // Refresh the file list
+      await loadFiles();
+      if (onRefresh) onRefresh();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to delete file');
+    }
+  };
+
   const filteredFiles = filesByType[activeTab].filter(file => 
     file.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -276,6 +307,51 @@ export function FileManagementPanel({
       onRefresh();
     }
   }, [filesByType, onRefresh]);
+
+  const handleUploadClick = (type: FileType) => {
+    fileInputRefs.current[type]?.click();
+  };
+
+  const handleFileChange = (type: FileType) => (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (files) {
+      const fileList = Array.from(files);
+      setFilesByType(prev => ({
+        ...prev,
+        [type]: [...(prev[type] || []), ...fileList]
+      }));
+    }
+  };
+
+  const handleTypeClick = (type: FileType) => {
+    // ... existing code ...
+  };
+
+  const handleCalibrationProgress = () => {
+    const requiredTypes: FileType[] = ['dark', 'bias', 'flat'];
+    const missingTypes = requiredTypes.filter(type => filesByType[type].length === 0);
+
+    if (filesByType['light'].length === 0) {
+      setError('Cannot progress to calibration: No light frames found. Please upload light frames first.');
+      return;
+    }
+
+    if (missingTypes.length > 0) {
+      setMissingFrameTypes(missingTypes);
+      setShowCalibrationWarning(true);
+      return;
+    }
+
+    // If we have all required files, proceed to calibration
+    // TODO: Implement navigation to calibration step
+    console.log('Proceeding to calibration step...');
+  };
+
+  const handleConfirmCalibration = () => {
+    setShowCalibrationWarning(false);
+    // TODO: Implement navigation to calibration step
+    console.log('Proceeding to calibration step despite missing frames...');
+  };
 
   return (
     <div className="space-y-4">
@@ -322,19 +398,19 @@ export function FileManagementPanel({
             {/* Left column with file types */}
             <div className="w-64 border-r border-gray-700 p-4">
               <div className="space-y-2">
-                {Object.entries(fileTypeLabels).map(([type, label]) => (
+                {INITIAL_FILE_TYPES.map((type) => (
                   <button
                     key={type}
-                    onClick={() => setActiveTab(type as FileType)}
+                    onClick={() => setActiveTab(type)}
                     className={`w-full flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                       activeTab === type
                         ? 'bg-blue-600 text-white'
                         : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
                     }`}
                   >
-                    {label}
+                    {fileTypeLabels[type]}
                     <span className="ml-auto text-xs">
-                      ({filesByType[type as FileType]?.length || 0})
+                      ({filesByType[type]?.length || 0})
                     </span>
                   </button>
                 ))}
@@ -432,14 +508,91 @@ export function FileManagementPanel({
                       >
                         <Download className="h-4 w-4" />
                       </button>
+                      <button
+                        onClick={() => handleDeleteFile(file)}
+                        className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                        title="Delete file"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
                     </div>
                   </div>
                 ))}
+              </div>
+
+              {/* File upload section */}
+              <div className="p-4 border-t border-gray-700">
+                <h3 className="text-sm font-medium text-gray-400 mb-2">Upload Files</h3>
+                <div className="space-y-2">
+                  {INITIAL_FILE_TYPES.map((type) => (
+                    <div key={type} className="flex items-center space-x-2">
+                      <button
+                        onClick={() => handleUploadClick(type)}
+                        className="flex-1 flex items-center justify-center space-x-2 px-3 py-2 bg-gray-800 text-gray-400 rounded-md hover:bg-gray-700 transition-colors"
+                      >
+                        <Upload className="h-4 w-4" />
+                        <span>Upload {fileTypeLabels[type]}</span>
+                      </button>
+                      <input
+                        type="file"
+                        ref={(el) => { fileInputRefs.current[type] = el; }}
+                        onChange={(e) => handleFileChange(type)(e)}
+                        className="hidden"
+                        multiple
+                        accept=".fits,.fit"
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
         )}
       </div>
+
+      {/* Add calibration progress button */}
+      <div className="mt-4 flex justify-end">
+        <button
+          onClick={handleCalibrationProgress}
+          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+        >
+          Proceed to Calibration
+        </button>
+      </div>
+
+      {/* Calibration warning modal */}
+      {showCalibrationWarning && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 p-6 rounded-lg max-w-md w-full">
+            <h3 className="text-lg font-semibold text-white mb-4">Missing Calibration Frames</h3>
+            <p className="text-gray-300 mb-4">
+              You are missing the following calibration frames:
+            </p>
+            <ul className="list-disc list-inside text-gray-300 mb-4">
+              {missingFrameTypes.map(type => (
+                <li key={type} className="capitalize">{type} frames</li>
+              ))}
+            </ul>
+            <p className="text-gray-300 mb-4">
+              Calibration may not be optimal without these frames. Do you want to proceed anyway?
+            </p>
+            <div className="flex justify-end space-x-4">
+              <button
+                onClick={() => setShowCalibrationWarning(false)}
+                className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmCalibration}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              >
+                Proceed Anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 } 

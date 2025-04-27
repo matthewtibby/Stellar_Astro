@@ -450,10 +450,11 @@ export const downloadFile = async (bucket: string, filePath: string): Promise<Bl
 export async function deleteFitsFile(filePath: string): Promise<void> {
   const client = checkSupabase();
   const { error } = await client.storage
-    .from('fits-files')
+    .from(STORAGE_BUCKETS.RAW_FRAMES)
     .remove([filePath]);
 
   if (error) {
+    console.error('Error deleting file:', error);
     throw new Error(`Failed to delete file: ${error.message}`);
   }
 }
