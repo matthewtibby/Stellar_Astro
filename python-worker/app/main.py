@@ -77,6 +77,8 @@ def get_frame_type_from_header(header: fits.header.Header) -> str:
     - IMAGETYP: Most common keyword for frame type
     - OBSTYPE: Alternative keyword used by some observatories
     - FILTER: Can help determine frame type
+    - EXPTIME: Exposure time can help distinguish between types
+    - OBJECT: Object name can provide context
     """
     # Try IMAGETYP first (most common)
     if 'IMAGETYP' in header:
@@ -102,8 +104,36 @@ def get_frame_type_from_header(header: fits.header.Header) -> str:
         elif 'bias' in obstype or 'zero' in obstype:
             return 'bias'
     
+    # Use EXPTIME and FILTER as additional hints
+    exptime = header.get('EXPTIME', 0)
+    filter_name = str(header.get('FILTER', '')).strip().lower()
+    
+    # Dark frames typically have longer exposure times and no filter
+    if exptime > 0 and not filter_name:
+        return 'dark'
+    
+    # Flat frames typically have filters and moderate exposure times
+    if filter_name and 0 < exptime < 10:
+        return 'flat'
+    
     # If we can't determine the type, return None
     return None
+
+def extract_metadata(header: fits.header.Header) -> dict:
+    """Extract relevant metadata from FITS header."""
+    return {
+        'exposure_time': header.get('EXPTIME'),
+        'filter': header.get('FILTER'),
+        'object': header.get('OBJECT'),
+        'date_obs': header.get('DATE-OBS'),
+        'instrument': header.get('INSTRUME'),
+        'telescope': header.get('TELESCOP'),
+        'gain': header.get('GAIN'),
+        'temperature': header.get('CCD-TEMP'),
+        'binning': f"{header.get('XBINNING', 1)}x{header.get('YBINNING', 1)}",
+        'image_type': header.get('IMAGETYP'),
+        'observation_type': header.get('OBSTYPE')
+    }
 
 @app.get("/test")
 async def test_endpoint():
@@ -130,17 +160,34 @@ async def validate_fits_file(
                 # Determine the actual frame type
                 actual_type = get_frame_type_from_header(header)
                 
+                # Extract metadata
+                metadata = extract_metadata(header)
+                
                 # Validate against expected type if provided
                 if expected_type and actual_type and expected_type.lower() != actual_type.lower():
                     return JSONResponse(
-                        status_code=400,
+                        status_code=200,  # Changed to 200 to allow client-side handling
                         content={
                             "valid": False,
                             "message": f"Frame type mismatch. Expected {expected_type}, got {actual_type}",
                             "actual_type": actual_type,
-                            "expected_type": expected_type
+                            "expected_type": expected_type,
+                            "metadata": metadata,
+                            "warnings": [
+                                f"File appears to be a {actual_type} frame but was uploaded as {expected_type}",
+                                "Consider re-uploading in the correct category"
+                            ]
                         }
                     )
+                
+                # Check for potential issues
+                warnings = []
+                if actual_type == 'light' and not metadata['filter']:
+                    warnings.append("Light frame missing filter information")
+                if actual_type == 'flat' and metadata['exposure_time'] > 10:
+                    warnings.append("Flat frame exposure time seems unusually long")
+                if actual_type == 'dark' and metadata['filter']:
+                    warnings.append("Dark frame has filter information, which is unusual")
                 
                 return JSONResponse(
                     status_code=200,
@@ -148,7 +195,9 @@ async def validate_fits_file(
                         "valid": True,
                         "message": "FITS file is valid",
                         "actual_type": actual_type,
-                        "expected_type": expected_type
+                        "expected_type": expected_type,
+                        "metadata": metadata,
+                        "warnings": warnings
                     }
                 )
         except Exception as e:
@@ -158,7 +207,9 @@ async def validate_fits_file(
                     "valid": False,
                     "message": f"Invalid FITS file: {str(e)}",
                     "actual_type": None,
-                    "expected_type": expected_type
+                    "expected_type": expected_type,
+                    "metadata": None,
+                    "warnings": []
                 }
             )
         finally:
@@ -174,7 +225,9 @@ async def validate_fits_file(
                 "valid": False,
                 "message": f"Server error: {str(e)}",
                 "actual_type": None,
-                "expected_type": expected_type
+                "expected_type": expected_type,
+                "metadata": None,
+                "warnings": []
             }
         )
 
