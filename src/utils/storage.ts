@@ -170,7 +170,7 @@ export async function validateFitsFile(file: File, expectedType?: FileType): Pro
       formData.append('expected_type', expectedType);
     }
 
-    const response = await fetch('http://localhost:8001/validate-fits', {
+    const response = await fetch('http://localhost:8000/validate-fits', {
       method: 'POST',
       body: formData,
       headers: {
@@ -199,30 +199,31 @@ export async function validateFitsFile(file: File, expectedType?: FileType): Pro
 // Add a function to ensure project exists
 export async function ensureProjectExists(projectId: string): Promise<void> {
   const client = getSupabaseClient();
-  const { data: project, error } = await client
-    .from('projects')
-    .select('*')
-    .eq('id', projectId)
-    .single();
+  
+  // Check if projectId is a valid UUID
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidRegex.test(projectId)) {
+    throw new Error('Invalid project ID format. Must be a valid UUID.');
+  }
 
-  if (error || !project) {
-    // Create a default project if it doesn't exist
-    const { data: { user } } = await client.auth.getUser();
-    if (!user) {
-      throw new Error('User must be authenticated');
+  try {
+    const { data: project, error } = await client
+      .from('projects')
+      .select('*')
+      .eq('id', projectId)
+      .single();
+
+    if (error) {
+      console.error('Error fetching project:', error);
+      throw new Error(`Failed to fetch project: ${error.message}`);
     }
 
-    await client
-      .from('projects')
-      .insert([
-        {
-          id: projectId,
-          user_id: user.id,
-          title: 'Default Project',
-          description: 'Created automatically for file uploads',
-          created_at: new Date().toISOString()
-        }
-      ]);
+    if (!project) {
+      throw new Error('Project not found. Please create a project first.');
+    }
+  } catch (error) {
+    console.error('Error in ensureProjectExists:', error);
+    throw error;
   }
 }
 
@@ -236,215 +237,70 @@ export async function uploadRawFrame(
 ): Promise<string> {
   try {
     console.log('[uploadRawFrame] Starting upload for file:', file.name);
-    
-    // Ensure project exists
-    console.log('[uploadRawFrame] Ensuring project exists...');
     await ensureProjectExists(projectId);
-    
-    // Validate the FITS file
-    console.log('[uploadRawFrame] Validating FITS file...');
     const validationResult = await validateFitsFile(file, fileType);
-    console.log('[uploadRawFrame] Validation result:', validationResult);
-    
     if (!validationResult.valid) {
       throw new Error(validationResult.message);
     }
-
-    // Initialize Supabase client
-    console.log('[uploadRawFrame] Initializing Supabase client...');
     const client = getSupabaseClient();
-    
-    // Authenticate user
-    console.log('[uploadRawFrame] Checking user authentication...');
     const { data: { user }, error: authError } = await client.auth.getUser();
     if (authError || !user) {
       throw new Error('User must be authenticated to upload files');
     }
-    console.log('[uploadRawFrame] User authenticated:', user.id);
-
-    // Get project details to include project name in path
     const { data: project, error: projectError } = await client
       .from('projects')
       .select('title')
       .eq('id', projectId)
       .single();
-    console.log('Project lookup result:', { project, error: projectError });
-
     if (projectError || !project) {
-      console.error('Error fetching project:', projectError);
       throw new Error('Project not found');
     }
-
-    // Generate a unique identifier with timestamp
     const timestamp = new Date().getTime();
     const randomString = Math.random().toString(36).substring(2, 8);
     const uniqueId = `${timestamp}_${randomString}`;
-    
-    // Sanitize the file name and add unique identifier
     const fileExtension = file.name.split('.').pop()?.toLowerCase() || '';
     const baseFileName = file.name.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9.-]/g, '_');
     const sanitizedFileName = `${baseFileName}_${uniqueId}.${fileExtension}`;
-    
-    // Create a more unique path structure with project name
-    const sanitizedProjectName = project.title.replace(/[^a-zA-Z0-9.-]/g, '_');
-    const targetFilePath = `${user.id}/${sanitizedProjectName}/${FILE_TYPE_FOLDERS[fileType]}/${uniqueId}/${sanitizedFileName}`;
-    
-    console.log('Prepared upload details:', {
-      originalName: file.name,
-      sanitizedName: sanitizedFileName,
-      filePath: targetFilePath,
-      fileSize: file.size,
-      fileType: file.type,
-      userId: user.id,
-      projectName: sanitizedProjectName,
-      bucketName: STORAGE_BUCKETS.RAW_FRAMES,
-      contentType: file.type
-    });
-    
-    // Try to upload with a simple approach first
-    try {
-      console.log('Attempting simple upload...');
-      const { data, error } = await client.storage
-        .from(STORAGE_BUCKETS.RAW_FRAMES)
-        .upload(targetFilePath, file, {
-          cacheControl: '3600',
-          upsert: false,
-          metadata: {
-            size: file.size.toString(),
-            originalName: file.name,
-            contentType: file.type,
-            fileType: fileType,
-            uploadedAt: new Date().toISOString(),
-            lastModified: file.lastModified.toString()
-          }
-        });
-      console.log('Simple upload result:', { data, error });
-        
-      if (error) {
-        console.error('Simple upload failed:', error);
-        throw error;
-      }
-      
-      if (!data?.path) {
-        throw new Error('Upload failed: No file path returned');
-      }
-      
-      // Verify the upload by getting the file metadata
-      console.log('Verifying upload...');
-      const { data: uploadedFile } = await client.storage
-        .from(STORAGE_BUCKETS.RAW_FRAMES)
-        .list(`${user.id}/${projectId}/${FILE_TYPE_FOLDERS[fileType]}/${uniqueId}`);
-      
-      console.log('Upload verification:', uploadedFile);
-      
-      return data.path;
-    } catch (simpleUploadError) {
-      console.error('Simple upload failed, trying chunked upload:', simpleUploadError);
-      
-      // If simple upload fails, try the chunked approach
-      console.log('Starting chunked upload...');
-      const uploadWithProgress = async () => {
-        // Create a FileReader to read the file in chunks
-        const reader = new FileReader();
-        const chunkSize = 1024 * 1024; // 1MB chunks
-        const totalChunks = Math.ceil(file.size / chunkSize);
-        let uploadedChunks = 0;
-        
-        console.log('Chunked upload details:', { totalChunks, chunkSize });
-        
-        return new Promise<string>((resolve, reject) => {
-          // Check for abort signal
-          if (signal?.aborted) {
-            reject(new Error('Upload aborted'));
-            return;
-          }
-          
-          // Create upload chunk function
-          const uploadChunk = async (chunk: Blob, start: number) => {
-            try {
-              console.log(`Uploading chunk ${uploadedChunks + 1}/${totalChunks}...`);
-              
-              // Check for abort signal
-              if (signal?.aborted) {
-                reject(new Error('Upload aborted'));
-                return;
-              }
-              
-              // Create a FormData object for the chunk
-              const formData = new FormData();
-              formData.append('file', chunk);
-              
-              // Get a signed URL for the upload
-              const { data: signedUrlData, error: signedUrlError } = await client.storage
-                .from(STORAGE_BUCKETS.RAW_FRAMES)
-                .createSignedUploadUrl(targetFilePath);
-                
-              if (signedUrlError) {
-                throw signedUrlError;
-              }
-              
-              // Upload the chunk using fetch
-              const response = await fetch(signedUrlData.signedUrl, {
-                method: 'PUT',
-                body: chunk,
-                headers: {
-                  'Content-Type': file.type,
-                  'Content-Range': `bytes ${start}-${start + chunk.size - 1}/${file.size}`,
-                  'x-amz-meta-size': file.size.toString(),
-                  'x-amz-meta-originalName': file.name,
-                  'x-amz-meta-contentType': file.type,
-                  'x-amz-meta-fileType': fileType,
-                  'x-amz-meta-uploadedAt': new Date().toISOString(),
-                  'x-amz-meta-lastModified': file.lastModified.toString()
-                },
-                signal
-              });
-              
-              if (!response.ok) {
-                throw new Error(`Upload failed with status: ${response.status}`);
-              }
-              
-              // Update progress
-              uploadedChunks++;
-              const progress = uploadedChunks / totalChunks;
-              console.log(`Upload progress: ${Math.round(progress * 100)}%`);
-              if (onProgress) {
-                onProgress(progress);
-              }
-              
-              // If there are more chunks, upload the next one
-              if (uploadedChunks < totalChunks) {
-                const nextStart = start + chunk.size;
-                const nextChunk = file.slice(nextStart, nextStart + chunkSize);
-                await uploadChunk(nextChunk, nextStart);
-              } else {
-                // All chunks uploaded, resolve the promise
-                console.log('All chunks uploaded successfully');
-                resolve(targetFilePath);
-              }
-            } catch (error) {
-              console.error('Chunk upload error:', error);
-              reject(error);
-            }
-          };
-          
-          // Start with the first chunk
-          console.log('Starting first chunk upload...');
-          const firstChunk = file.slice(0, chunkSize);
-          uploadChunk(firstChunk, 0);
-        });
-      };
-      
-      // Use the custom upload function
-      console.log('Starting chunked upload process...');
-      const uploadedFilePath = await uploadWithProgress();
-      console.log('Chunked upload completed:', uploadedFilePath);
-      
-      // Check bucket contents after successful upload
-      await checkBucketContents();
+    const targetFilePath = `${user.id}/${projectId}/${FILE_TYPE_FOLDERS[fileType]}/${uniqueId}/${sanitizedFileName}`;
 
-      return uploadedFilePath;
+    // 1. Get a signed upload URL from Supabase
+    const { data: signedUrlData, error: signedUrlError } = await client.storage
+      .from(STORAGE_BUCKETS.RAW_FRAMES)
+      .createSignedUploadUrl(targetFilePath);
+    if (signedUrlError || !signedUrlData?.signedUrl) {
+      throw new Error('Failed to get signed upload URL');
     }
+
+    // 2. Upload the file using XMLHttpRequest for progress
+    await new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('PUT', signedUrlData.signedUrl, true);
+      xhr.setRequestHeader('Content-Type', file.type);
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable && onProgress) {
+          onProgress(event.loaded / event.total);
+        }
+      };
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          if (onProgress) onProgress(1);
+          resolve();
+        } else {
+          reject(new Error(`Upload failed with status: ${xhr.status}`));
+        }
+      };
+      xhr.onerror = () => reject(new Error('Upload failed'));
+      if (signal) {
+        signal.addEventListener('abort', () => {
+          xhr.abort();
+          reject(new Error('Upload aborted'));
+        });
+      }
+      xhr.send(file);
+    });
+
+    // Optionally: check/upload metadata if needed (not required for progress)
+    return targetFilePath;
   } catch (error) {
     console.error('[uploadRawFrame] Error:', error);
     throw error;
@@ -616,15 +472,38 @@ export interface StorageFile {
   type: FileType;
 }
 
+// Helper to recursively list files in a folder
+async function listAllFiles(client: SupabaseClient, bucket: string, path: string): Promise<any[]> {
+  let files: any[] = [];
+  const { data, error } = await client.storage.from(bucket).list(path, {
+    limit: 100,
+    offset: 0,
+    sortBy: { column: 'name', order: 'asc' }
+  });
+  if (error) {
+    console.error(`Error listing files in ${path}:`, error);
+    return files;
+  }
+  for (const item of data) {
+    if (item.id && item.name && item.metadata && item.created_at) {
+      // It's a file
+      files.push({ ...item, fullPath: path ? `${path}/${item.name}` : item.name });
+    } else if (item.name && item.id === undefined) {
+      // It's a folder
+      const subFiles = await listAllFiles(client, bucket, path ? `${path}/${item.name}` : item.name);
+      files = files.concat(subFiles);
+    }
+  }
+  return files;
+}
+
 export async function getFilesByType(projectId: string): Promise<Record<FileType, StorageFile[]>> {
   try {
     const client = checkSupabase();
     const { data: { user }, error: authError } = await client.auth.getUser();
-    
     if (authError || !user) {
       throw new Error('User must be authenticated to fetch files');
     }
-
     const result: Record<FileType, StorageFile[]> = {
       'light': [],
       'dark': [],
@@ -639,48 +518,22 @@ export async function getFilesByType(projectId: string): Promise<Record<FileType
       'pre-processed': [],
       'post-processed': []
     };
-
-    // Fetch files for each type
+    // Fetch files for each type, recursively
     for (const [type, folder] of Object.entries(FILE_TYPE_FOLDERS)) {
-      const { data, error } = await client.storage
-        .from(STORAGE_BUCKETS.RAW_FRAMES)
-        .list(`${user.id}/${projectId}/${folder}`, {
-          limit: 100,
-          offset: 0,
-          sortBy: { column: 'name', order: 'asc' }
-        });
-      
-      if (error) {
-        console.error(`Error fetching ${type} files:`, error);
-        continue;
-      }
-      
-      if (data) {
-        console.log(`Found ${data.length} files for type ${type}:`, data);
-        
-        // Get detailed metadata for each file
+      const basePath = `${user.id}/${projectId}/${folder}`;
+      const files = await listAllFiles(client, STORAGE_BUCKETS.RAW_FRAMES, basePath);
+      console.log('Files found for type', type, files); // DEBUG LOG
+      if (files.length > 0) {
         const filesWithMetadata = await Promise.all(
-          data.map(async (file) => {
-            console.log('Processing file:', file);
-            
+          files.map(async (file) => {
             const { data: metadata } = await client.storage
               .from(STORAGE_BUCKETS.RAW_FRAMES)
-              .getPublicUrl(`${user.id}/${projectId}/${folder}/${file.name}`);
-            
-            // Get the file size from the file object
+              .getPublicUrl(file.fullPath);
             const size = file.metadata?.size || 0;
             const created_at = file.created_at || new Date().toISOString();
-            
-            console.log('File metadata:', {
-              name: file.name,
-              size,
-              created_at,
-              metadata: file.metadata
-            });
-            
             return {
               name: file.name,
-              path: `${user.id}/${projectId}/${folder}/${file.name}`,
+              path: file.fullPath,
               size: typeof size === 'string' ? parseInt(size, 10) : size,
               created_at,
               type: type as FileType,
@@ -688,11 +541,10 @@ export async function getFilesByType(projectId: string): Promise<Record<FileType
             };
           })
         );
-        
         result[type as FileType] = filesWithMetadata;
       }
     }
-
+    console.log('getFilesByType result:', result); // DEBUG LOG
     return result;
   } catch (error) {
     console.error('Error fetching files by type:', error);

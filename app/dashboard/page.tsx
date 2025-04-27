@@ -38,6 +38,7 @@ import StepsIndicator from '@/src/components/StepsIndicator';
 import { FileManagementPanel } from '@/src/components/FileManagementPanel';
 import { type StorageFile } from '@/src/utils/storage';
 import { getSupabaseClient } from '../../src/utils/supabase';
+import { generateUUID } from '@/src/utils/uuid';
 
 // Add these interfaces before the mockProjects array
 interface Project {
@@ -81,7 +82,7 @@ interface User {
 // Mock project data
 const mockProjects: Project[] = [
   {
-    id: "project-1",
+    id: generateUUID(),
     name: "Orion Nebula",
     target: {
       id: "NGC 7000",
@@ -110,7 +111,7 @@ const mockProjects: Project[] = [
     ]
   },
   {
-    id: "project-2",
+    id: generateUUID(),
     name: "Andromeda Galaxy",
     target: {
       id: "M31",
@@ -238,6 +239,14 @@ const FileUploadSection = ({ projectId }: { projectId: string }) => {
   const [activeTab, setActiveTab] = useState<string>('light');
   const [validationError, setValidationError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!projectId) {
+      setValidationError('Please create a project first before uploading files.');
+    } else {
+      setValidationError(null);
+    }
+  }, [projectId]);
+
   const handleUploadComplete = (file: StorageFile) => {
     setUploadedFiles(prev => ({
       ...prev,
@@ -252,7 +261,6 @@ const FileUploadSection = ({ projectId }: { projectId: string }) => {
 
   const handleValidationError = (error: string) => {
     setValidationError(error);
-    // You can add toast notification here if needed
   };
 
   const fileTypes = [
@@ -261,6 +269,14 @@ const FileUploadSection = ({ projectId }: { projectId: string }) => {
     { id: 'flat', label: 'Flat Frames' },
     { id: 'bias', label: 'Bias Frames' },
   ];
+
+  if (!projectId) {
+    return (
+      <div className="p-4 bg-gray-800/50 text-gray-400 rounded-md border border-gray-700">
+        Please create a project first before uploading files.
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -540,26 +556,32 @@ const DashboardPage = () => {
         const { data: project, error: projectError } = await supabase
           .from('projects')
           .insert([{
-            name: projectName,
+            title: projectName,
             description: projectDescription || '',
             user_id: user.id,
             created_at: new Date().toISOString(),
-            status: 'draft',
             updated_at: new Date().toISOString(),
-            telescope_id: selectedTelescope?.id || null
+            is_public: false
           }])
           .select()
           .single();
 
-        if (projectError || !project) {
+        if (projectError) {
+          console.error('Project creation error:', projectError);
           throw new Error(projectError?.message || 'Failed to create project');
         }
 
+        if (!project) {
+          throw new Error('No project data returned after creation');
+        }
+
+        console.log('Created project:', project);
+
         const newProject: Project = {
           id: project.id,
-          name: project.name,
-          createdAt: project.created_at,
-          updatedAt: project.updated_at,
+          name: project.title,
+          createdAt: new Date(project.created_at),
+          updatedAt: new Date(project.updated_at),
           status: 'draft',
           target: selectedTarget || {
             id: '',
@@ -578,16 +600,16 @@ const DashboardPage = () => {
         };
 
         setActiveProject(newProject);
+        setCurrentStep(1);
         setProjectName('');
         setProjectDescription('');
         setSelectedTarget(null);
         setSelectedTelescope(null);
         setSelectedCamera(null);
         setSelectedFilters([]);
-        setShowNewProject(false);
       } catch (error) {
         console.error('Error creating project:', error);
-        // Here you might want to show an error message to the user
+        // TODO: Show error message to user
       }
     };
 
@@ -681,10 +703,19 @@ const DashboardPage = () => {
   };
 
   const renderFileUpload = () => {
+    if (!currentProjectId) {
+      return (
+        <div className="bg-gray-800/50 rounded-lg p-6 shadow-lg border border-gray-700">
+          <h3 className="text-xl font-semibold text-white mb-6">Upload Files</h3>
+          <p className="text-gray-400">Please create a project first to upload files.</p>
+        </div>
+      );
+    }
+
     return (
       <div className="bg-gray-800/50 rounded-lg p-6 shadow-lg border border-gray-700">
         <h3 className="text-xl font-semibold text-white mb-6">Upload Files</h3>
-        <FileUploadSection projectId={currentProjectId || 'temp-project'} />
+        <FileUploadSection projectId={currentProjectId} />
       </div>
     );
   };
@@ -955,7 +986,7 @@ const DashboardPage = () => {
 
               {/* Projects or Workflow */}
               {showNewProject || activeProject ? (
-                renderStepContent(currentProjectId || 'new-project')
+                renderStepContent(activeProject?.id || currentProjectId || '')
               ) : (
                 <>
                   <div className="flex justify-between items-center mb-6">
