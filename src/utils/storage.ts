@@ -162,7 +162,28 @@ export async function checkBucketContents(): Promise<void> {
 }
 
 // Add this new function for FITS validation
-export async function validateFitsFile(file: File, expectedType?: FileType): Promise<{ valid: boolean; message: string; actual_type: string | null; expected_type: string | null }> {
+export interface FitsValidationResult {
+  valid: boolean;
+  message: string;
+  actual_type: string | null;
+  expected_type: string | null;
+  metadata: {
+    exposure_time?: number;
+    filter?: string;
+    object?: string;
+    date_obs?: string;
+    instrument?: string;
+    telescope?: string;
+    gain?: number;
+    temperature?: number;
+    binning?: string;
+    image_type?: string;
+    observation_type?: string;
+  } | null;
+  warnings: string[];
+}
+
+export async function validateFitsFile(file: File, expectedType?: FileType): Promise<FitsValidationResult> {
   try {
     const formData = new FormData();
     formData.append('file', file);
@@ -184,12 +205,7 @@ export async function validateFitsFile(file: File, expectedType?: FileType): Pro
     }
 
     const data = await response.json();
-    return {
-      valid: data.valid,
-      message: data.message,
-      actual_type: data.actual_type,
-      expected_type: data.expected_type
-    };
+    return data;
   } catch (error) {
     console.error('Error validating FITS file:', error);
     throw error;
