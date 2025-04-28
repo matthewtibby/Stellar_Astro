@@ -83,6 +83,13 @@ export function FileList({ projectId, fileType, onFileSelect }: FileListProps) {
                   <p className="text-sm text-gray-400">
                     {formatFileSize(file.size)} • {formatDate(file.created_at)}
                   </p>
+                  {file.metadata && (
+                    <div className="mt-1 text-xs text-gray-500">
+                      <p>Exposure: {file.metadata.exposure_time}s</p>
+                      {file.metadata.filter && <p>Filter: {file.metadata.filter}</p>}
+                      {file.metadata.temperature && <p>Temp: {file.metadata.temperature}°C</p>}
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="flex items-center space-x-2">

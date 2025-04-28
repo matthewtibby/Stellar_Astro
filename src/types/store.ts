@@ -90,4 +90,5 @@ export interface StorageFile {
   created_at: string;
   type: FileType;
   url?: string;
+  metadata?: Record<string, any>;
 } 
