@@ -1,21 +1,21 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { getFilesByType, type StorageFile, validateFitsFile, uploadRawFrame, getFitsFileUrl, deleteFitsFile, type FitsValidationResult } from '@/src/utils/storage';
+import { getFilesByType, validateFitsFile, uploadRawFrame, getFitsFileUrl, deleteFitsFile } from '@/src/utils/storage';
 import { File, Trash2, Download, Eye, RefreshCw, FolderOpen, Upload, AlertCircle, Info, ChevronDown, ChevronUp, X } from 'lucide-react';
-import { type FileType } from '@/src/types/store';
+import { type FileType, type StorageFile } from '@/src/types/store';
+import { type FitsMetadata, type FitsValidationResult } from '@/src/types/fits';
 import { useDropzone } from 'react-dropzone';
 import Image from 'next/image';
+import { createBrowserClient } from '@supabase/ssr';
 
 // Add constant for initial file types
 const INITIAL_FILE_TYPES: FileType[] = ['light', 'dark', 'bias', 'flat'];
 
 interface FileManagementPanelProps {
   projectId: string;
-  onFileSelect?: (file: StorageFile) => void;
   onRefresh?: () => void;
   onValidationError?: (error: string) => void;
-  onProgress?: (progress: number) => void;
 }
 
 interface SelectedFile {
@@ -111,14 +111,87 @@ function FileMetadata({ metadata, isExpanded, onToggle }: FileMetadataProps) {
   );
 }
 
-export function FileManagementPanel({ 
-  projectId, 
-  onFileSelect,
-  onRefresh,
-  onValidationError,
-  onProgress
-}: FileManagementPanelProps) {
-  const [filesByType, setFilesByType] = useState<Record<FileType, StorageFile[]>>({
+// Add interfaces for state
+interface FileWarnings {
+  [key: string]: string[];
+}
+
+interface ExpandedFiles {
+  [key: string]: boolean;
+}
+
+interface FilesByType extends Record<FileType, StorageFile[]> {
+  'light': StorageFile[];
+  'dark': StorageFile[];
+  'bias': StorageFile[];
+  'flat': StorageFile[];
+  'master-dark': StorageFile[];
+  'master-bias': StorageFile[];
+  'master-flat': StorageFile[];
+  'calibrated': StorageFile[];
+  'stacked': StorageFile[];
+  'aligned': StorageFile[];
+  'pre-processed': StorageFile[];
+  'post-processed': StorageFile[];
+}
+
+interface UploadProgress {
+  [key: string]: number;
+}
+
+// Update the file type mapping to handle null values
+const getFileTypeFromPath = (path: string): FileType | null => {
+  const type = path.split('/')[0] as FileType;
+  return INITIAL_FILE_TYPES.includes(type) ? type : null;
+};
+
+// Update the file type display to handle null values
+const getFileTypeDisplay = (type: FileType | null): string => {
+  if (!type) return 'Unknown';
+  return type.charAt(0).toUpperCase() + type.slice(1);
+};
+
+// Update the file type labels
+const fileTypeLabels: Record<FileType, string> = {
+  'light': 'Light Frames',
+  'dark': 'Dark Frames',
+  'bias': 'Bias Frames',
+  'flat': 'Flat Frames',
+  'master-dark': 'Master Dark',
+  'master-bias': 'Master Bias',
+  'master-flat': 'Master Flat',
+  'calibrated': 'Calibrated',
+  'stacked': 'Stacked',
+  'aligned': 'Aligned',
+  'pre-processed': 'Pre-Processed',
+  'post-processed': 'Post-Processed'
+};
+
+export default function FileManagementPanel({ projectId, onRefresh, onValidationError }: FileManagementPanelProps) {
+  const [files, setFiles] = useState<StorageFile[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<UploadProgress>({});
+  const [selectedFiles, setSelectedFiles] = useState<SelectedFile[]>([]);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [currentFile, setCurrentFile] = useState<string | null>(null);
+  const [abortController, setAbortController] = useState<AbortController | null>(null);
+  const [selectedFileMetadata, setSelectedFileMetadata] = useState<NonNullable<FitsValidationResult['metadata']> | null>(null);
+  const [fileWarnings, setFileWarnings] = useState<FileWarnings>({});
+  const [moveNotification, setMoveNotification] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<FileType>('light');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+
+  const [filesByType, setFilesByType] = useState<FilesByType>({
     'light': [],
     'dark': [],
     'bias': [],
@@ -133,21 +206,9 @@ export function FileManagementPanel({
     'post-processed': []
   });
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<FileType>('light');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
-  const [currentFile, setCurrentFile] = useState<string>('');
-  const [selectedFiles, setSelectedFiles] = useState<SelectedFile[]>([]);
-  const [selectedType, setSelectedType] = useState<FileType | null>(null);
   const [showCalibrationWarning, setShowCalibrationWarning] = useState(false);
   const [missingFrameTypes, setMissingFrameTypes] = useState<FileType[]>([]);
-  const [selectedFileMetadata, setSelectedFileMetadata] = useState<FitsValidationResult['metadata'] | null>(null);
-  const [fileWarnings, setFileWarnings] = useState<Record<string, string[]>>({});
   const [hasLoadedFiles, setHasLoadedFiles] = useState(false);
-  const [abortController, setAbortController] = useState<AbortController | null>(null);
   const fileInputRefs = useRef<Record<FileType, HTMLInputElement | null>>({
     light: null,
     dark: null,
@@ -162,11 +223,21 @@ export function FileManagementPanel({
     'pre-processed': null,
     'post-processed': null
   });
-  const [expandedFiles, setExpandedFiles] = useState<Record<string, boolean>>({});
+  const [expandedFiles, setExpandedFiles] = useState<ExpandedFiles>({});
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewError, setPreviewError] = useState<string | null>(null);
-  const [moveNotification, setMoveNotification] = useState<string | null>(null);
+
+  // Get user ID on component mount
+  useEffect(() => {
+    const getUser = async () => {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      if (error || !user) {
+        setError('User not authenticated');
+        return;
+      }
+      setUserId(user.id);
+    };
+    getUser();
+  }, [supabase]);
 
   // Initialize file input refs
   useEffect(() => {
@@ -229,6 +300,11 @@ export function FileManagementPanel({
   const handleFileChange = useCallback((type: FileType) => async (event: React.ChangeEvent<HTMLInputElement>) => {
     event.preventDefault();
     
+    if (!userId) {
+      setUploadError('User not authenticated');
+      return;
+    }
+
     const files = event.target.files;
     if (!files || files.length === 0) {
       setUploadError('No files selected');
@@ -257,7 +333,7 @@ export function FileManagementPanel({
 
         try {
           console.log('[validate-fits-debug] Calling validateFitsFile with expectedType:', type);
-          const validationResult = await validateFitsFile(file, type || 'light');
+          const validationResult = await validateFitsFile(file, projectId, userId, type || 'light');
           
           if (!validationResult.valid) {
             errors.push(`${file.name}: ${validationResult.message}`);
@@ -302,16 +378,15 @@ export function FileManagementPanel({
           try {
             setCurrentFile(selectedFile.file.name);
             const filePath = await uploadRawFrame(
+              selectedFile.file,
               projectId,
               selectedFile.type,
-              selectedFile.file,
               (progress) => {
                 setUploadProgress(prev => ({
                   ...prev,
                   [selectedFile.file.name]: progress
                 }));
-              },
-              abortController.signal
+              }
             );
           } catch (error) {
             setError(error instanceof Error ? error.message : 'Failed to upload file');
@@ -331,7 +406,7 @@ export function FileManagementPanel({
       setUploadProgress({});
       abortController.abort();
     }
-  }, [projectId, onRefresh, onValidationError]);
+  }, [projectId, onRefresh, onValidationError, userId]);
 
   const loadFiles = async () => {
     if (!projectId) return;
@@ -371,109 +446,6 @@ export function FileManagementPanel({
     if (onRefresh) onRefresh();
   };
 
-  const onDrop = useCallback(async (acceptedFiles: File[]) => {
-    setUploadError(null);
-    const validFiles: SelectedFile[] = [];
-    const errors: string[] = [];
-    const moveMessages: string[] = [];
-
-    // Create a new AbortController for this upload
-    const controller = new AbortController();
-    setAbortController(controller);
-
-    for (const file of acceptedFiles) {
-      try {
-        console.log('[validate-fits-debug] Calling validateFitsFile with expectedType:', activeTab);
-        const validationResult = await validateFitsFile(file, activeTab || 'light');
-        console.log('[autosort-debug] File:', file.name, 'Expected:', activeTab, 'ValidationResult:', validationResult);
-        if (validationResult.valid) {
-          validFiles.push({ file, type: activeTab });
-          if (validationResult.metadata) {
-            setSelectedFileMetadata(validationResult.metadata);
-          }
-          if (validationResult.warnings.length > 0) {
-            setFileWarnings(prev => ({
-              ...prev,
-              [file.name]: validationResult.warnings
-            }));
-          }
-        } else if (
-          validationResult.actual_type &&
-          ['light', 'dark', 'bias', 'flat'].includes(validationResult.actual_type)
-        ) {
-          // Move to correct folder
-          validFiles.push({ file, type: validationResult.actual_type as FileType });
-          moveMessages.push(
-            `We noticed you uploaded a ${validationResult.actual_type} frame in the ${activeTab} tab. We've moved it to the ${validationResult.actual_type.charAt(0).toUpperCase() + validationResult.actual_type.slice(1)} tab for you.`
-          );
-        } else {
-          errors.push(`${file.name}: ${validationResult.message}`);
-        }
-      } catch (error) {
-        errors.push(`${file.name}: ${error instanceof Error ? error.message : 'Validation failed'}`);
-      }
-    }
-
-    if (errors.length > 0) {
-      const errorMessage = errors.join('\n');
-      setUploadError(errorMessage);
-      onValidationError?.(errorMessage);
-    }
-
-    if (moveMessages.length > 0) {
-      setMoveNotification(moveMessages.join(' '));
-    }
-
-    if (validFiles.length > 0) {
-      setSelectedFiles(validFiles);
-      setIsUploading(true);
-      setError(null);
-      setUploadProgress({});
-
-      for (const selectedFile of validFiles) {
-        try {
-          console.log('[validate-fits-debug] Calling validateFitsFile with expectedType:', selectedFile.type);
-          const validationResult = await validateFitsFile(selectedFile.file, selectedFile.type || 'light');
-          setCurrentFile(selectedFile.file.name);
-          const filePath = await uploadRawFrame(
-            projectId,
-            selectedFile.type,
-            selectedFile.file,
-            (progress) => {
-              setUploadProgress(prev => ({
-                ...prev,
-                [selectedFile.file.name]: progress
-              }));
-            },
-            controller.signal
-          );
-        } catch (error) {
-          if (error instanceof Error && error.name === 'AbortError') {
-            setError('Upload cancelled');
-            break;
-          }
-          setError(error instanceof Error ? error.message : 'Failed to upload file');
-          break;
-        }
-      }
-
-      await loadFiles();
-      if (onRefresh) onRefresh();
-      setIsUploading(false);
-      setSelectedFiles([]);
-      setUploadProgress({});
-      setAbortController(null);
-    }
-  }, [activeTab, onValidationError, projectId, onRefresh]);
-
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    accept: {
-      'application/fits': ['.fits', '.fit', '.FIT', '.FITS', '.RAW'],
-    },
-    multiple: true,
-  });
-
   const handleUpload = async () => {
     if (!selectedFiles.length) return;
     const moveMessages: string[] = [];
@@ -481,50 +453,34 @@ export function FileManagementPanel({
     const controller = new AbortController();
     setAbortController(controller);
 
-    // Validate all files before uploading
-    const filesToUpload: SelectedFile[] = [];
-    for (const selectedFile of selectedFiles) {
-      console.log('[validate-fits-debug] Calling validateFitsFile with expectedType:', selectedFile.type);
-      const validationResult = await validateFitsFile(selectedFile.file, selectedFile.type || 'light');
-      if (validationResult.valid) {
-        filesToUpload.push(selectedFile);
-      } else if (
-        validationResult.actual_type &&
-        ['light', 'dark', 'bias', 'flat'].includes(validationResult.actual_type)
-      ) {
-        filesToUpload.push({ file: selectedFile.file, type: validationResult.actual_type as FileType });
-        moveMessages.push(
-          `We noticed you uploaded a ${validationResult.actual_type} frame in the ${selectedFile.type} tab. We've moved it to the ${validationResult.actual_type.charAt(0).toUpperCase() + validationResult.actual_type.slice(1)} tab for you.`
-        );
-      } else {
-        setError(validationResult.message);
-      }
-    }
-    if (moveMessages.length > 0) {
-      setMoveNotification(moveMessages.join(' '));
-    }
-
     try {
+      if (!supabase) {
+        throw new Error('Supabase client not initialized');
+      }
+
+      // Get authenticated user first
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        throw new Error('User not authenticated');
+      }
+
       setIsUploading(true);
       setError(null);
       setUploadProgress({});
 
-      for (const selectedFile of filesToUpload) {
+      for (const selectedFile of selectedFiles) {
         try {
-          console.log('[validate-fits-debug] Calling validateFitsFile with expectedType:', selectedFile.type);
-          const validationResult = await validateFitsFile(selectedFile.file, selectedFile.type || 'light');
           setCurrentFile(selectedFile.file.name);
-          const filePath = await uploadRawFrame(
+          await uploadRawFrame(
+            selectedFile.file,
             projectId,
             selectedFile.type,
-            selectedFile.file,
             (progress) => {
               setUploadProgress(prev => ({
                 ...prev,
                 [selectedFile.file.name]: progress
               }));
-            },
-            controller.signal
+            }
           );
         } catch (error) {
           if (error instanceof Error && error.name === 'AbortError') {
@@ -583,21 +539,6 @@ export function FileManagementPanel({
     file.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const fileTypeLabels: Record<FileType, string> = {
-    'light': 'Light Frames',
-    'dark': 'Dark Frames',
-    'bias': 'Bias Frames',
-    'flat': 'Flat Frames',
-    'master-dark': 'Master Dark',
-    'master-bias': 'Master Bias',
-    'master-flat': 'Master Flat',
-    'calibrated': 'Calibrated',
-    'stacked': 'Stacked',
-    'aligned': 'Aligned',
-    'pre-processed': 'Pre-processed',
-    'post-processed': 'Post-processed'
-  };
-
   const fileTypeIcons: Record<FileType, React.ReactNode> = {
     'light': <FolderOpen className="h-4 w-4" />,
     'dark': <FolderOpen className="h-4 w-4" />,
@@ -612,12 +553,6 @@ export function FileManagementPanel({
     'pre-processed': <FolderOpen className="h-4 w-4" />,
     'post-processed': <FolderOpen className="h-4 w-4" />
   };
-
-  useEffect(() => {
-    if (onRefresh) {
-      onRefresh();
-    }
-  }, [filesByType, onRefresh]);
 
   const handleUploadClick = (type: FileType) => {
     try {
@@ -728,6 +663,211 @@ export function FileManagementPanel({
     };
   }, []);
 
+  const onDrop = useCallback(async (acceptedFiles: File[]) => {
+    setUploadError(null);
+    const validFiles: SelectedFile[] = [];
+    const errors: string[] = [];
+    const moveMessages: string[] = [];
+
+    // Create a new AbortController for this upload
+    const controller = new AbortController();
+    setAbortController(controller);
+
+    try {
+      if (!supabase) {
+        throw new Error('Supabase client not initialized');
+      }
+
+      // Get authenticated user first
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        throw new Error('User not authenticated');
+      }
+
+      for (const file of acceptedFiles) {
+        try {
+          console.log('[validate-fits-debug] Calling validateFitsFile with expectedType:', activeTab);
+          const validationResult = await validateFitsFile(file, projectId, user.id, activeTab || 'light');
+          console.log('[autosort-debug] File:', file.name, 'Expected:', activeTab, 'ValidationResult:', validationResult);
+          if (validationResult.valid) {
+            validFiles.push({ file, type: activeTab });
+            if (validationResult.metadata) {
+              setSelectedFileMetadata(validationResult.metadata);
+            }
+            if (validationResult.warnings.length > 0) {
+              setFileWarnings(prev => ({
+                ...prev,
+                [file.name]: validationResult.warnings
+              }));
+            }
+          } else if (
+            validationResult.actual_type &&
+            ['light', 'dark', 'bias', 'flat'].includes(validationResult.actual_type)
+          ) {
+            // Move to correct folder
+            validFiles.push({ file, type: validationResult.actual_type as FileType });
+            moveMessages.push(
+              `We noticed you uploaded a ${validationResult.actual_type} frame in the ${activeTab} tab. We've moved it to the ${validationResult.actual_type.charAt(0).toUpperCase() + validationResult.actual_type.slice(1)} tab for you.`
+            );
+          } else {
+            errors.push(`${file.name}: ${validationResult.message}`);
+          }
+        } catch (error) {
+          errors.push(`${file.name}: ${error instanceof Error ? error.message : 'Validation failed'}`);
+        }
+      }
+
+      if (errors.length > 0) {
+        const errorMessage = errors.join('\n');
+        setUploadError(errorMessage);
+        onValidationError?.(errorMessage);
+      }
+
+      if (moveMessages.length > 0) {
+        setMoveNotification(moveMessages.join(' '));
+      }
+
+      if (validFiles.length > 0) {
+        setSelectedFiles(validFiles);
+        setIsUploading(true);
+        setError(null);
+        setUploadProgress({});
+
+        for (const selectedFile of validFiles) {
+          try {
+            setCurrentFile(selectedFile.file.name);
+            await uploadRawFrame(
+              selectedFile.file,
+              projectId,
+              selectedFile.type,
+              (progress) => {
+                setUploadProgress(prev => ({
+                  ...prev,
+                  [selectedFile.file.name]: progress
+                }));
+              }
+            );
+          } catch (error) {
+            if (error instanceof Error && error.name === 'AbortError') {
+              setError('Upload cancelled');
+              break;
+            }
+            setError(error instanceof Error ? error.message : 'Failed to upload file');
+            break;
+          }
+        }
+
+        await loadFiles();
+        if (onRefresh) onRefresh();
+      }
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to upload files');
+    } finally {
+      setIsUploading(false);
+      setSelectedFiles([]);
+      setUploadProgress({});
+      setAbortController(null);
+    }
+  }, [projectId, onRefresh, onValidationError, activeTab]);
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: {
+      'application/fits': ['.fits', '.fit', '.FIT', '.FITS', '.RAW'],
+    },
+    multiple: true,
+  });
+
+  // Update the file list rendering to handle null values
+  const renderFileList = (files: StorageFile[]) => {
+    return files.map((file) => {
+      const fileType = getFileTypeFromPath(file.path);
+      const warnings = fileWarnings[file.name] || [];
+      const isExpanded = expandedFiles[file.name] || false;
+      
+      return (
+        <div
+          key={file.path}
+          className="flex flex-col p-3 bg-gray-800/50 rounded-lg border border-gray-700 hover:bg-gray-800/70 transition-colors"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <File className="h-5 w-5 text-gray-400" />
+              <div>
+                <p className="text-sm text-white">{file.name}</p>
+                <p className="text-xs text-gray-400">
+                  {formatFileSize(file.size)} • {formatDate(file.created_at)} • {getFileTypeDisplay(fileType)}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => handlePreview(file)}
+                className="p-1 text-gray-400 hover:text-white transition-colors"
+                title="Preview"
+              >
+                <Eye className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => handleDownload(file)}
+                className="p-1 text-gray-400 hover:text-white transition-colors"
+                title="Download"
+              >
+                <Download className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => handleDeleteFile(file)}
+                className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                title="Delete"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+          
+          {/* Show metadata if available */}
+          {selectedFileMetadata && (
+            <FileMetadata 
+              metadata={selectedFileMetadata} 
+              isExpanded={isExpanded}
+              onToggle={() => toggleFileExpansion(file.name)}
+            />
+          )}
+          
+          {/* Show warnings if any */}
+          {warnings.length > 0 && (
+            <div className="mt-2 p-2 bg-yellow-900/50 rounded-md text-sm">
+              <div className="flex items-start space-x-2">
+                <AlertCircle className="h-4 w-4 text-yellow-400 mt-0.5" />
+                <div className="space-y-1">
+                  {warnings.map((warning: string, i: number) => (
+                    <p key={i} className="text-yellow-400">{warning}</p>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    });
+  };
+
+  // Update the file type display in the UI
+  const renderFileTypeDisplay = (type: FileType) => {
+    const files = filesByType[type];
+    return (
+      <span className="text-sm text-gray-400">
+        {files.length} files
+      </span>
+    );
+  };
+
+  // Update the upload progress display
+  const getUploadProgress = (fileName: string | null): number => {
+    if (!fileName) return 0;
+    return uploadProgress[fileName] || 0;
+  };
+
   return (
     <div className="space-y-4">
       {error && (
@@ -741,7 +881,7 @@ export function FileManagementPanel({
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-200 border-t-transparent" />
-              <span>Uploading {currentFile}... {uploadProgress[currentFile] ? Math.round(uploadProgress[currentFile] * 100) : 0}%</span>
+              <span>Uploading {currentFile}... {getUploadProgress(currentFile) ? Math.round(getUploadProgress(currentFile) * 100) : 0}%</span>
             </div>
             <button
               onClick={handleCancelUpload}
@@ -753,7 +893,7 @@ export function FileManagementPanel({
           <div className="mt-2 w-full bg-gray-700 rounded-full h-2">
             <div 
               className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-              style={{ width: `${uploadProgress[currentFile] ? Math.round(uploadProgress[currentFile] * 100) : 0}%` }}
+              style={{ width: `${getUploadProgress(currentFile) ? Math.round(getUploadProgress(currentFile) * 100) : 0}%` }}
             />
           </div>
         </div>
@@ -775,9 +915,7 @@ export function FileManagementPanel({
         <div className="p-4 border-b border-gray-700 flex justify-between items-center">
           <h3 className="text-lg font-semibold text-white">File Management</h3>
           <div className="flex items-center space-x-2">
-            <span className="text-sm text-gray-400">
-              {filesByType[activeTab]?.length || 0} files
-            </span>
+            {renderFileTypeDisplay(activeTab)}
             <button 
               onClick={handleRefresh}
               className="p-2 text-gray-400 hover:text-white transition-colors rounded-full hover:bg-gray-800"
@@ -809,9 +947,6 @@ export function FileManagementPanel({
                     }`}
                   >
                     {fileTypeLabels[type]}
-                    <span className="ml-auto text-xs">
-                      ({filesByType[type]?.length || 0})
-                    </span>
                   </button>
                 ))}
               </div>
@@ -862,70 +997,7 @@ export function FileManagementPanel({
               ) : (
                 /* File list */
                 <div className="space-y-2">
-                  {filteredFiles.map((file) => (
-                    <div
-                      key={file.path}
-                      className="flex flex-col p-3 bg-gray-800/50 rounded-lg border border-gray-700 hover:bg-gray-800/70 transition-colors"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          <File className="h-5 w-5 text-gray-400" />
-                          <div>
-                            <p className="text-sm text-white">{file.name}</p>
-                            <p className="text-xs text-gray-400">
-                              {formatFileSize(file.size)} • {formatDate(file.created_at)}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <button
-                            onClick={() => handlePreview(file)}
-                            className="p-1 text-gray-400 hover:text-white transition-colors"
-                            title="Preview"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDownload(file)}
-                            className="p-1 text-gray-400 hover:text-white transition-colors"
-                            title="Download"
-                          >
-                            <Download className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteFile(file)}
-                            className="p-1 text-gray-400 hover:text-red-500 transition-colors"
-                            title="Delete"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </div>
-                      
-                      {/* Show metadata if available */}
-                      {selectedFileMetadata && (
-                        <FileMetadata 
-                          metadata={selectedFileMetadata} 
-                          isExpanded={expandedFiles[file.name] || false}
-                          onToggle={() => toggleFileExpansion(file.name)}
-                        />
-                      )}
-                      
-                      {/* Show warnings if any */}
-                      {fileWarnings[file.name]?.length > 0 && (
-                        <div className="mt-2 p-2 bg-yellow-900/50 rounded-md text-sm">
-                          <div className="flex items-start space-x-2">
-                            <AlertCircle className="h-4 w-4 text-yellow-400 mt-0.5" />
-                            <div className="space-y-1">
-                              {fileWarnings[file.name].map((warning, i) => (
-                                <p key={i} className="text-yellow-400">{warning}</p>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                  {renderFileList(filteredFiles)}
                 </div>
               )}
             </div>

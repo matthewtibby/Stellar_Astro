@@ -94,7 +94,7 @@ STRIPE_SECRET_KEY=your-stripe-secret-key
 STRIPE_WEBHOOK_SECRET=your-stripe-webhook-secret
 
 # Python Worker
-PYTHON_WORKER_URL=http://localhost:8001
+PYTHON_WORKER_URL=http://localhost:8000
 `.trim();
 
       if (!fs.existsSync('.env.example')) {
@@ -344,7 +344,7 @@ STRIPE_SECRET_KEY=your-stripe-secret-key
 STRIPE_WEBHOOK_SECRET=your-stripe-webhook-secret
 
 # Python Worker
-PYTHON_WORKER_URL=http://localhost:8001
+PYTHON_WORKER_URL=http://localhost:8000
 `.trim();
 
       if (!fs.existsSync('.env.example')) {
