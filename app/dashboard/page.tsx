@@ -36,8 +36,7 @@ import EquipmentAutocomplete from '@/src/components/EquipmentAutocomplete';
 import FitsFileUpload from '@/src/components/FitsFileUpload';
 import StepsIndicator from '@/src/components/StepsIndicator';
 import { FileManagementPanel } from '@/src/components/FileManagementPanel';
-import { type StorageFile } from '@/src/utils/storage';
-import { getSupabaseClient } from '../../src/utils/supabase';
+import { type StorageFile, getSupabaseClient } from '@/src/utils/storage';
 import { generateUUID } from '@/src/utils/uuid';
 import { UniversalFileUpload } from '@/src/components/UniversalFileUpload';
 
@@ -232,6 +231,7 @@ const mockUserSubscription: UserSubscription = {
 
 const FileUploadSection = ({ projectId }: { projectId: string }) => {
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!projectId) {
@@ -240,6 +240,22 @@ const FileUploadSection = ({ projectId }: { projectId: string }) => {
       setValidationError(null);
     }
   }, [projectId]);
+
+  useEffect(() => {
+    // Get the current user's ID
+    const getCurrentUser = async () => {
+      try {
+        const supabase = getSupabaseClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          setUserId(user.id);
+        }
+      } catch (error) {
+        console.error('Error getting current user:', error);
+      }
+    };
+    getCurrentUser();
+  }, []);
 
   const handleValidationError = (error: string) => {
     setValidationError(error);
@@ -253,6 +269,14 @@ const FileUploadSection = ({ projectId }: { projectId: string }) => {
     );
   }
 
+  if (!userId) {
+    return (
+      <div className="p-4 bg-gray-800/50 text-gray-400 rounded-md border border-gray-700">
+        Please sign in to upload files.
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       {validationError && (
@@ -262,6 +286,7 @@ const FileUploadSection = ({ projectId }: { projectId: string }) => {
       )}
       <UniversalFileUpload 
         projectId={projectId}
+        userId={userId}
         onValidationError={handleValidationError}
       />
     </div>

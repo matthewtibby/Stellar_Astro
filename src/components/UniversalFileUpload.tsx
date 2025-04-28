@@ -8,22 +8,24 @@ type StorageFileWithMetadata = StorageFile & { metadata?: any };
 
 interface UniversalFileUploadProps {
   projectId: string;
+  userId: string;
   onUploadComplete?: () => void;
   onValidationError?: (error: string) => void;
 }
 
 interface UploadStatus {
   file: File;
-  type: FileType;
-  progress: number;
   status: 'uploading' | 'completed' | 'error';
+  progress: number;
+  type?: FileType;
+  metadata?: any;
   error?: string;
-  metadata?: FitsValidationResult['metadata'];
-  warnings: string[];
+  warnings?: string[];
 }
 
 export function UniversalFileUpload({ 
   projectId, 
+  userId,
   onUploadComplete,
   onValidationError 
 }: UniversalFileUploadProps) {
@@ -97,6 +99,74 @@ export function UniversalFileUpload({
     loadFiles();
   }, [projectId, activeTab]);
 
+  const handleUpload = async (filesToUpload: File[]) => {
+    try {
+      setIsUploading(true);
+      const controller = new AbortController();
+      setAbortController(controller);
+
+      const newStatuses: UploadStatus[] = filesToUpload.map(file => ({
+        file,
+        type: 'light', // Default type, will be updated after validation
+        progress: 0,
+        status: 'uploading',
+        warnings: []
+      }));
+
+      setUploadStatuses(newStatuses);
+
+      for (let i = 0; i < filesToUpload.length; i++) {
+        const file = filesToUpload[i];
+        const uploadStatusObj = newStatuses[i];
+
+        try {
+          // Validate the FITS file
+          const validationResult = await validateFitsFile(file, projectId, userId);
+          if (!validationResult.valid) {
+            throw new Error(validationResult.message || 'Invalid FITS file');
+          }
+
+          // Update the file type based on validation
+          uploadStatusObj.type = validationResult.actual_type as FileType;
+          uploadStatusObj.metadata = validationResult.metadata;
+          uploadStatusObj.warnings = validationResult.warnings;
+
+          // Upload the file
+          await uploadRawFrame(
+            file,
+            projectId,
+            uploadStatusObj.type,
+            (progress) => {
+              setUploadStatuses(prev => {
+                const newStatuses = [...prev];
+                newStatuses[i] = { ...newStatuses[i], progress };
+                return newStatuses;
+              });
+            }
+          );
+
+          uploadStatusObj.status = 'completed';
+        } catch (error) {
+          uploadStatusObj.status = 'error';
+          uploadStatusObj.error = error instanceof Error ? error.message : 'Upload failed';
+          console.error('Upload error:', error);
+        }
+      }
+
+      // After all uploads are complete, reload the file list
+      const updatedFiles = await getFilesByType(projectId);
+      setFilesByType(updatedFiles);
+      
+      // Call the upload complete callback if provided
+      onUploadComplete?.();
+    } catch (error) {
+      console.error('Error in handleUpload:', error);
+    } finally {
+      setIsUploading(false);
+      setAbortController(null);
+    }
+  };
+
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (!acceptedFiles.length) return;
 
@@ -113,7 +183,7 @@ export function UniversalFileUpload({
       try {
         console.log('Validating file:', file.name);
         // Validate the FITS file
-        const validationResult = await validateFitsFile(file);
+        const validationResult = await validateFitsFile(file, projectId, userId);
         console.log('Validation result:', validationResult);
         
         if (!validationResult.valid) {
@@ -167,30 +237,23 @@ export function UniversalFileUpload({
             : status
         ));
 
-        console.log('Reloading files after upload');
-        // Reload files after successful upload
-        const updatedFiles = await getFilesByType(projectId);
-        console.log('Updated files after upload:', updatedFiles);
+        // Instead of reloading files, update the local state with the new file
         setFilesByType(prevFilesByType => {
-          const newFilesByType = { ...updatedFiles };
-          uploadStatuses.forEach(status => {
-            if (status.metadata) {
-              const files = newFilesByType[status.type] || [];
-              // Match by name for robustness
-              const idx = files.findIndex(f => f.name === status.file.name);
-              if (idx !== -1) {
-                console.log('Attaching metadata to:', files[idx].name, status.metadata);
-                files[idx] = { ...files[idx], metadata: status.metadata } as StorageFileWithMetadata;
-              } else {
-                console.log('No match found for:', status.file.name);
-              }
-            }
-          });
+          const newFilesByType = { ...prevFilesByType };
+          const files = newFilesByType[fileType] || [];
+          const newFile: StorageFileWithMetadata = {
+            name: file.name,
+            path: validationResult.file_path || `${userId}/${projectId}/${fileType}/${file.name}`,
+            type: fileType,
+            created_at: new Date().toISOString(),
+            size: file.size,
+            metadata: validationResult.metadata
+          };
+          newFilesByType[fileType] = [...files, newFile];
           return newFilesByType;
         });
 
         // Switch to the correct tab after successful upload
-        // This is just for UI navigation, not affecting the file type
         if (fileType !== activeTab) {
           console.log('Switching to tab:', fileType);
           setActiveTab(fileType);
@@ -214,7 +277,7 @@ export function UniversalFileUpload({
     setAbortController(null);
     if (onUploadComplete) onUploadComplete();
 
-  }, [projectId, onUploadComplete, activeTab]);
+  }, [projectId, userId, onUploadComplete, activeTab]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -252,16 +315,18 @@ export function UniversalFileUpload({
 
       // Get the file URL from Supabase
       const fileUrl = await getFitsFileUrl(file.path);
+      console.log('[FITS Preview] Got signed URL:', fileUrl);
 
       // Send the URL to your preview endpoint
       const previewResponse = await fetch('http://localhost:8000/preview-fits', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(fileUrl),
+        body: JSON.stringify({ url: fileUrl }),
       });
 
       if (!previewResponse.ok) {
         const errorText = await previewResponse.text();
+        console.error('[FITS Preview] Preview generation failed:', errorText);
         throw new Error(`Failed to generate preview: ${errorText}`);
       }
 
@@ -269,7 +334,9 @@ export function UniversalFileUpload({
       const imageBlob = await previewResponse.blob();
       const imageUrl = URL.createObjectURL(imageBlob);
       setPreviewUrl(imageUrl);
+      console.log('[FITS Preview] Preview generated successfully');
     } catch (error) {
+      console.error('[FITS Preview] Error:', error);
       setPreviewError(error instanceof Error ? error.message : 'Failed to generate preview');
     } finally {
       setPreviewLoading(false);

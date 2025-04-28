@@ -15,10 +15,21 @@ import io
 import matplotlib.pyplot as plt
 from PIL import Image
 import numpy as np
-import asyncpg
 import json
+from .db import init_db, get_db
+from contextlib import asynccontextmanager
+import random
+import string
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    await init_db()
+    yield
+    # Shutdown
+    print("Shutting down gracefully...")
+
+app = FastAPI(lifespan=lifespan)
 
 # Configure CORS with more specific settings
 app.add_middleware(
@@ -35,27 +46,6 @@ app.add_middleware(
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
-
-# Handle graceful shutdown
-@app.on_event("shutdown")
-async def shutdown_event():
-    print("Shutting down gracefully...")
-    # Add any cleanup code here
-
-# Prevent immediate shutdown on SIGTERM
-def handle_sigterm(signum, frame):
-    print("Received SIGTERM, waiting for requests to complete...")
-    # Let the server handle the shutdown gracefully
-    sys.exit(0)
-
-# Prevent immediate shutdown on SIGINT
-def handle_sigint(signum, frame):
-    print("Received SIGINT, waiting for requests to complete...")
-    # Let the server handle the shutdown gracefully
-    sys.exit(0)
-
-signal.signal(signal.SIGTERM, handle_sigterm)
-signal.signal(signal.SIGINT, handle_sigint)
 
 # Add a request timeout handler
 @app.middleware("http")
@@ -142,11 +132,31 @@ async def test_endpoint():
 @app.post("/validate-fits")
 async def validate_fits_file(
     file: UploadFile = File(...),
-    expected_type: Optional[str] = None,
+    expected_type: Optional[str] = Form(None),
     project_id: str = Form(...),
     user_id: str = Form(...)
 ) -> JSONResponse:
     try:
+        if not file:
+            return JSONResponse(
+                status_code=422,
+                content={
+                    "valid": False,
+                    "message": "No file provided",
+                    "details": "A FITS file must be uploaded"
+                }
+            )
+        
+        if not project_id or not user_id:
+            return JSONResponse(
+                status_code=422,
+                content={
+                    "valid": False,
+                    "message": "Missing required fields",
+                    "details": "Both project_id and user_id are required"
+                }
+            )
+
         # Create a temporary file to store the uploaded file
         with tempfile.NamedTemporaryFile(delete=False, suffix='.fits') as temp_file:
             content = await file.read()
@@ -168,33 +178,12 @@ async def validate_fits_file(
                 print('[validate-fits-debug] actual_type:', actual_type)
                 print('[validate-fits-debug] header:', dict(header))
                 
-                # Check for potential issues
-                warnings = []
+                # Generate a consistent file path using the original filename
+                sanitized_filename = file.filename.replace(' ', '_')
+                actual_path = f"{user_id}/{project_id}/{actual_type}/{sanitized_filename}"
                 
-                # Validate exposure time
-                if metadata['exposure_time'] is not None:
-                    if actual_type == 'bias' and metadata['exposure_time'] > 0.1:
-                        warnings.append("Bias frame has unusually long exposure time")
-                    elif actual_type == 'flat' and metadata['exposure_time'] > 10:
-                        warnings.append("Flat frame exposure time seems unusually long")
-                    elif actual_type == 'light' and metadata['exposure_time'] < 0.1:
-                        warnings.append("Light frame has unusually short exposure time")
-                
-                # Validate filter presence
-                if actual_type == 'light' and not metadata['filter']:
-                    warnings.append("Light frame missing filter information")
-                if actual_type == 'flat' and not metadata['filter']:
-                    warnings.append("Flat frame missing filter information")
-                if actual_type == 'dark' and metadata['filter']:
-                    warnings.append("Dark frame has filter information, which is unusual")
-                
-                # Validate temperature
-                if metadata['temperature'] is not None:
-                    if abs(metadata['temperature'] - header.get('SET-TEMP', 0)) > 5:
-                        warnings.append("CCD temperature differs significantly from set temperature")
-                
-                # You must determine file_path, project_id, and user_id from your context or request
-                await save_fits_metadata(temp_file_path, project_id, user_id, metadata)
+                # Save metadata with the correct path
+                await save_fits_metadata(actual_path, project_id, user_id, metadata)
                 
                 return JSONResponse(
                     status_code=200,
@@ -204,7 +193,7 @@ async def validate_fits_file(
                         "actual_type": actual_type,
                         "expected_type": expected_type,
                         "metadata": metadata,
-                        "warnings": warnings
+                        "file_path": actual_path  # Return the correct path to the frontend
                     }
                 )
         except Exception as e:
@@ -213,10 +202,7 @@ async def validate_fits_file(
                 content={
                     "valid": False,
                     "message": f"Invalid FITS file: {str(e)}",
-                    "actual_type": None,
-                    "expected_type": expected_type,
-                    "metadata": None,
-                    "warnings": []
+                    "details": "The uploaded file is not a valid FITS file or is corrupted"
                 }
             )
         finally:
@@ -231,10 +217,7 @@ async def validate_fits_file(
             content={
                 "valid": False,
                 "message": f"Server error: {str(e)}",
-                "actual_type": None,
-                "expected_type": expected_type,
-                "metadata": None,
-                "warnings": []
+                "details": "An unexpected error occurred while processing the file"
             }
         )
 
@@ -242,7 +225,7 @@ async def validate_fits_file(
 async def list_files(project_id: str, user_id: str):
     """List all files for a given project and user with their metadata."""
     try:
-        conn = await asyncpg.connect(DATABASE_URL)
+        conn = await get_db()
         rows = await conn.fetch(
             """
             SELECT file_path, metadata 
@@ -261,8 +244,22 @@ async def list_files(project_id: str, user_id: str):
             if isinstance(metadata, str):
                 metadata = json.loads(metadata)
             
-            # Extract the file type from metadata
-            file_type = get_frame_type_from_header(fits.Header(metadata))
+            # Get the file type directly from metadata
+            file_type = metadata.get('observation_type', 'light')
+            if not file_type:
+                # Fallback to image_type if observation_type is not set
+                file_type = metadata.get('image_type', 'light')
+            
+            # Normalize the file type
+            file_type = file_type.lower()
+            if 'light' in file_type or 'object' in file_type:
+                file_type = 'light'
+            elif 'dark' in file_type:
+                file_type = 'dark'
+            elif 'flat' in file_type:
+                file_type = 'flat'
+            elif 'bias' in file_type or 'zero' in file_type:
+                file_type = 'bias'
             
             files.append({
                 'path': row['file_path'],
@@ -312,25 +309,27 @@ async def preview_fits(request: Request):
         buf.seek(0)
         return StreamingResponse(buf, media_type="image/png")
 
-DATABASE_URL = os.environ.get("SUPABASE_DB_URL")  # Set this in your environment
-
 async def save_fits_metadata(file_path, project_id, user_id, metadata):
-    conn = await asyncpg.connect(DATABASE_URL)
-    await conn.execute(
-        """
-        insert into fits_metadata (file_path, project_id, user_id, metadata)
-        values ($1, $2, $3, $4)
-        on conflict (file_path) do update set metadata = $4
-        """,
-        file_path, project_id, user_id, json.dumps(metadata)
-    )
-    await conn.close()
+    conn = await get_db()
+    try:
+        await conn.execute(
+            """
+            insert into fits_metadata (file_path, project_id, user_id, metadata)
+            values ($1, $2, $3, $4)
+            on conflict (file_path) do update set metadata = $4
+            """,
+            file_path, project_id, user_id, json.dumps(metadata)
+        )
+    finally:
+        await conn.close()
 
 async def get_fits_metadata(file_path):
-    conn = await asyncpg.connect(DATABASE_URL)
-    row = await conn.fetchrow("select metadata from fits_metadata where file_path = $1", file_path)
-    await conn.close()
-    return row['metadata'] if row else None
+    conn = await get_db()
+    try:
+        row = await conn.fetchrow("select metadata from fits_metadata where file_path = $1", file_path)
+        return row['metadata'] if row else None
+    finally:
+        await conn.close()
 
 # Example usage after validation:
 # await save_fits_metadata(file_path, project_id, user_id, metadata)
@@ -338,4 +337,4 @@ async def get_fits_metadata(file_path):
 if __name__ == "__main__":
     # Force port 8000 and prevent port changes
     os.environ['PORT'] = '8000'  # Override any environment variables
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True) 
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True) 
