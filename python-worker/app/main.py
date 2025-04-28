@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Request
+from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Request, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from astropy.io import fits
@@ -15,6 +15,8 @@ import io
 import matplotlib.pyplot as plt
 from PIL import Image
 import numpy as np
+import asyncpg
+import json
 
 app = FastAPI()
 
@@ -140,7 +142,9 @@ async def test_endpoint():
 @app.post("/validate-fits")
 async def validate_fits_file(
     file: UploadFile = File(...),
-    expected_type: Optional[str] = None
+    expected_type: Optional[str] = None,
+    project_id: str = Form(...),
+    user_id: str = Form(...)
 ) -> JSONResponse:
     try:
         # Create a temporary file to store the uploaded file
@@ -189,6 +193,9 @@ async def validate_fits_file(
                     if abs(metadata['temperature'] - header.get('SET-TEMP', 0)) > 5:
                         warnings.append("CCD temperature differs significantly from set temperature")
                 
+                # You must determine file_path, project_id, and user_id from your context or request
+                await save_fits_metadata(temp_file_path, project_id, user_id, metadata)
+                
                 return JSONResponse(
                     status_code=200,
                     content={
@@ -231,6 +238,53 @@ async def validate_fits_file(
             }
         )
 
+@app.get("/list-files")
+async def list_files(project_id: str, user_id: str):
+    """List all files for a given project and user with their metadata."""
+    try:
+        conn = await asyncpg.connect(DATABASE_URL)
+        rows = await conn.fetch(
+            """
+            SELECT file_path, metadata 
+            FROM fits_metadata 
+            WHERE project_id = $1 AND user_id = $2
+            ORDER BY file_path
+            """,
+            project_id, user_id
+        )
+        await conn.close()
+        
+        # Format the response
+        files = []
+        for row in rows:
+            metadata = row['metadata']
+            if isinstance(metadata, str):
+                metadata = json.loads(metadata)
+            
+            # Extract the file type from metadata
+            file_type = get_frame_type_from_header(fits.Header(metadata))
+            
+            files.append({
+                'path': row['file_path'],
+                'type': file_type,
+                'metadata': metadata
+            })
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "files": files,
+                "count": len(files)
+            }
+        )
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": f"Failed to list files: {str(e)}"
+            }
+        )
+
 @app.get("/")
 async def root():
     return {"message": "Stellar Astro Python Worker"}
@@ -257,6 +311,29 @@ async def preview_fits(request: Request):
         img.save(buf, format='PNG')
         buf.seek(0)
         return StreamingResponse(buf, media_type="image/png")
+
+DATABASE_URL = os.environ.get("SUPABASE_DB_URL")  # Set this in your environment
+
+async def save_fits_metadata(file_path, project_id, user_id, metadata):
+    conn = await asyncpg.connect(DATABASE_URL)
+    await conn.execute(
+        """
+        insert into fits_metadata (file_path, project_id, user_id, metadata)
+        values ($1, $2, $3, $4)
+        on conflict (file_path) do update set metadata = $4
+        """,
+        file_path, project_id, user_id, json.dumps(metadata)
+    )
+    await conn.close()
+
+async def get_fits_metadata(file_path):
+    conn = await asyncpg.connect(DATABASE_URL)
+    row = await conn.fetchrow("select metadata from fits_metadata where file_path = $1", file_path)
+    await conn.close()
+    return row['metadata'] if row else None
+
+# Example usage after validation:
+# await save_fits_metadata(file_path, project_id, user_id, metadata)
 
 if __name__ == "__main__":
     # Force port 8000 and prevent port changes

@@ -1,8 +1,10 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { validateFitsFile, uploadRawFrame, type FitsValidationResult, getFilesByType, type StorageFile, getFitsFileUrl } from '@/src/utils/storage';
-import { File, AlertCircle, Info, Upload, X, Trash2, Eye } from 'lucide-react';
+import { File, AlertCircle, Info, Upload, X, Trash2, Eye, ChevronDown, ChevronUp } from 'lucide-react';
 import { type FileType } from '@/src/types/store';
+
+type StorageFileWithMetadata = StorageFile & { metadata?: any };
 
 interface UniversalFileUploadProps {
   projectId: string;
@@ -49,6 +51,7 @@ export function UniversalFileUpload({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [expandedFiles, setExpandedFiles] = useState<Record<string, boolean>>({});
 
   // Load files when component mounts or active tab changes
   useEffect(() => {
@@ -168,7 +171,23 @@ export function UniversalFileUpload({
         // Reload files after successful upload
         const updatedFiles = await getFilesByType(projectId);
         console.log('Updated files after upload:', updatedFiles);
-        setFilesByType(updatedFiles);
+        setFilesByType(prevFilesByType => {
+          const newFilesByType = { ...updatedFiles };
+          uploadStatuses.forEach(status => {
+            if (status.metadata) {
+              const files = newFilesByType[status.type] || [];
+              // Match by name for robustness
+              const idx = files.findIndex(f => f.name === status.file.name);
+              if (idx !== -1) {
+                console.log('Attaching metadata to:', files[idx].name, status.metadata);
+                files[idx] = { ...files[idx], metadata: status.metadata } as StorageFileWithMetadata;
+              } else {
+                console.log('No match found for:', status.file.name);
+              }
+            }
+          });
+          return newFilesByType;
+        });
 
         // Switch to the correct tab after successful upload
         // This is just for UI navigation, not affecting the file type
@@ -268,28 +287,26 @@ export function UniversalFileUpload({
     // Implement delete logic here
   }
 
-  function renderMetadata(file: StorageFile): React.ReactNode {
-    if (!file || !file.type) return <span>No metadata available</span>;
-    const meta = (file as any).metadata || {};
+  function toggleFileExpansion(fileName: string) {
+    setExpandedFiles(prev => ({
+      ...prev,
+      [fileName]: !prev[fileName]
+    }));
+  }
+
+  function renderMetadataTable(file: StorageFileWithMetadata) {
+    const meta = file.metadata || {};
     return (
-      <ul className="space-y-1">
-        <li><strong>Type:</strong> {file.type}</li>
-        <li><strong>Name:</strong> {file.name}</li>
-        <li><strong>Size:</strong> {formatFileSize(file.size)}</li>
-        <li><strong>Uploaded:</strong> {new Date(file.created_at).toLocaleString()}</li>
-        {meta.exposure_time !== undefined && <li><strong>Exposure:</strong> {meta.exposure_time} s</li>}
-        {meta.gain !== undefined && <li><strong>Gain:</strong> {meta.gain}</li>}
-        {meta.telescope && <li><strong>Telescope:</strong> {meta.telescope}</li>}
-        {meta.filter && <li><strong>Filter:</strong> {meta.filter}</li>}
-        {meta.instrument && <li><strong>Instrument:</strong> {meta.instrument}</li>}
-        {meta.object && <li><strong>Object:</strong> {meta.object}</li>}
-        {meta.date_obs && <li><strong>Date Obs:</strong> {meta.date_obs}</li>}
-        {meta.binning && <li><strong>Binning:</strong> {meta.binning}</li>}
-        {meta.focal_length && <li><strong>Focal Length:</strong> {meta.focal_length}</li>}
-        {meta.ra && <li><strong>RA:</strong> {meta.ra}</li>}
-        {meta.dec && <li><strong>DEC:</strong> {meta.dec}</li>}
-        {/* Add more fields as needed */}
-      </ul>
+      <table className="text-xs text-gray-200 w-full">
+        <tbody>
+          {Object.entries(meta).map(([key, value]) => (
+            <tr key={key}>
+              <td className="font-semibold pr-2">{key}</td>
+              <td>{String(value)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     );
   }
 
@@ -368,21 +385,14 @@ export function UniversalFileUpload({
                   <span className="hidden sm:inline">Preview</span>
                 </button>
                 {/* Info Icon with Tooltip/Popover */}
-                <div className="relative">
-                  <button
-                    className="text-gray-400 hover:text-blue-400"
-                    onMouseEnter={() => setHoveredFile(file.path)}
-                    onMouseLeave={() => setHoveredFile(null)}
-                    title="Show metadata"
-                  >
-                    <Info className="h-4 w-4" />
-                  </button>
-                  {hoveredFile === file.path && (
-                    <div className="absolute right-0 z-10 mt-2 w-72 bg-gray-900 text-gray-200 text-xs rounded shadow-lg p-4 border border-gray-700">
-                      {renderMetadata(file)}
-                    </div>
-                  )}
-                </div>
+                <button
+                  className="ml-2 text-gray-400 hover:text-blue-400 flex items-center"
+                  onClick={() => toggleFileExpansion(file.name)}
+                  title="Show metadata"
+                >
+                  {expandedFiles[file.name] ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  <span className="ml-1">Metadata</span>
+                </button>
                 {/* Delete Icon (Trash) */}
                 <button
                   className="text-gray-400 hover:text-red-500"
@@ -392,6 +402,12 @@ export function UniversalFileUpload({
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
+              {/* Collapsible metadata section */}
+              {expandedFiles[file.name] && (
+                <div className="bg-gray-900 p-3 rounded mt-2">
+                  {renderMetadataTable(file)}
+                </div>
+              )}
             </div>
           ))}
           {(!filesByType[activeTab] || filesByType[activeTab].length === 0) && (

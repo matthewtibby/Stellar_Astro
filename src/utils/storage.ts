@@ -505,36 +505,7 @@ export interface StorageFile {
   size: number;
   created_at: string;
   type: FileType;
-}
-
-// Helper to recursively list files in a folder
-async function listAllFiles(client: SupabaseClient, bucket: string, path: string): Promise<any[]> {
-  let files: any[] = [];
-  const { data, error } = await client.storage.from(bucket).list(path, {
-    limit: 100,
-    offset: 0,
-    sortBy: { column: 'name', order: 'asc' }
-  });
-  
-  if (error) {
-    console.error(`Error listing files in ${path}:`, error);
-    return files;
-  }
-  
-  for (const item of data) {
-    if (item.id && item.name && item.metadata && item.created_at) {
-      // It's a file
-      files.push({ ...item, fullPath: path ? `${path}/${item.name}` : item.name });
-    } else if (item.name && item.id === undefined) {
-      // It's a folder - recursively search
-      const subPath = path ? `${path}/${item.name}` : item.name;
-      console.log(`Found directory: ${subPath}, searching recursively`);
-      const subFiles = await listAllFiles(client, bucket, subPath);
-      files = files.concat(subFiles);
-    }
-  }
-  
-  return files;
+  metadata?: any;
 }
 
 export async function getFilesByType(projectId: string): Promise<Record<FileType, StorageFile[]>> {
@@ -546,6 +517,15 @@ export async function getFilesByType(projectId: string): Promise<Record<FileType
       throw new Error('User must be authenticated to fetch files');
     }
 
+    // Call the new /list-files endpoint
+    const response = await fetch(`${process.env.NEXT_PUBLIC_PYTHON_WORKER_URL}/list-files?project_id=${projectId}&user_id=${user.id}`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch files: ${response.statusText}`);
+    }
+
+    const { files } = await response.json();
+    
+    // Initialize the result object
     const result: Record<FileType, StorageFile[]> = {
       'light': [],
       'dark': [],
@@ -561,21 +541,18 @@ export async function getFilesByType(projectId: string): Promise<Record<FileType
       'post-processed': []
     };
 
-    // For each type, recursively list all files in the folder
-    for (const type of Object.keys(result) as FileType[]) {
-      const folderPath = `${user.id}/${projectId}/${type}`;
-      const files = await listAllFiles(client, STORAGE_BUCKETS.RAW_FRAMES, folderPath);
-      for (const file of files) {
-        // Only include files with a .fit/.fits extension
-        if (file.fullPath && /\.(fit|fits)$/i.test(file.fullPath)) {
-          result[type].push({
-            name: file.name,
-            path: file.fullPath,
-            size: ('size' in file && typeof file.size === 'number') ? file.size : (file.metadata?.size || 0),
-            created_at: file.created_at || new Date().toISOString(),
-            type: type
-          });
-        }
+    // Sort files by type
+    for (const file of files) {
+      const fileType = file.type as FileType;
+      if (fileType in result) {
+        result[fileType].push({
+          name: file.path.split('/').pop() || '',
+          path: file.path,
+          size: 0, // Size will be updated when we get the file details
+          created_at: new Date().toISOString(),
+          type: fileType,
+          metadata: file.metadata
+        });
       }
     }
 

@@ -1,6 +1,6 @@
 # Future Features Backlog
 
-## 1. Persist FITS Metadata in Backend
+## 1. Persist FITS Metadata in Backend (COMPLETED)
 
 **Description:**
 - When a FITS file is uploaded and validated, store the extracted metadata (exposure time, gain, telescope, filter, instrument, object, date_obs, binning, focal length, RA, DEC, etc.) in a database or as part of the file's metadata in storage.
@@ -13,6 +13,6 @@
 - Reduces need to re-validate or re-parse FITS files on demand.
 
 **Steps:**
-1. Update backend to save metadata on upload/validation.
-2. Update file listing endpoint to include metadata.
-3. Update frontend to use metadata from API response. 
+1. Update backend to save metadata on upload/validation. **(DONE)**
+2. Update file listing endpoint to include metadata. **(DONE)**
+3. Update frontend to use metadata from API response. **(DONE)** 
