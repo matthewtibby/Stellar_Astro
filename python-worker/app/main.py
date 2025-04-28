@@ -1,6 +1,6 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
+from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from astropy.io import fits
 import uvicorn
 from typing import Optional
@@ -10,6 +10,11 @@ import asyncio
 import signal
 import time
 import sys
+import requests
+import io
+import matplotlib.pyplot as plt
+from PIL import Image
+import numpy as np
 
 app = FastAPI()
 
@@ -72,55 +77,41 @@ async def timeout_middleware(request, call_next):
 
 def get_frame_type_from_header(header: fits.header.Header) -> str:
     """
-    Determine the frame type from FITS header keywords.
-    Common keywords that indicate frame type:
-    - IMAGETYP: Most common keyword for frame type
-    - OBSTYPE: Alternative keyword used by some observatories
-    - FILTER: Can help determine frame type
-    - EXPTIME: Exposure time can help distinguish between types
-    - OBJECT: Object name can provide context
+    Determine the frame type from FITS header metadata.
+    Uses a combination of keywords and metadata to make an educated guess.
     """
-    # Try IMAGETYP first (most common)
-    if 'IMAGETYP' in header:
-        imagetyp = str(header['IMAGETYP']).strip().lower()
-        if 'light' in imagetyp or 'object' in imagetyp:
-            return 'light'
-        elif 'dark' in imagetyp:
-            return 'dark'
-        elif 'flat' in imagetyp:
-            return 'flat'
-        elif 'bias' in imagetyp or 'zero' in imagetyp:
-            return 'bias'
-    
-    # Try OBSTYPE as fallback
-    if 'OBSTYPE' in header:
-        obstype = str(header['OBSTYPE']).strip().lower()
-        if 'light' in obstype or 'object' in obstype:
-            return 'light'
-        elif 'dark' in obstype:
-            return 'dark'
-        elif 'flat' in obstype:
-            return 'flat'
-        elif 'bias' in obstype or 'zero' in obstype:
-            return 'bias'
-    
-    # Use EXPTIME and FILTER as additional hints
-    exptime = header.get('EXPTIME', 0)
+    # Extract relevant metadata
+    imagetyp = str(header.get('IMAGETYP', '')).strip().lower()
+    obstype = str(header.get('OBSTYPE', '')).strip().lower()
+    exptime = float(header.get('EXPTIME', 0))
     filter_name = str(header.get('FILTER', '')).strip().lower()
+    object_name = str(header.get('OBJECT', '')).strip().lower()
     
-    # Dark frames typically have longer exposure times and no filter
-    if exptime > 0 and not filter_name:
+    # Check for explicit type indicators
+    if 'light' in imagetyp or 'object' in imagetyp or 'light' in obstype or 'object' in obstype:
+        return 'light'
+    elif 'dark' in imagetyp or 'dark' in obstype:
         return 'dark'
-    
-    # Flat frames typically have filters and moderate exposure times
-    if filter_name and 0 < exptime < 10:
+    elif 'flat' in imagetyp or 'flat' in obstype:
         return 'flat'
+    elif 'bias' in imagetyp or 'zero' in imagetyp or 'bias' in obstype or 'zero' in obstype:
+        return 'bias'
     
-    # If we can't determine the type, return None
-    return None
+    # Use metadata to make an educated guess
+    if exptime == 0 or exptime < 0.1:  # Very short or zero exposure
+        return 'bias'
+    elif exptime > 0.1 and not filter_name:  # No filter, longer exposure
+        return 'dark'
+    elif filter_name and 0.1 < exptime < 10:  # Has filter, moderate exposure
+        return 'flat'
+    elif object_name and exptime > 0.1:  # Has object name and exposure
+        return 'light'
+    
+    # Default to light if we can't determine
+    return 'light'
 
 def extract_metadata(header: fits.header.Header) -> dict:
-    """Extract relevant metadata from FITS header."""
+    """Extract comprehensive metadata from FITS header."""
     return {
         'exposure_time': header.get('EXPTIME'),
         'filter': header.get('FILTER'),
@@ -132,7 +123,14 @@ def extract_metadata(header: fits.header.Header) -> dict:
         'temperature': header.get('CCD-TEMP'),
         'binning': f"{header.get('XBINNING', 1)}x{header.get('YBINNING', 1)}",
         'image_type': header.get('IMAGETYP'),
-        'observation_type': header.get('OBSTYPE')
+        'observation_type': header.get('OBSTYPE'),
+        'pixel_size': f"{header.get('XPIXSZ', '?')}x{header.get('YPIXSZ', '?')}",
+        'focal_length': header.get('FOCALLEN'),
+        'ra': header.get('RA'),
+        'dec': header.get('DEC'),
+        'creator': header.get('CREATOR'),
+        'offset': header.get('OFFSET'),
+        'egain': header.get('EGAIN')
     }
 
 @app.get("/test")
@@ -156,38 +154,40 @@ async def validate_fits_file(
             with fits.open(temp_file_path) as hdul:
                 # Get the primary header
                 header = hdul[0].header
-                
-                # Determine the actual frame type
-                actual_type = get_frame_type_from_header(header)
+                print('[validate-fits-debug] expected_type:', expected_type)
                 
                 # Extract metadata
                 metadata = extract_metadata(header)
                 
-                # Validate against expected type if provided
-                if expected_type and actual_type and expected_type.lower() != actual_type.lower():
-                    return JSONResponse(
-                        status_code=200,  # Changed to 200 to allow client-side handling
-                        content={
-                            "valid": False,
-                            "message": f"Frame type mismatch. Expected {expected_type}, got {actual_type}",
-                            "actual_type": actual_type,
-                            "expected_type": expected_type,
-                            "metadata": metadata,
-                            "warnings": [
-                                f"File appears to be a {actual_type} frame but was uploaded as {expected_type}",
-                                "Consider re-uploading in the correct category"
-                            ]
-                        }
-                    )
+                # Determine the actual frame type
+                actual_type = get_frame_type_from_header(header)
+                print('[validate-fits-debug] actual_type:', actual_type)
+                print('[validate-fits-debug] header:', dict(header))
                 
                 # Check for potential issues
                 warnings = []
+                
+                # Validate exposure time
+                if metadata['exposure_time'] is not None:
+                    if actual_type == 'bias' and metadata['exposure_time'] > 0.1:
+                        warnings.append("Bias frame has unusually long exposure time")
+                    elif actual_type == 'flat' and metadata['exposure_time'] > 10:
+                        warnings.append("Flat frame exposure time seems unusually long")
+                    elif actual_type == 'light' and metadata['exposure_time'] < 0.1:
+                        warnings.append("Light frame has unusually short exposure time")
+                
+                # Validate filter presence
                 if actual_type == 'light' and not metadata['filter']:
                     warnings.append("Light frame missing filter information")
-                if actual_type == 'flat' and metadata['exposure_time'] > 10:
-                    warnings.append("Flat frame exposure time seems unusually long")
+                if actual_type == 'flat' and not metadata['filter']:
+                    warnings.append("Flat frame missing filter information")
                 if actual_type == 'dark' and metadata['filter']:
                     warnings.append("Dark frame has filter information, which is unusual")
+                
+                # Validate temperature
+                if metadata['temperature'] is not None:
+                    if abs(metadata['temperature'] - header.get('SET-TEMP', 0)) > 5:
+                        warnings.append("CCD temperature differs significantly from set temperature")
                 
                 return JSONResponse(
                     status_code=200,
@@ -234,6 +234,29 @@ async def validate_fits_file(
 @app.get("/")
 async def root():
     return {"message": "Stellar Astro Python Worker"}
+
+@app.post("/preview-fits")
+async def preview_fits(request: Request):
+    # Get the signed URL from the request body
+    file_url = await request.json()
+    if isinstance(file_url, dict):
+        file_url = file_url.get("url", list(file_url.values())[0])
+    # Download the FITS file
+    response = requests.get(file_url)
+    response.raise_for_status()
+    with fits.open(io.BytesIO(response.content)) as hdul:
+        data = hdul[0].data.astype(np.float32)
+        # Percentile clipping for better contrast
+        vmin, vmax = np.percentile(data, [0.1, 99.9])
+        data = np.clip(data, vmin, vmax)
+        # Normalize to 0-255
+        norm = (data - vmin) / (vmax - vmin) * 255
+        norm = np.nan_to_num(norm)
+        img = Image.fromarray(norm.astype(np.uint8), mode='L')
+        buf = io.BytesIO()
+        img.save(buf, format='PNG')
+        buf.seek(0)
+        return StreamingResponse(buf, media_type="image/png")
 
 if __name__ == "__main__":
     # Force port 8000 and prevent port changes

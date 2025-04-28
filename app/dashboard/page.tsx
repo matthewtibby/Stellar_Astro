@@ -39,6 +39,7 @@ import { FileManagementPanel } from '@/src/components/FileManagementPanel';
 import { type StorageFile } from '@/src/utils/storage';
 import { getSupabaseClient } from '../../src/utils/supabase';
 import { generateUUID } from '@/src/utils/uuid';
+import { UniversalFileUpload } from '@/src/components/UniversalFileUpload';
 
 // Add these interfaces before the mockProjects array
 interface Project {
@@ -230,13 +231,6 @@ const mockUserSubscription: UserSubscription = {
 };
 
 const FileUploadSection = ({ projectId }: { projectId: string }) => {
-  const [uploadedFiles, setUploadedFiles] = useState<Record<string, string[]>>({
-    light: [],
-    dark: [],
-    flat: [],
-    bias: [],
-  });
-  const [activeTab, setActiveTab] = useState<string>('light');
   const [validationError, setValidationError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -247,28 +241,9 @@ const FileUploadSection = ({ projectId }: { projectId: string }) => {
     }
   }, [projectId]);
 
-  const handleUploadComplete = (file: StorageFile) => {
-    setUploadedFiles(prev => ({
-      ...prev,
-      [file.type]: [...prev[file.type], file.path],
-    }));
-  };
-
-  const handleUploadError = (error: string) => {
-    console.error('Upload error:', error);
-    setValidationError(error);
-  };
-
   const handleValidationError = (error: string) => {
     setValidationError(error);
   };
-
-  const fileTypes = [
-    { id: 'light', label: 'Light Frames' },
-    { id: 'dark', label: 'Dark Frames' },
-    { id: 'flat', label: 'Flat Frames' },
-    { id: 'bias', label: 'Bias Frames' },
-  ];
 
   if (!projectId) {
     return (
@@ -285,9 +260,8 @@ const FileUploadSection = ({ projectId }: { projectId: string }) => {
           {validationError}
         </div>
       )}
-      <FileManagementPanel 
+      <UniversalFileUpload 
         projectId={projectId}
-        onFileSelect={handleUploadComplete}
         onValidationError={handleValidationError}
       />
     </div>

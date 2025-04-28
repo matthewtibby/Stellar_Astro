@@ -153,7 +153,7 @@ export async function checkBucketContents(): Promise<void> {
 
     console.log('All files in raw-frames bucket:', data.map(file => ({
       name: file.name,
-      size: file.metadata?.size,
+      size: ('size' in file && typeof file.size === 'number') ? file.size : (file.metadata?.size || 0),
       created_at: file.created_at
     })));
   } catch (error) {
@@ -245,101 +245,98 @@ export async function ensureProjectExists(projectId: string): Promise<void> {
 
 // Update the uploadRawFrame function to include validation
 export async function uploadRawFrame(
+  file: File,
   projectId: string,
   fileType: FileType,
-  file: File,
-  onProgress?: UploadProgressCallback,
-  signal?: AbortSignal
-): Promise<string> {
+  onProgress?: (progress: number) => void
+): Promise<void> {
+  console.log('Starting upload for file:', file.name);
+  
   try {
-    console.log('[uploadRawFrame] Starting upload for file:', file.name);
-    await ensureProjectExists(projectId);
-    const validationResult = await validateFitsFile(file, fileType);
+    if (!supabase) {
+      throw new Error('Supabase client not initialized');
+    }
+
+    // Validate the FITS file
+    const validationResult = await validateFitsFile(file);
     if (!validationResult.valid) {
-      throw new Error(validationResult.message);
+      throw new Error(validationResult.message || 'Invalid FITS file');
     }
-    const client = getSupabaseClient();
-    const { data: { user }, error: authError } = await client.auth.getUser();
-    if (authError || !user) {
-      throw new Error('User must be authenticated to upload files');
+
+    // Get the actual file type from validation
+    const actualFileType = validationResult.metadata?.observation_type || fileType;
+    console.log('File type determined:', actualFileType);
+
+    // Get authenticated user
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      throw new Error('User not authenticated');
     }
-    const { data: project, error: projectError } = await client
+
+    // Check if project exists
+    const { data: project, error: projectError } = await supabase
       .from('projects')
-      .select('title')
+      .select('id')
       .eq('id', projectId)
       .single();
+
     if (projectError || !project) {
       throw new Error('Project not found');
     }
+
+    // Generate a unique file path
     const timestamp = new Date().getTime();
-    const randomString = Math.random().toString(36).substring(2, 8);
-    const uniqueId = `${timestamp}_${randomString}`;
-    const fileExtension = file.name.split('.').pop()?.toLowerCase() || '';
-    const baseFileName = file.name.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9.-]/g, '_');
-    const sanitizedFileName = `${baseFileName}_${uniqueId}.${fileExtension}`;
-    const targetFilePath = `${user.id}/${projectId}/${FILE_TYPE_FOLDERS[fileType]}/${uniqueId}/${sanitizedFileName}`;
+    const uniqueId = Math.random().toString(36).substring(2, 8);
+    const sanitizedFileName = `${timestamp}-${uniqueId}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+    const targetPath = `${user.id}/${projectId}/${actualFileType}/${sanitizedFileName}`;
+    console.log('Target path:', targetPath);
 
-    console.log('[uploadRawFrame] Target path:', targetFilePath);
+    // Get signed upload URL
+    const { data: signedUrlData, error: signedUrlError } = await supabase
+      .storage
+      .from('raw-frames')
+      .createSignedUploadUrl(targetPath);
 
-    // 1. Get a signed upload URL from Supabase
-    const { data: signedUrlData, error: signedUrlError } = await client.storage
-      .from(STORAGE_BUCKETS.RAW_FRAMES)
-      .createSignedUploadUrl(targetFilePath);
     if (signedUrlError || !signedUrlData?.signedUrl) {
       throw new Error('Failed to get signed upload URL');
     }
 
-    console.log('[uploadRawFrame] Got signed URL, starting upload');
-
-    // 2. Upload the file using XMLHttpRequest for progress
-    await new Promise<void>((resolve, reject) => {
+    // Upload the file
+    return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
-      xhr.open('PUT', signedUrlData.signedUrl, true);
-      xhr.setRequestHeader('Content-Type', file.type);
+      
       xhr.upload.onprogress = (event) => {
-        if (event.lengthComputable && onProgress) {
-          onProgress(event.loaded / event.total);
+        if (event.lengthComputable) {
+          const progress = event.loaded / event.total;
+          onProgress?.(progress);
         }
       };
+
       xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          if (onProgress) onProgress(1);
+        if (xhr.status === 200) {
+          console.log('Upload completed successfully');
           resolve();
         } else {
-          reject(new Error(`Upload failed with status: ${xhr.status}`));
+          console.error('Upload failed:', xhr.statusText);
+          reject(new Error(`Upload failed: ${xhr.statusText}`));
         }
       };
-      xhr.onerror = () => reject(new Error('Upload failed'));
-      if (signal) {
-        signal.addEventListener('abort', () => {
-          xhr.abort();
-          reject(new Error('Upload aborted'));
-        });
+
+      xhr.onerror = () => {
+        console.error('Upload error:', xhr.statusText);
+        reject(new Error(`Upload error: ${xhr.statusText}`));
+      };
+
+      try {
+        xhr.open('PUT', signedUrlData.signedUrl);
+        xhr.send(file);
+      } catch (error) {
+        console.error('Error sending file:', error);
+        reject(error);
       }
-      xhr.send(file);
     });
-
-    console.log('[uploadRawFrame] Upload completed, verifying file exists');
-
-    // 3. Verify the file exists
-    const { data: fileData, error: fileError } = await client.storage
-      .from(STORAGE_BUCKETS.RAW_FRAMES)
-      .list(`${user.id}/${projectId}/${FILE_TYPE_FOLDERS[fileType]}/${uniqueId}`);
-
-    if (fileError) {
-      console.error('[uploadRawFrame] Error verifying file:', fileError);
-      throw new Error('Failed to verify file upload');
-    }
-
-    if (!fileData || !fileData.some(f => f.name === sanitizedFileName)) {
-      console.error('[uploadRawFrame] File not found after upload');
-      throw new Error('File not found after upload');
-    }
-
-    console.log('[uploadRawFrame] File verified, returning path:', targetFilePath);
-    return targetFilePath;
   } catch (error) {
-    console.error('[uploadRawFrame] Error:', error);
+    console.error('Error in uploadRawFrame:', error);
     throw error;
   }
 }
@@ -492,8 +489,8 @@ export async function listProjectFiles(projectId: string): Promise<string[]> {
 export async function getFitsFileUrl(filePath: string): Promise<string> {
   const client = checkSupabase();
   const { data } = await client.storage
-    .from('fits-files')
-    .createSignedUrl(filePath, 3600); // URL expires in 1 hour
+    .from('raw-frames')
+    .createSignedUrl(filePath, 3600);
 
   if (!data?.signedUrl) {
     throw new Error('Failed to generate signed URL');
@@ -564,67 +561,21 @@ export async function getFilesByType(projectId: string): Promise<Record<FileType
       'post-processed': []
     };
 
-    // Fetch files for each type
-    for (const [type, folder] of Object.entries(FILE_TYPE_FOLDERS)) {
-      try {
-        const basePath = `${user.id}/${projectId}/${folder}`;
-        console.log(`[getFilesByType] Searching for files in path: ${basePath}`);
-        
-        // First, list the top-level directories
-        const { data: directories, error: dirError } = await client.storage
-          .from(STORAGE_BUCKETS.RAW_FRAMES)
-          .list(basePath);
-
-        if (dirError) {
-          console.error(`[getFilesByType] Error listing directories in ${basePath}:`, dirError);
-          continue;
+    // For each type, recursively list all files in the folder
+    for (const type of Object.keys(result) as FileType[]) {
+      const folderPath = `${user.id}/${projectId}/${type}`;
+      const files = await listAllFiles(client, STORAGE_BUCKETS.RAW_FRAMES, folderPath);
+      for (const file of files) {
+        // Only include files with a .fit/.fits extension
+        if (file.fullPath && /\.(fit|fits)$/i.test(file.fullPath)) {
+          result[type].push({
+            name: file.name,
+            path: file.fullPath,
+            size: ('size' in file && typeof file.size === 'number') ? file.size : (file.metadata?.size || 0),
+            created_at: file.created_at || new Date().toISOString(),
+            type: type
+          });
         }
-
-        // For each directory, list its files
-        for (const dir of directories) {
-          if (dir.name) {
-            const dirPath = `${basePath}/${dir.name}`;
-            const { data: files, error: fileError } = await client.storage
-              .from(STORAGE_BUCKETS.RAW_FRAMES)
-              .list(dirPath);
-
-            if (fileError) {
-              console.error(`[getFilesByType] Error listing files in ${dirPath}:`, fileError);
-              continue;
-            }
-
-            const filesWithMetadata = await Promise.all(
-              files.map(async (file) => {
-                try {
-                  const filePath = `${dirPath}/${file.name}`;
-                  const { data: metadata } = await client.storage
-                    .from(STORAGE_BUCKETS.RAW_FRAMES)
-                    .getPublicUrl(filePath);
-
-                  return {
-                    name: file.name,
-                    path: filePath,
-                    size: file.metadata?.size || 0,
-                    created_at: file.created_at || new Date().toISOString(),
-                    type: type as FileType,
-                    url: metadata?.publicUrl
-                  };
-                } catch (error) {
-                  console.error(`[getFilesByType] Error processing file ${file.name}:`, error);
-                  return null;
-                }
-              })
-            );
-
-            result[type as FileType] = [
-              ...result[type as FileType],
-              ...filesWithMetadata.filter(Boolean) as StorageFile[]
-            ];
-          }
-        }
-      } catch (error) {
-        console.error(`[getFilesByType] Error processing type ${type}:`, error);
-        // Continue with other types even if one fails
       }
     }
 

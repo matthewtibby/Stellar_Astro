@@ -256,7 +256,8 @@ export function FileManagementPanel({
         }
 
         try {
-          const validationResult = await validateFitsFile(file, type);
+          console.log('[validate-fits-debug] Calling validateFitsFile with expectedType:', type);
+          const validationResult = await validateFitsFile(file, type || 'light');
           
           if (!validationResult.valid) {
             errors.push(`${file.name}: ${validationResult.message}`);
@@ -382,7 +383,9 @@ export function FileManagementPanel({
 
     for (const file of acceptedFiles) {
       try {
-        const validationResult = await validateFitsFile(file, activeTab);
+        console.log('[validate-fits-debug] Calling validateFitsFile with expectedType:', activeTab);
+        const validationResult = await validateFitsFile(file, activeTab || 'light');
+        console.log('[autosort-debug] File:', file.name, 'Expected:', activeTab, 'ValidationResult:', validationResult);
         if (validationResult.valid) {
           validFiles.push({ file, type: activeTab });
           if (validationResult.metadata) {
@@ -429,6 +432,8 @@ export function FileManagementPanel({
 
       for (const selectedFile of validFiles) {
         try {
+          console.log('[validate-fits-debug] Calling validateFitsFile with expectedType:', selectedFile.type);
+          const validationResult = await validateFitsFile(selectedFile.file, selectedFile.type || 'light');
           setCurrentFile(selectedFile.file.name);
           const filePath = await uploadRawFrame(
             projectId,
@@ -479,7 +484,8 @@ export function FileManagementPanel({
     // Validate all files before uploading
     const filesToUpload: SelectedFile[] = [];
     for (const selectedFile of selectedFiles) {
-      const validationResult = await validateFitsFile(selectedFile.file, selectedFile.type);
+      console.log('[validate-fits-debug] Calling validateFitsFile with expectedType:', selectedFile.type);
+      const validationResult = await validateFitsFile(selectedFile.file, selectedFile.type || 'light');
       if (validationResult.valid) {
         filesToUpload.push(selectedFile);
       } else if (
@@ -505,6 +511,8 @@ export function FileManagementPanel({
 
       for (const selectedFile of filesToUpload) {
         try {
+          console.log('[validate-fits-debug] Calling validateFitsFile with expectedType:', selectedFile.type);
+          const validationResult = await validateFitsFile(selectedFile.file, selectedFile.type || 'light');
           setCurrentFile(selectedFile.file.name);
           const filePath = await uploadRawFrame(
             projectId,
