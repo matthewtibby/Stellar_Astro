@@ -21,6 +21,8 @@ interface UploadStatus {
   metadata?: any;
   error?: string;
   warnings?: string[];
+  index: number;
+  total: number;
 }
 
 export function UniversalFileUpload({ 
@@ -34,7 +36,7 @@ export function UniversalFileUpload({
   const [moveNotification, setMoveNotification] = useState<string | null>(null);
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [activeTab, setActiveTab] = useState<FileType>('light');
-  const [filesByType, setFilesByType] = useState<Record<FileType, StorageFile[]>>({
+  const [filesByType, setFilesByType] = useState<Record<FileType, StorageFileWithMetadata[]>>({
     'light': [],
     'dark': [],
     'bias': [],
@@ -55,167 +57,82 @@ export function UniversalFileUpload({
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [expandedFiles, setExpandedFiles] = useState<Record<string, boolean>>({});
 
-  // Load files when component mounts or active tab changes
+  // Function to save files to localStorage
+  const saveFilesToLocalStorage = useCallback((files: Record<FileType, StorageFileWithMetadata[]>) => {
+    try {
+      localStorage.setItem(`files_${projectId}`, JSON.stringify(files));
+    } catch (error) {
+      console.error('Error saving files to localStorage:', error);
+    }
+  }, [projectId]);
+
+  // Function to load files from localStorage
+  const loadFilesFromLocalStorage = useCallback(() => {
+    try {
+      const savedFiles = localStorage.getItem(`files_${projectId}`);
+      if (savedFiles) {
+        const parsedFiles = JSON.parse(savedFiles);
+        setFilesByType(parsedFiles);
+        return parsedFiles;
+      }
+    } catch (error) {
+      console.error('Error loading files from localStorage:', error);
+    }
+    return null;
+  }, [projectId]);
+
+  // Load files on component mount
   useEffect(() => {
     const loadFiles = async () => {
       try {
-        console.log('Loading files for project:', projectId);
-        const files = await getFilesByType(projectId);
-        console.log('Raw files from getFilesByType:', files);
-
-        // Ensure files are properly sorted by their type
-        const sortedFiles: Record<FileType, StorageFile[]> = {
-          'light': [],
-          'dark': [],
-          'bias': [],
-          'flat': [],
-          'master-dark': [],
-          'master-bias': [],
-          'master-flat': [],
-          'calibrated': [],
-          'stacked': [],
-          'aligned': [],
-          'pre-processed': [],
-          'post-processed': []
-        };
-
-        // Sort files into their respective types
-        Object.entries(files).forEach(([type, fileList]) => {
-          console.log(`Processing files for type: ${type}`, fileList);
-          if (type in sortedFiles) {
-            sortedFiles[type as FileType] = fileList;
-            console.log(`Added ${fileList.length} files to ${type} folder`);
-          } else {
-            console.warn(`Unknown file type: ${type}`);
-          }
-        });
-
-        console.log('Final sorted files:', sortedFiles);
-        setFilesByType(sortedFiles);
+        // First try to load from localStorage
+        const savedFiles = loadFilesFromLocalStorage();
+        
+        // Then fetch from server to ensure we have the latest state
+        const serverFiles = await getFilesByType(projectId);
+        
+        // Merge the files, prioritizing server files (they might be more up-to-date)
+        const mergedFiles = { ...savedFiles, ...serverFiles };
+        setFilesByType(mergedFiles);
+        saveFilesToLocalStorage(mergedFiles);
       } catch (error) {
         console.error('Error loading files:', error);
+        onValidationError?.(error instanceof Error ? error.message : 'Failed to load files');
       }
     };
+
     loadFiles();
-  }, [projectId, activeTab]);
+  }, [projectId, onValidationError, loadFilesFromLocalStorage, saveFilesToLocalStorage]);
 
-  const handleUpload = async (filesToUpload: File[]) => {
-    try {
-      setIsUploading(true);
-      const controller = new AbortController();
-      setAbortController(controller);
-
-      const newStatuses: UploadStatus[] = filesToUpload.map(file => ({
-        file,
-        type: 'light', // Default type, will be updated after validation
-        progress: 0,
-        status: 'uploading',
-        warnings: []
-      }));
-
-      setUploadStatuses(newStatuses);
-
-      for (let i = 0; i < filesToUpload.length; i++) {
-        const file = filesToUpload[i];
-        const uploadStatusObj = newStatuses[i];
-
-        try {
-          // Validate the FITS file
-          const validationResult = await validateFitsFile(file, projectId, userId);
-          if (!validationResult.valid) {
-            throw new Error(validationResult.message || 'Invalid FITS file');
-          }
-
-          // Update the file type based on validation
-          uploadStatusObj.type = validationResult.actual_type as FileType;
-          uploadStatusObj.metadata = validationResult.metadata;
-          uploadStatusObj.warnings = validationResult.warnings;
-
-          // Upload the file
-          await uploadRawFrame(
-            file,
-            projectId,
-            uploadStatusObj.type,
-            (progress) => {
-              setUploadStatuses(prev => {
-                const newStatuses = [...prev];
-                newStatuses[i] = { ...newStatuses[i], progress };
-                return newStatuses;
-              });
-            }
-          );
-
-          uploadStatusObj.status = 'completed';
-        } catch (error) {
-          uploadStatusObj.status = 'error';
-          uploadStatusObj.error = error instanceof Error ? error.message : 'Upload failed';
-          console.error('Upload error:', error);
-        }
-      }
-
-      // After all uploads are complete, reload the file list
-      const updatedFiles = await getFilesByType(projectId);
-      setFilesByType(updatedFiles);
-      
-      // Call the upload complete callback if provided
-      onUploadComplete?.();
-    } catch (error) {
-      console.error('Error in handleUpload:', error);
-    } finally {
-      setIsUploading(false);
-      setAbortController(null);
-    }
-  };
+  // Save files whenever they change
+  useEffect(() => {
+    saveFilesToLocalStorage(filesByType);
+  }, [filesByType, saveFilesToLocalStorage]);
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
-    if (!acceptedFiles.length) return;
+    if (acceptedFiles.length === 0) return;
 
-    console.log('Starting upload for files:', acceptedFiles.map(f => f.name));
-
-    // Create a new AbortController for this upload
-    const controller = new AbortController();
-    setAbortController(controller);
     setIsUploading(true);
-
-    const newUploadStatuses: UploadStatus[] = [];
+    setUploadStatuses(acceptedFiles.map((file, index) => ({
+      file,
+      type: activeTab,
+      progress: 0,
+      status: 'uploading',
+      warnings: [],
+      index: index + 1,
+      total: acceptedFiles.length
+    })));
 
     for (const file of acceptedFiles) {
       try {
-        console.log('Validating file:', file.name);
         // Validate the FITS file
         const validationResult = await validateFitsFile(file, projectId, userId);
-        console.log('Validation result:', validationResult);
-        
         if (!validationResult.valid) {
-          console.log('File validation failed:', validationResult.message);
-          newUploadStatuses.push({
-            file,
-            type: 'light', // Default type
-            progress: 0,
-            status: 'error',
-            error: validationResult.message,
-            warnings: validationResult.warnings || []
-          });
-          continue;
+          throw new Error(validationResult.message || 'Invalid FITS file');
         }
 
-        // Determine the file type from validation result only
-        const fileType = validationResult.actual_type as FileType || 'light';
-        console.log('Determined file type:', fileType);
-        
-        newUploadStatuses.push({
-          file,
-          type: fileType,
-          progress: 0,
-          status: 'uploading',
-          metadata: validationResult.metadata,
-          warnings: validationResult.warnings || []
-        });
+        const fileType = validationResult.actual_type as FileType || activeTab;
 
-        // Update the upload statuses immediately
-        setUploadStatuses(newUploadStatuses);
-
-        console.log('Uploading file to path:', `${projectId}/${fileType}/${file.name}`);
         // Upload the file with the type determined from validation
         await uploadRawFrame(
           file,
@@ -237,7 +154,7 @@ export function UniversalFileUpload({
             : status
         ));
 
-        // Instead of reloading files, update the local state with the new file
+        // Update the filesByType state for the correct file type
         setFilesByType(prevFilesByType => {
           const newFilesByType = { ...prevFilesByType };
           const files = newFilesByType[fileType] || [];
@@ -253,9 +170,8 @@ export function UniversalFileUpload({
           return newFilesByType;
         });
 
-        // Switch to the correct tab after successful upload
+        // Switch to the correct tab after successful upload if it's different
         if (fileType !== activeTab) {
-          console.log('Switching to tab:', fileType);
           setActiveTab(fileType);
         }
 
@@ -276,8 +192,7 @@ export function UniversalFileUpload({
     setIsUploading(false);
     setAbortController(null);
     if (onUploadComplete) onUploadComplete();
-
-  }, [projectId, userId, onUploadComplete, activeTab]);
+  }, [projectId, userId, activeTab, onUploadComplete]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -488,19 +403,32 @@ export function UniversalFileUpload({
       {/* Upload Status - only show during active uploads */}
       {isUploading && (
         <div className="mt-4 bg-gray-800/70 rounded-lg p-4 border border-blue-700">
-          <h4 className="text-blue-300 text-sm mb-2">Uploading...</h4>
+          <h4 className="text-blue-300 text-sm mb-2">Uploading Files...</h4>
           {uploadStatuses.map((status) => (
             <div key={status.file.name} className="mb-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-200">{status.file.name}</span>
-                <span className="text-xs text-gray-400">{Math.round((status.progress || 0) * 100)}%</span>
+                <span className="text-xs text-gray-200">
+                  {status.file.name} ({status.index} of {status.total})
+                </span>
+                <span className="text-xs text-gray-400">
+                  {status.status === 'completed' ? '✓' : `${Math.round((status.progress || 0) * 100)}%`}
+                </span>
               </div>
               <div className="w-full bg-gray-700 rounded h-2 mt-1">
                 <div
-                  className="bg-blue-500 h-2 rounded"
+                  className={`h-2 rounded ${
+                    status.status === 'completed' 
+                      ? 'bg-green-500' 
+                      : status.status === 'error'
+                        ? 'bg-red-500'
+                        : 'bg-blue-500'
+                  }`}
                   style={{ width: `${Math.round((status.progress || 0) * 100)}%` }}
                 />
               </div>
+              {status.status === 'error' && (
+                <p className="text-xs text-red-400 mt-1">{status.error}</p>
+              )}
             </div>
           ))}
         </div>
