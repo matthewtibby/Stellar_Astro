@@ -286,12 +286,28 @@ export async function uploadRawFrame(
 
     // Get the actual file type and path from validation
     const actualFileType = validationResult.actual_type || fileType;
-    const filePath = validationResult.file_path;
+    const filePath = `${user.id}/${projectId}/${actualFileType}/${file.name}`;
     console.log('File type determined:', actualFileType);
     console.log('File path:', filePath);
 
     if (!filePath) {
       throw new Error('No file path returned from validation');
+    }
+
+    // Check if file already exists in this project
+    const { data: existingFiles, error: listError } = await supabase
+      .storage
+      .from('raw-frames')
+      .list(`${user.id}/${projectId}/${actualFileType}`);
+
+    if (listError) {
+      console.error('Error checking for existing files:', listError);
+      throw new Error('Failed to check for existing files');
+    }
+
+    const fileExists = existingFiles?.some(existingFile => existingFile.name === file.name);
+    if (fileExists) {
+      throw new Error(`A file with the name "${file.name}" already exists in this project. Please rename the file or choose a different project.`);
     }
 
     // Get signed upload URL
@@ -344,8 +360,12 @@ export async function uploadRawFrame(
     });
 
     // Verify the file was uploaded successfully
-    const exists = await fileExists(STORAGE_BUCKETS.RAW_FRAMES, filePath);
-    if (!exists) {
+    const { data: verifyData, error: verifyError } = await supabase
+      .storage
+      .from(STORAGE_BUCKETS.RAW_FRAMES)
+      .list(filePath.split('/').slice(0, -1).join('/'));
+
+    if (verifyError || !verifyData?.some(file => file.name === file.name)) {
       console.error('File upload verification failed - file not found:', filePath);
       throw new Error('File upload verification failed');
     }
@@ -503,7 +523,7 @@ export async function listProjectFiles(projectId: string): Promise<string[]> {
 }
 
 // Add a function to check if a file exists in the bucket
-async function fileExists(bucket: string, filePath: string): Promise<boolean> {
+export async function fileExists(bucket: string, filePath: string): Promise<boolean> {
   const client = checkSupabase();
   try {
     const { data, error } = await client.storage
