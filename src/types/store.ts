@@ -27,14 +27,38 @@ export interface ProcessingStep {
   updatedAt: string;
 }
 
+export interface ProjectMetadata {
+  date: string;
+  location?: {
+    latitude?: number;
+    longitude?: number;
+    name?: string;
+  };
+  equipment?: {
+    telescope?: string;
+    camera?: string;
+    filters?: string[];
+  };
+  notes?: string;
+}
+
 export interface Project {
   id: string;
   userId: string;
   title: string;
   description?: string;
+  metadata: ProjectMetadata;
+  status: 'draft' | 'in_progress' | 'completed';
   isPublic: boolean;
   createdAt: string;
   updatedAt: string;
+  version: number;
+  steps: {
+    id: string;
+    name: string;
+    status: 'pending' | 'in_progress' | 'completed';
+    completedAt?: string;
+  }[];
 }
 
 export interface PipelineState {
