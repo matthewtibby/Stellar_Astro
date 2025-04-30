@@ -35,7 +35,7 @@ import { Telescope, Camera as CameraType, Filter } from '@/src/data/equipmentDat
 import EquipmentAutocomplete from '@/src/components/EquipmentAutocomplete';
 import FitsFileUpload from '@/src/components/FitsFileUpload';
 import StepsIndicator from '@/src/components/StepsIndicator';
-import { FileManagementPanel } from '@/src/components/FileManagementPanel';
+import FileManagementPanel from '@/src/components/FileManagementPanel';
 import { type StorageFile, getSupabaseClient } from '@/src/utils/storage';
 import { generateUUID } from '@/src/utils/uuid';
 import { UniversalFileUpload } from '@/src/components/UniversalFileUpload';

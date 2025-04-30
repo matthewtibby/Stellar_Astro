@@ -3,6 +3,7 @@ import { useDropzone } from 'react-dropzone';
 import { validateFitsFile, uploadRawFrame, type FitsValidationResult, getFilesByType, type StorageFile, getFitsFileUrl } from '@/src/utils/storage';
 import { File, AlertCircle, Info, Upload, X, Trash2, Eye, ChevronDown, ChevronUp } from 'lucide-react';
 import { type FileType } from '@/src/types/store';
+import { spaceFacts } from '@/src/utils/spaceFacts';
 
 type StorageFileWithMetadata = StorageFile & { metadata?: any };
 
@@ -465,9 +466,14 @@ export function UniversalFileUpload({
       )}
       {previewLoading && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-gray-900 p-8 rounded-lg">
+          <div className="bg-gray-900 p-8 rounded-lg max-w-md">
             <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent mx-auto" />
-            <p className="text-white mt-4">Generating preview...</p>
+            <p className="text-white mt-4 text-center">Generating preview...</p>
+            <div className="mt-6 p-4 bg-gray-800 rounded-lg">
+              <p className="text-blue-400 text-sm italic text-center">
+                {spaceFacts[Math.floor(Math.random() * spaceFacts.length)]}
+              </p>
+            </div>
           </div>
         </div>
       )}
