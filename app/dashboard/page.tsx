@@ -39,6 +39,9 @@ import FileManagementPanel from '@/src/components/FileManagementPanel';
 import { type StorageFile, getSupabaseClient } from '@/src/utils/storage';
 import { generateUUID } from '@/src/utils/uuid';
 import { UniversalFileUpload } from '@/src/components/UniversalFileUpload';
+import ProjectManagementPanel from '@/src/components/ProjectManagementPanel';
+import FileComparisonPanel from '@/src/components/FileComparisonPanel';
+import ProjectChecklist from '@/src/components/ProjectChecklist';
 
 // Add these interfaces before the mockProjects array
 interface Project {
@@ -199,28 +202,91 @@ const mockProjects: Project[] = [
   }
 ];
 
-// Workflow steps
+// Update the workflow steps to be more focused
 const workflowSteps: WorkflowStep[] = [
   {
     id: 0,
-    name: 'Project Details',
-    icon: FileText,
-  },
-  {
-    id: 1,
-    name: 'File Upload',
+    name: 'Upload & Organize',
     icon: Upload,
   },
   {
-    id: 2,
-    name: 'Processing',
+    id: 1,
+    name: 'Process & Stack',
     icon: Settings,
   },
   {
-    id: 3,
-    name: 'Results',
-    icon: Star,
+    id: 2,
+    name: 'Export & Share',
+    icon: Share2,
   },
+];
+
+// Update the default checklist to match the new workflow
+const defaultChecklist: ChecklistItem[] = [
+  {
+    id: 'upload-files',
+    title: 'Upload FITS Files',
+    description: 'Upload your light, dark, flat, and bias frames',
+    status: 'pending',
+    required: true,
+    category: 'upload'
+  },
+  {
+    id: 'organize-files',
+    title: 'Organize Files',
+    description: 'Categorize and validate your uploaded files',
+    status: 'pending',
+    required: true,
+    category: 'upload'
+  },
+  {
+    id: 'calibrate-frames',
+    title: 'Calibrate Frames',
+    description: 'Process calibration frames (darks, flats, bias)',
+    status: 'pending',
+    required: true,
+    category: 'process'
+  },
+  {
+    id: 'register-frames',
+    title: 'Register Frames',
+    description: 'Align all frames to a reference',
+    status: 'pending',
+    required: true,
+    category: 'process'
+  },
+  {
+    id: 'stack-frames',
+    title: 'Stack Frames',
+    description: 'Combine all registered frames',
+    status: 'pending',
+    required: true,
+    category: 'process'
+  },
+  {
+    id: 'post-process',
+    title: 'Post-Processing',
+    description: 'Enhance the final image',
+    status: 'pending',
+    required: true,
+    category: 'process'
+  },
+  {
+    id: 'export-image',
+    title: 'Export Final Image',
+    description: 'Save and export the processed image',
+    status: 'pending',
+    required: true,
+    category: 'export'
+  },
+  {
+    id: 'share-project',
+    title: 'Share Project',
+    description: 'Share your project with others',
+    status: 'pending',
+    required: false,
+    category: 'export'
+  }
 ];
 
 // Add this after the mockProjects array
@@ -690,7 +756,7 @@ const DashboardPage = () => {
             </button>
             <button
               onClick={handleCreateProject}
-              disabled={!projectName || !selectedTarget}
+              disabled={!projectName}
               className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Create Project
@@ -750,8 +816,6 @@ const DashboardPage = () => {
 
     switch (currentStep) {
       case 0:
-        return renderNewProjectForm();
-      case 1:
         return (
           <div className="space-y-6">
             <div className="bg-gray-800/50 rounded-lg p-6 shadow-lg border border-gray-700">
@@ -763,18 +827,62 @@ const DashboardPage = () => {
               </p>
               <FileUploadSection projectId={projectId} />
             </div>
+            <FileManagementPanel
+              projectId={projectId}
+              onRefresh={() => {
+                if (fileListRef.current) {
+                  fileListRef.current.refresh();
+                }
+              }}
+              onValidationError={(error) => {
+                setUploadErrors(prev => ({
+                  ...prev,
+                  [projectId]: error
+                }));
+              }}
+            />
+            {renderStepNavigation()}
+          </div>
+        );
+      case 1:
+        return (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-4">
+                <FileManagementPanel
+                  projectId={projectId}
+                  onRefresh={() => {
+                    if (fileListRef.current) {
+                      fileListRef.current.refresh();
+                    }
+                  }}
+                  onValidationError={(error) => {
+                    setUploadErrors(prev => ({
+                      ...prev,
+                      [projectId]: error
+                    }));
+                  }}
+                />
+                <FileComparisonPanel projectId={projectId} />
+              </div>
+              <div className="space-y-4">
+                <ProjectChecklist projectId={projectId} />
+              </div>
+            </div>
+            {renderStepNavigation()}
           </div>
         );
       case 2:
-      case 3:
         return (
-          <div className="bg-gray-800/50 rounded-lg p-6 shadow-lg border border-gray-700">
-            <h3 className="text-xl font-semibold text-white mb-6">
-              {step?.name || 'Step'}
-            </h3>
-            <p className="text-gray-400">
-              This step is under development. In a real application, this would contain the specific workflow for this step.
-            </p>
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-4">
+                <ProjectChecklist projectId={projectId} />
+              </div>
+              <div className="space-y-4">
+                <ProjectManagementPanel projectId={projectId} />
+              </div>
+            </div>
             {renderStepNavigation()}
           </div>
         );
@@ -985,7 +1093,9 @@ const DashboardPage = () => {
 
               {/* Projects or Workflow */}
               {showNewProject || activeProject ? (
-                renderStepContent(activeProject?.id || currentProjectId || '')
+                <div className="p-4 space-y-4">
+                  {renderStepContent(activeProject?.id || currentProjectId || '')}
+                </div>
               ) : (
                 <>
                   <div className="flex justify-between items-center mb-6">

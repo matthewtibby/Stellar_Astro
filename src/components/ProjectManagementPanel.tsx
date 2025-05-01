@@ -1,0 +1,239 @@
+import { useState } from 'react';
+import { Share2, Download, Upload, Copy, CheckCircle, X } from 'lucide-react';
+import { useProjectStore } from '@/src/store/project';
+import { getSupabaseClient } from '@/src/utils/storage';
+import { toast } from 'react-hot-toast';
+
+interface ProjectManagementPanelProps {
+  projectId: string;
+}
+
+export default function ProjectManagementPanel({ projectId }: ProjectManagementPanelProps) {
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [shareLink, setShareLink] = useState<string | null>(null);
+  const [isCopied, setIsCopied] = useState(false);
+  const { currentProject, updateProject } = useProjectStore();
+
+  const handleExport = async () => {
+    if (!currentProject) return;
+    
+    setIsExporting(true);
+    try {
+      const supabase = getSupabaseClient();
+      
+      // Get all files associated with the project
+      const { data: files, error: filesError } = await supabase
+        .from('project_files')
+        .select('*')
+        .eq('project_id', projectId);
+      
+      if (filesError) throw filesError;
+
+      // Create export data
+      const exportData = {
+        project: currentProject,
+        files: files,
+        metadata: {
+          exportedAt: new Date().toISOString(),
+          version: '1.0'
+        }
+      };
+
+      // Convert to JSON and create blob
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      
+      // Create download link
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `project_${currentProject.title}_export.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast.success('Project exported successfully');
+    } catch (error) {
+      console.error('Export failed:', error);
+      toast.error('Failed to export project');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const importData = JSON.parse(e.target?.result as string);
+          
+          // Validate import data
+          if (!importData.project || !importData.files) {
+            throw new Error('Invalid project export file');
+          }
+
+          const supabase = getSupabaseClient();
+          
+          // Create new project
+          const { data: newProject, error: projectError } = await supabase
+            .from('projects')
+            .insert([{
+              ...importData.project,
+              id: undefined, // Let database generate new ID
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+              version: 1
+            }])
+            .select()
+            .single();
+
+          if (projectError) throw projectError;
+
+          // Import files
+          for (const file of importData.files) {
+            const { error: fileError } = await supabase
+              .from('project_files')
+              .insert([{
+                ...file,
+                id: undefined,
+                project_id: newProject.id,
+                created_at: new Date().toISOString()
+              }]);
+
+            if (fileError) throw fileError;
+          }
+
+          toast.success('Project imported successfully');
+        } catch (error) {
+          console.error('Import failed:', error);
+          toast.error('Failed to import project');
+        } finally {
+          setIsImporting(false);
+        }
+      };
+      reader.readAsText(file);
+    } catch (error) {
+      console.error('Import failed:', error);
+      toast.error('Failed to import project');
+      setIsImporting(false);
+    }
+  };
+
+  const handleShare = async () => {
+    if (!currentProject) return;
+
+    try {
+      const supabase = getSupabaseClient();
+      
+      // Create a share token
+      const { data: shareToken, error: tokenError } = await supabase
+        .from('project_shares')
+        .insert([{
+          project_id: projectId,
+          created_at: new Date().toISOString(),
+          expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7 days
+        }])
+        .select()
+        .single();
+
+      if (tokenError) throw tokenError;
+
+      // Generate share link
+      const shareLink = `${window.location.origin}/share/${shareToken.id}`;
+      setShareLink(shareLink);
+
+      // Update project to be public
+      await updateProject(projectId, { isPublic: true });
+      
+      toast.success('Project shared successfully');
+    } catch (error) {
+      console.error('Share failed:', error);
+      toast.error('Failed to share project');
+    }
+  };
+
+  const handleCopyLink = async () => {
+    if (!shareLink) return;
+
+    try {
+      await navigator.clipboard.writeText(shareLink);
+      setIsCopied(true);
+      setTimeout(() => setIsCopied(false), 2000);
+      toast.success('Link copied to clipboard');
+    } catch (error) {
+      console.error('Copy failed:', error);
+      toast.error('Failed to copy link');
+    }
+  };
+
+  return (
+    <div className="space-y-4 p-4 bg-gray-900/50 rounded-lg border border-gray-700">
+      <h3 className="text-lg font-semibold text-white">Project Management</h3>
+      
+      <div className="space-y-2">
+        <button
+          onClick={handleExport}
+          disabled={isExporting}
+          className="w-full flex items-center space-x-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors disabled:opacity-50"
+        >
+          <Download className="h-5 w-5" />
+          <span>{isExporting ? 'Exporting...' : 'Export Project'}</span>
+        </button>
+
+        <div className="relative">
+          <input
+            type="file"
+            accept=".json"
+            onChange={handleImport}
+            className="hidden"
+            id="project-import"
+          />
+          <label
+            htmlFor="project-import"
+            className="w-full flex items-center space-x-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-md transition-colors cursor-pointer"
+          >
+            <Upload className="h-5 w-5" />
+            <span>{isImporting ? 'Importing...' : 'Import Project'}</span>
+          </label>
+        </div>
+
+        <button
+          onClick={handleShare}
+          className="w-full flex items-center space-x-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md transition-colors"
+        >
+          <Share2 className="h-5 w-5" />
+          <span>Share Project</span>
+        </button>
+
+        {shareLink && (
+          <div className="mt-4 p-3 bg-gray-800 rounded-md">
+            <div className="flex items-center space-x-2">
+              <input
+                type="text"
+                value={shareLink}
+                readOnly
+                className="flex-1 px-3 py-2 bg-gray-700 text-white rounded-md"
+              />
+              <button
+                onClick={handleCopyLink}
+                className="p-2 bg-gray-700 hover:bg-gray-600 rounded-md transition-colors"
+              >
+                {isCopied ? (
+                  <CheckCircle className="h-5 w-5 text-green-500" />
+                ) : (
+                  <Copy className="h-5 w-5 text-gray-400" />
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+} 

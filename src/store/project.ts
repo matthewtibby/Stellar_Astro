@@ -175,4 +175,28 @@ export const useProjectStore = create<ProjectStore>()(
       }),
     }
   )
-); 
+);
+
+export const setProjectName = (name: string) => {
+  // Implementation to set project name
+};
+
+export const setProjectDescription = (description: string) => {
+  // Implementation to set project description
+};
+
+export const setSelectedTarget = (target: string) => {
+  // Implementation to set selected target
+};
+
+export const setSelectedTelescope = (telescope: string) => {
+  // Implementation to set selected telescope
+};
+
+export const setSelectedCamera = (camera: string) => {
+  // Implementation to set selected camera
+};
+
+export const setSelectedFilters = (filters: string[]) => {
+  // Implementation to set selected filters
+}; 

@@ -256,7 +256,10 @@ export async function ensureProjectExists(projectId: string): Promise<void> {
   }
 }
 
-// Update the uploadRawFrame function to include validation
+// Define a maximum number of retries
+const MAX_RETRIES = 3;
+
+// Update the uploadRawFrame function to include validation and retry logic
 export async function uploadRawFrame(
   file: File,
   projectId: string,
@@ -323,54 +326,66 @@ export async function uploadRawFrame(
 
     console.log('Got signed upload URL for path:', filePath);
 
-    // Upload the file
-    await new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      
-      xhr.upload.onprogress = (event) => {
-        if (event.lengthComputable) {
-          const progress = event.loaded / event.total;
-          console.log('Upload progress:', progress);
-          onProgress?.(progress);
-        }
-      };
-
-      xhr.onload = () => {
-        if (xhr.status === 200) {
-          console.log('Upload completed successfully for path:', filePath);
-          resolve(true);
-        } else {
-          console.error('Upload failed:', xhr.statusText, 'Status:', xhr.status);
-          reject(new Error(`Upload failed: ${xhr.statusText}`));
-        }
-      };
-
-      xhr.onerror = () => {
-        console.error('Upload error:', xhr.statusText);
-        reject(new Error(`Upload error: ${xhr.statusText}`));
-      };
-
+    // Add retry logic
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
-        xhr.open('PUT', signedUrlData.signedUrl);
-        xhr.send(file);
+        // Upload the file
+        await new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          
+          xhr.upload.onprogress = (event) => {
+            if (event.lengthComputable) {
+              const progress = event.loaded / event.total;
+              console.log('Upload progress:', progress);
+              onProgress?.(progress);
+            }
+          };
+
+          xhr.onload = () => {
+            if (xhr.status === 200) {
+              console.log('Upload completed successfully for path:', filePath);
+              resolve(true);
+            } else {
+              console.error('Upload failed:', xhr.statusText, 'Status:', xhr.status);
+              reject(new Error(`Upload failed: ${xhr.statusText}`));
+            }
+          };
+
+          xhr.onerror = () => {
+            console.error('Upload error:', xhr.statusText);
+            reject(new Error(`Upload error: ${xhr.statusText}`));
+          };
+
+          try {
+            xhr.open('PUT', signedUrlData.signedUrl);
+            xhr.send(file);
+          } catch (error) {
+            console.error('Error sending file:', error);
+            reject(error);
+          }
+        });
+
+        // Verify the file was uploaded successfully
+        const { data: verifyData, error: verifyError } = await supabase
+          .storage
+          .from(STORAGE_BUCKETS.RAW_FRAMES)
+          .list(filePath.split('/').slice(0, -1).join('/'));
+
+        if (verifyError || !verifyData?.some(file => file.name === file.name)) {
+          console.error('File upload verification failed - file not found:', filePath);
+          throw new Error('File upload verification failed');
+        }
+
+        console.log('File uploaded and verified successfully to:', filePath);
+        break; // Exit the retry loop on success
       } catch (error) {
-        console.error('Error sending file:', error);
-        reject(error);
+        console.error(`Attempt ${attempt} failed:`, error);
+        if (attempt === MAX_RETRIES) {
+          throw new Error(`Failed to upload file after ${MAX_RETRIES} attempts`);
+        }
+        console.log(`Retrying upload (attempt ${attempt + 1} of ${MAX_RETRIES})...`);
       }
-    });
-
-    // Verify the file was uploaded successfully
-    const { data: verifyData, error: verifyError } = await supabase
-      .storage
-      .from(STORAGE_BUCKETS.RAW_FRAMES)
-      .list(filePath.split('/').slice(0, -1).join('/'));
-
-    if (verifyError || !verifyData?.some(file => file.name === file.name)) {
-      console.error('File upload verification failed - file not found:', filePath);
-      throw new Error('File upload verification failed');
     }
-
-    console.log('File uploaded and verified successfully to:', filePath);
   } catch (error) {
     console.error('Error in uploadRawFrame:', error);
     throw error;
