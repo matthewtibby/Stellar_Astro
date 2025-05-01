@@ -20,6 +20,10 @@ from .db import init_db, get_db
 from contextlib import asynccontextmanager
 import random
 import string
+from .fits_analysis import analyze_fits_headers
+import logging
+
+logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -69,38 +73,18 @@ async def timeout_middleware(request, call_next):
 
 def get_frame_type_from_header(header: fits.header.Header) -> str:
     """
-    Determine the frame type from FITS header metadata.
-    Uses a combination of keywords and metadata to make an educated guess.
+    Determine the frame type from FITS headers with enhanced analysis.
     """
-    # Extract relevant metadata
-    imagetyp = str(header.get('IMAGETYP', '')).strip().lower()
-    obstype = str(header.get('OBSTYPE', '')).strip().lower()
-    exptime = float(header.get('EXPTIME', 0))
-    filter_name = str(header.get('FILTER', '')).strip().lower()
-    object_name = str(header.get('OBJECT', '')).strip().lower()
+    analysis = analyze_fits_headers(header)
     
-    # Check for explicit type indicators
-    if 'light' in imagetyp or 'object' in imagetyp or 'light' in obstype or 'object' in obstype:
-        return 'light'
-    elif 'dark' in imagetyp or 'dark' in obstype:
-        return 'dark'
-    elif 'flat' in imagetyp or 'flat' in obstype:
-        return 'flat'
-    elif 'bias' in imagetyp or 'zero' in imagetyp or 'bias' in obstype or 'zero' in obstype:
-        return 'bias'
+    # Log analysis results
+    logger.info(f"Frame type analysis: {analysis.type} (confidence: {analysis.confidence:.2f})")
+    if analysis.warnings:
+        logger.warning(f"Warnings: {', '.join(analysis.warnings)}")
+    if analysis.suggestions:
+        logger.info(f"Suggestions: {', '.join(analysis.suggestions)}")
     
-    # Use metadata to make an educated guess
-    if exptime == 0 or exptime < 0.1:  # Very short or zero exposure
-        return 'bias'
-    elif exptime > 0.1 and not filter_name:  # No filter, longer exposure
-        return 'dark'
-    elif filter_name and 0.1 < exptime < 10:  # Has filter, moderate exposure
-        return 'flat'
-    elif object_name and exptime > 0.1:  # Has object name and exposure
-        return 'light'
-    
-    # Default to light if we can't determine
-    return 'light'
+    return analysis.type
 
 def extract_metadata(header: fits.header.Header) -> dict:
     """Extract comprehensive metadata from FITS header."""
