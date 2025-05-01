@@ -8,5 +8,11 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 export const getSupabaseClient = () => {
-  return createClient(supabaseUrl, supabaseAnonKey);
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true
+    }
+  });
 }; 
