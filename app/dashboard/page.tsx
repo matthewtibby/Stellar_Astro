@@ -42,26 +42,10 @@ import { UniversalFileUpload } from '@/src/components/UniversalFileUpload';
 import ProjectManagementPanel from '@/src/components/ProjectManagementPanel';
 import FileComparisonPanel from '@/src/components/FileComparisonPanel';
 import ProjectChecklist from '@/src/components/ProjectChecklist';
+import { useProjects } from '@/src/hooks/useProjects';
+import { Project, ChecklistItem } from '@/src/types/project';
 
 // Add these interfaces before the mockProjects array
-interface Project {
-  id: string;
-  name: string;
-  target: AstronomicalTarget;
-  telescope?: Telescope;
-  camera?: CameraType;
-  filters?: Filter[];
-  createdAt: Date;
-  updatedAt: Date;
-  status: 'draft' | 'in_progress' | 'completed';
-  steps: {
-    id: string;
-    name: string;
-    status: 'pending' | 'in_progress' | 'completed';
-    completedAt?: Date;
-  }[];
-}
-
 interface WorkflowStep {
   id: number;
   name: string;
@@ -362,6 +346,7 @@ const FileUploadSection = ({ projectId }: { projectId: string }) => {
 const DashboardPage = () => {
   const router = useRouter();
   const { user, isAuthenticated, subscription, fullName } = useUserStore();
+  const { projects, isLoading: isLoadingProjects, error: projectsError, fetchProjects } = useProjects(user?.id, isAuthenticated);
   const [activeView, setActiveView] = useState('grid');
   const [activeProject, setActiveProject] = useState<Project | null>(null);
   const [showNewProject, setShowNewProject] = useState(false);
@@ -441,7 +426,7 @@ const DashboardPage = () => {
 
   // Add this function to check project limits
   const checkProjectLimits = () => {
-    const projectCount = mockProjects.length;
+    const projectCount = projects.length;
     const userSubscription = subscription || mockUserSubscription;
     
     if (projectCount >= userSubscription.projectLimit) {
@@ -479,7 +464,7 @@ const DashboardPage = () => {
   const renderProjectGrid = () => {
     return (
       <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 ${showNewProject ? 'opacity-50' : ''}`}>
-        {mockProjects.map((project) => (
+        {projects.map((project) => (
           <div 
             key={project.id} 
             className="bg-gray-800/50 rounded-lg overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300 cursor-pointer border border-gray-700 hover:border-blue-500"
@@ -491,7 +476,7 @@ const DashboardPage = () => {
               </div>
               <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
                 <h3 className="text-lg font-semibold text-white">{project.name}</h3>
-                <p className="text-sm text-gray-400">Last updated: {project.updatedAt.toLocaleDateString()}</p>
+                <p className="text-sm text-gray-400">Last updated: {project.updatedAt instanceof Date ? project.updatedAt.toLocaleDateString() : String(project.updatedAt)}</p>
               </div>
               {project.status === "completed" && (
                 <div className="absolute top-2 right-2">
@@ -519,7 +504,7 @@ const DashboardPage = () => {
   const renderProjectList = () => {
     return (
       <div className={`space-y-4 ${showNewProject ? 'opacity-50' : ''}`}>
-        {mockProjects.map((project) => (
+        {projects.map((project) => (
           <div 
             key={project.id} 
             className="bg-gray-800/50 rounded-lg p-4 shadow-lg hover:shadow-xl transition-all duration-300 cursor-pointer border border-gray-700 hover:border-blue-500 flex items-center"
@@ -530,7 +515,7 @@ const DashboardPage = () => {
             </div>
             <div className="flex-1">
               <h3 className="text-lg font-semibold text-white">{project.name}</h3>
-              <p className="text-sm text-gray-400">Last updated: {project.updatedAt.toLocaleDateString()}</p>
+              <p className="text-sm text-gray-400">Last updated: {project.updatedAt instanceof Date ? project.updatedAt.toLocaleDateString() : String(project.updatedAt)}</p>
             </div>
             <div className="flex items-center space-x-4">
               <div className="w-24 h-2 bg-gray-700 rounded-full overflow-hidden">
@@ -609,15 +594,12 @@ const DashboardPage = () => {
   const renderNewProjectForm = () => {
     const handleCreateProject = async () => {
       if (!projectName) return;
-      
       try {
         const supabase = getSupabaseClient();
         const { data: { user }, error: authError } = await supabase.auth.getUser();
-        
         if (authError || !user) {
           throw new Error('Authentication required');
         }
-
         const { data: project, error: projectError } = await supabase
           .from('projects')
           .insert([{
@@ -630,19 +612,16 @@ const DashboardPage = () => {
           }])
           .select()
           .single();
-
         if (projectError) {
           console.error('Project creation error:', projectError);
           throw new Error(projectError?.message || 'Failed to create project');
         }
-
         if (!project) {
           throw new Error('No project data returned after creation');
         }
-
-        console.log('Created project:', project);
-
-        const newProject: Project = {
+        // Re-fetch projects after creation
+        await fetchProjects();
+        setActiveProject({
           id: project.id,
           name: project.title,
           createdAt: new Date(project.created_at),
@@ -656,15 +635,10 @@ const DashboardPage = () => {
             category: 'other',
             type: 'other',
             commonNames: [],
-            coordinates: {
-              ra: '',
-              dec: ''
-            }
+            coordinates: { ra: '', dec: '' }
           },
           steps: []
-        };
-
-        setActiveProject(newProject);
+        });
         setCurrentStep(1);
         setProjectName('');
         setProjectDescription('');
@@ -964,9 +938,9 @@ const DashboardPage = () => {
             <div className="flex items-center space-x-4">
               <button
                 onClick={handleNewProject}
-                disabled={mockProjects.length >= (subscription || mockUserSubscription).projectLimit}
+                disabled={projects.length >= (subscription || mockUserSubscription).projectLimit}
                 className={`flex items-center space-x-2 px-4 py-2 rounded-md transition-colors ${
-                  mockProjects.length >= (subscription || mockUserSubscription).projectLimit
+                  projects.length >= (subscription || mockUserSubscription).projectLimit
                     ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
                     : 'bg-blue-600 text-white hover:bg-blue-700'
                 }`}
@@ -1101,10 +1075,18 @@ const DashboardPage = () => {
                   <div className="flex justify-between items-center mb-6">
                     <h2 className="text-xl font-semibold text-white">Your Projects</h2>
                     <div className="flex items-center space-x-2">
-                      <span className="text-sm text-gray-400">{mockProjects.length} projects</span>
+                      <span className="text-sm text-gray-400">{projects.length} projects</span>
                     </div>
                   </div>
-                  {activeView === 'grid' ? renderProjectGrid() : renderProjectList()}
+                  {isLoadingProjects ? (
+                    <div className="flex justify-center items-center py-12">
+                      <span className="text-gray-400 text-lg">Loading projects...</span>
+                    </div>
+                  ) : projectsError ? (
+                    <div className="flex justify-center items-center py-12">
+                      <span className="text-red-400 text-lg">{projectsError}</span>
+                    </div>
+                  ) : activeView === 'grid' ? renderProjectGrid() : renderProjectList()}
                 </>
               )}
             </div>
