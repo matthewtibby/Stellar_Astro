@@ -10,4 +10,11 @@ export interface FitsValidationResult {
   metadata?: FitsMetadata;
   actual_type?: string;
   file_path?: string;
+}
+
+export interface FitsAnalysisResult {
+  type: string;
+  confidence: number;
+  warnings: string[];
+  suggestions: string[];
 } 

@@ -57,3 +57,10 @@ venv.bak/
 # Temporary files
 *.zip
 test*.fits
+Example ASTRO PROJECT/
+
+# Python
+*.pyc
+__pycache__/
+*.egg-info/
+

@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { getFilesByType, validateFitsFile, uploadRawFrame, getFitsFileUrl, deleteFitsFile } from '@/src/utils/storage';
 import { File, Trash2, Download, Eye, RefreshCw, FolderOpen, Upload, AlertCircle, Info, ChevronDown, ChevronUp, X } from 'lucide-react';
 import { type FileType, type StorageFile } from '@/src/types/store';
-import { type FitsMetadata, type FitsValidationResult } from '@/src/types/fits';
+import { type FitsMetadata, type FitsValidationResult, type FitsAnalysisResult } from '@/src/types/fits';
 import { useDropzone } from 'react-dropzone';
 import Image from 'next/image';
 import { createBrowserClient } from '@supabase/ssr';
@@ -137,6 +137,14 @@ interface FilesByType extends Record<FileType, StorageFile[]> {
 
 interface UploadProgress {
   [key: string]: number;
+}
+
+interface FileValidationResult {
+  isValid: boolean;
+  type: FileType;
+  metadata: FitsMetadata;
+  analysis?: FitsAnalysisResult;
+  error?: string;
 }
 
 // Update the file type mapping to handle null values
@@ -841,7 +849,9 @@ export default function FileManagementPanel({ projectId, onRefresh, onValidation
                 <AlertCircle className="h-4 w-4 text-yellow-400 mt-0.5" />
                 <div className="space-y-1">
                   {warnings.map((warning: string, i: number) => (
-                    <p key={i} className="text-yellow-400">{warning}</p>
+                    <div key={i} className="text-yellow-600 text-sm">
+                      ⚠️ {warning}
+                    </div>
                   ))}
                 </div>
               </div>
@@ -866,6 +876,56 @@ export default function FileManagementPanel({ projectId, onRefresh, onValidation
   const getUploadProgress = (fileName: string | null): number => {
     if (!fileName) return 0;
     return uploadProgress[fileName] || 0;
+  };
+
+  const FilePreview = ({ file, metadata, analysis }: { file: File; metadata: FitsMetadata; analysis?: FitsAnalysisResult }) => {
+    return (
+      <div className="p-4 space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <h3 className="font-semibold mb-2">Basic Info</h3>
+            <p>Filename: {file.name}</p>
+            <p>Size: {(file.size / 1024 / 1024).toFixed(2)} MB</p>
+            <p>Type: {metadata.type || 'Unknown'}</p>
+          </div>
+          <div>
+            <h3 className="font-semibold mb-2">Exposure</h3>
+            <p>Exposure Time: {metadata.exposureTime || 'N/A'}s</p>
+            <p>Temperature: {metadata.temperature || 'N/A'}°C</p>
+            <p>Gain: {metadata.gain || 'N/A'}</p>
+          </div>
+        </div>
+
+        {analysis && (
+          <div className="mt-4">
+            <h3 className="font-semibold mb-2">Analysis</h3>
+            <div className="space-y-2">
+              <p>Confidence: {(analysis.confidence * 100).toFixed(1)}%</p>
+              {analysis.warnings.length > 0 && (
+                <div className="text-yellow-600">
+                  <h4 className="font-medium">Warnings:</h4>
+                  <ul className="list-disc pl-5">
+                    {analysis.warnings.map((warning: string, i: number) => (
+                      <li key={i}>{warning}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {analysis.suggestions.length > 0 && (
+                <div className="text-blue-600">
+                  <h4 className="font-medium">Suggestions:</h4>
+                  <ul className="list-disc pl-5">
+                    {analysis.suggestions.map((suggestion: string, i: number) => (
+                      <li key={i}>{suggestion}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
