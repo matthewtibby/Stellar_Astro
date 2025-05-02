@@ -1,4 +1,4 @@
-import { getSupabaseClient } from './src/utils/storage.ts';
+import { getSupabaseClient } from '@/src/lib/supabase';
 import { createProject } from './src/utils/projects.ts';
 import { uploadRawFrame } from './src/utils/storage.ts';
 import fs from 'fs';

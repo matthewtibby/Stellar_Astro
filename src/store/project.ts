@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Project, ProjectMetadata } from '@/types/store';
-import { getSupabaseClient } from '@/src/utils/storage';
+import { getSupabaseClient } from '@/src/lib/supabase';
 import { PostgrestError } from '@supabase/supabase-js';
 
 interface ProjectStore {
@@ -36,8 +36,7 @@ export const useProjectStore = create<ProjectStore>()(
       createProject: async (projectData) => {
         set({ isLoading: true, error: null });
         try {
-          const supabase = getSupabaseClient();
-          const { data: { user } } = await supabase.auth.getUser();
+          const { data: { user } } = await getSupabaseClient().auth.getUser();
           
           if (!user) throw new Error('User not authenticated');
 
@@ -47,7 +46,7 @@ export const useProjectStore = create<ProjectStore>()(
             version: 1,
           };
 
-          const { data: project, error } = await supabase
+          const { data: project, error } = await getSupabaseClient()
             .from('projects')
             .insert([newProject])
             .select()
@@ -71,7 +70,6 @@ export const useProjectStore = create<ProjectStore>()(
       updateProject: async (projectId, updates) => {
         set({ isLoading: true, error: null });
         try {
-          const supabase = getSupabaseClient();
           const currentProject = get().currentProject;
 
           if (!currentProject) throw new Error('No project selected');
@@ -83,7 +81,7 @@ export const useProjectStore = create<ProjectStore>()(
             updatedAt: new Date().toISOString(),
           };
 
-          const { data: project, error } = await supabase
+          const { data: project, error } = await getSupabaseClient()
             .from('projects')
             .update(updatedProject)
             .eq('id', projectId)
@@ -110,8 +108,7 @@ export const useProjectStore = create<ProjectStore>()(
       deleteProject: async (projectId) => {
         set({ isLoading: true, error: null });
         try {
-          const supabase = getSupabaseClient();
-          const { error } = await supabase
+          const { error } = await getSupabaseClient()
             .from('projects')
             .delete()
             .eq('id', projectId);
@@ -133,8 +130,7 @@ export const useProjectStore = create<ProjectStore>()(
       loadProject: async (projectId) => {
         set({ isLoading: true, error: null });
         try {
-          const supabase = getSupabaseClient();
-          const { data: project, error } = await supabase
+          const { data: project, error } = await getSupabaseClient()
             .from('projects')
             .select('*')
             .eq('id', projectId)

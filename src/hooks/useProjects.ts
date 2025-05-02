@@ -1,24 +1,90 @@
 import { useEffect, useState, useCallback } from 'react';
-import { getSupabaseClient } from '@/src/utils/storage';
+import { getSupabaseClient } from '@/src/lib/supabase';
 import { Project } from '@/src/types/project';
+
+// Define allowed sort fields
+const allowedSortFields = ['created_at', 'name'];
 
 export function useProjects(userId?: string, isAuthenticated?: boolean) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchProjects = useCallback(async () => {
-    if (!userId) return;
+  const fetchProjects = useCallback(async (searchTerm = '', filterStatus = '', sortBy = 'created_at', sortOrder = 'desc') => {
+    if (!userId) {
+      console.warn('fetchProjects: No userId provided');
+      setError('User ID is required to fetch projects');
+      return;
+    }
+
+    if (!isAuthenticated) {
+      console.warn('fetchProjects: User is not authenticated');
+      setError('Authentication is required to fetch projects');
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
     try {
-      const supabase = getSupabaseClient();
-      const { data, error } = await supabase
+      console.log('fetchProjects called with:', { 
+        searchTerm, 
+        filterStatus, 
+        sortBy, 
+        sortOrder, 
+        userId,
+        isAuthenticated 
+      });
+
+      // Verify authentication state
+      const { data: { user }, error: authError } = await getSupabaseClient().auth.getUser();
+      if (authError) {
+        console.error('Authentication check failed:', authError);
+        throw new Error('Failed to verify authentication status');
+      }
+
+      if (!user || user.id !== userId) {
+        console.error('User ID mismatch:', { 
+          expected: userId, 
+          actual: user?.id 
+        });
+        throw new Error('User authentication mismatch');
+      }
+
+      let query = getSupabaseClient()
         .from('projects')
         .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false });
-      if (error) throw error;
+        .eq('user_id', userId);
+
+      // Apply search
+      if (searchTerm) {
+        query = query.ilike('name', `%${searchTerm}%`);
+      }
+
+      // Apply filter
+      if (filterStatus) {
+        query = query.eq('status', filterStatus);
+      }
+
+      // Validate and apply sorting
+      const safeSortBy = allowedSortFields.includes(sortBy) ? sortBy : 'created_at';
+      console.log('Ordering by:', safeSortBy, 'ascending:', sortOrder === 'asc');
+      query = query.order(safeSortBy, { ascending: sortOrder === 'asc' });
+
+      // Log the final query object
+      console.log('Final query object:', query);
+      
+      const { data, error: queryError } = await query;
+      
+      if (queryError) {
+        console.error('Supabase query error:', {
+          code: queryError.code,
+          message: queryError.message,
+          details: queryError.details,
+          hint: queryError.hint
+        });
+        throw queryError;
+      }
+
       // Normalize createdAt, updatedAt, and steps[].completedAt to Date objects
       const normalized = (data || []).map((p: any) => ({
         ...p,
@@ -31,16 +97,30 @@ export function useProjects(userId?: string, isAuthenticated?: boolean) {
             }))
           : [],
       }));
+      
       setProjects(normalized);
+      if (!normalized.length) {
+        setError('No projects found. Create your first project!');
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load projects');
+      const errorMessage = err instanceof Error 
+        ? err.message 
+        : 'Failed to load projects';
+      setError(errorMessage);
+      console.error('fetchProjects error:', {
+        error: err,
+        userId,
+        isAuthenticated
+      });
     } finally {
       setIsLoading(false);
     }
-  }, [userId]);
+  }, [userId, isAuthenticated]);
 
   useEffect(() => {
-    if (isAuthenticated) fetchProjects();
+    if (isAuthenticated && userId) {
+      fetchProjects();
+    }
   }, [isAuthenticated, userId, fetchProjects]);
 
   return { projects, isLoading, error, fetchProjects };

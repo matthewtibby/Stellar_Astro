@@ -43,12 +43,13 @@ export interface ProjectMetadata {
 }
 
 export interface Project {
+  [x: string]: any;
   id: string;
   userId: string;
   title: string;
   description?: string;
   metadata: ProjectMetadata;
-  status: 'draft' | 'in_progress' | 'completed';
+  status: 'draft' | 'in_progress' | 'completed' | 'archived' | 'deleted';
   isPublic: boolean;
   createdAt: string;
   updatedAt: string;
@@ -59,6 +60,8 @@ export interface Project {
     status: 'pending' | 'in_progress' | 'completed';
     completedAt?: string;
   }[];
+  isFavorite?: boolean;
+  tags?: string[];
 }
 
 export interface PipelineState {
@@ -80,7 +83,7 @@ export interface UserState {
   isAuthenticated: boolean;
   error: string | null;
   subscription: {
-    type: 'free' | 'pro' | 'enterprise';
+    type: 'FREE' | 'Monthly' | 'Annual' | 'Super';
     projectLimit: number;
   };
 }
