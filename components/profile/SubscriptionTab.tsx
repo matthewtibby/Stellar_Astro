@@ -20,9 +20,10 @@ export default function SubscriptionTab({ user }: SubscriptionTabProps) {
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
   // Subscription details
-  const subscription = user?.subscription || { type: 'free', projectLimit: 3 };
-  const isFree = subscription.type === 'free';
-  const isPro = subscription.type === 'pro';
+  const subscription = user?.subscription || { type: 'FREE', projectLimit: 3 };
+  const isFree = subscription.type === 'FREE';
+  const isSuper = subscription.type === 'Super';
+  const isPro = subscription.type === 'Monthly' || subscription.type === 'Annual';
 
   // Subscription pricing
   const pricing = {
@@ -106,6 +107,9 @@ export default function SubscriptionTab({ user }: SubscriptionTabProps) {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold text-white">Subscription Management</h2>
+        {isSuper && (
+          <span className="ml-4 px-3 py-1 bg-gradient-to-r from-yellow-400 to-pink-500 text-white text-xs font-bold rounded-full shadow">ADMIN</span>
+        )}
       </div>
 
       {message && (
@@ -117,31 +121,36 @@ export default function SubscriptionTab({ user }: SubscriptionTabProps) {
       {/* Current Subscription */}
       <div className="bg-slate-800/50 rounded-lg p-6 border border-gray-700">
         <h3 className="text-lg font-medium text-white mb-4">Current Plan</h3>
-        
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-white font-medium capitalize">{subscription.type} Plan</p>
-            <p className="text-gray-400 text-sm">
-              {isFree ? 'Free tier' : 'Pro subscription'}
-            </p>
+            {isSuper ? (
+              <>
+                <p className="text-white font-medium">Super Plan <span className="ml-2 px-2 py-0.5 bg-gradient-to-r from-yellow-400 to-pink-500 text-xs font-bold rounded">ADMIN ONLY</span></p>
+                <p className="text-gray-400 text-sm">This plan is reserved for administrators and is free of charge.</p>
+              </>
+            ) : (
+              <>
+                <p className="text-white font-medium capitalize">{subscription.type} Plan</p>
+                <p className="text-gray-400 text-sm">{isFree ? 'Free tier' : 'Pro subscription'}</p>
+              </>
+            )}
           </div>
           <div className="text-right">
-            {isFree ? (
+            {isSuper ? (
+              <p className="text-white font-medium">Free</p>
+            ) : isFree ? (
               <p className="text-white font-medium">Free</p>
             ) : (
-              <p className="text-white font-medium">
-                {formatPrice(pricing['pro-monthly'], currency)}/month
-              </p>
+              <p className="text-white font-medium">{formatPrice(pricing['pro-monthly'], currency)}/month</p>
             )}
           </div>
         </div>
-
         <div className="mt-4 pt-4 border-t border-gray-700">
           <div className="flex items-center text-sm text-gray-300">
             <Check className="h-4 w-4 text-green-500 mr-2" />
-            <span>Up to {subscription.projectLimit} active projects</span>
+            <span>{isSuper ? 'Unlimited active projects' : `Up to ${subscription.projectLimit} active projects`}</span>
           </div>
-          {!isFree && (
+          {!isFree && !isSuper && (
             <>
               <div className="flex items-center text-sm text-gray-300 mt-2">
                 <CreditCard className="h-4 w-4 text-green-500 mr-2" />
@@ -154,8 +163,8 @@ export default function SubscriptionTab({ user }: SubscriptionTabProps) {
             </>
           )}
         </div>
-
-        {!isFree && (
+        {/* Hide all action buttons for Super users */}
+        {!isFree && !isSuper && (
           <div className="mt-6 flex space-x-3">
             {isPaused ? (
               <button
@@ -183,12 +192,10 @@ export default function SubscriptionTab({ user }: SubscriptionTabProps) {
           </div>
         )}
       </div>
-
-      {/* Upgrade Options */}
-      {!isPro && (
+      {/* Hide upgrade options for Super users */}
+      {!isPro && !isSuper && (
         <div className="bg-slate-800/50 rounded-lg p-6 border border-gray-700">
           <h3 className="text-lg font-medium text-white mb-4">Upgrade Your Plan</h3>
-          
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {!isPro && (
               <div className="border border-gray-700 rounded-lg p-4">

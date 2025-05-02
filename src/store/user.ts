@@ -13,7 +13,7 @@ const initialState: UserState = {
   isLoading: false,
   error: null,
   subscription: {
-    type: 'free' as const,
+    type: 'FREE',
     projectLimit: 1,
   }
 };
@@ -33,6 +33,7 @@ export const useUserStore = create<UserStore>()(
           fullName: user.user_metadata?.full_name || '',
           avatarUrl: user.user_metadata?.avatar_url || '',
           isAuthenticated: true,
+          subscription: user.user_metadata?.subscription || { type: 'FREE', projectLimit: 1 },
           user,
         });
       },

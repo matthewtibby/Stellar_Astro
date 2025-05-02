@@ -1,4 +1,4 @@
-import { getSupabaseClient } from '@/src/utils/storage';
+import { getSupabaseClient } from '@/src/lib/supabase';
 
 export async function checkProjectNameExists(userId: string, projectName: string): Promise<boolean> {
   const client = getSupabaseClient();

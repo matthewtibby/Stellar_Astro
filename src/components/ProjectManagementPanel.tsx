@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { Share2, Download, Upload, Copy, CheckCircle, X } from 'lucide-react';
+import { Share2, Download, Upload, Copy, CheckCircle, X, Star, Tag, Trash, Copy as Duplicate, Archive } from 'lucide-react';
 import { useProjectStore } from '@/src/store/project';
-import { getSupabaseClient } from '@/src/utils/storage';
+import { getSupabaseClient } from '@/src/lib/supabase';
 import { toast } from 'react-hot-toast';
 
 interface ProjectManagementPanelProps {
@@ -20,10 +20,8 @@ export default function ProjectManagementPanel({ projectId }: ProjectManagementP
     
     setIsExporting(true);
     try {
-      const supabase = getSupabaseClient();
-      
       // Get all files associated with the project
-      const { data: files, error: filesError } = await supabase
+      const { data: files, error: filesError } = await getSupabaseClient()
         .from('project_files')
         .select('*')
         .eq('project_id', projectId);
@@ -78,10 +76,8 @@ export default function ProjectManagementPanel({ projectId }: ProjectManagementP
             throw new Error('Invalid project export file');
           }
 
-          const supabase = getSupabaseClient();
-          
           // Create new project
-          const { data: newProject, error: projectError } = await supabase
+          const { data: newProject, error: projectError } = await getSupabaseClient()
             .from('projects')
             .insert([{
               ...importData.project,
@@ -97,7 +93,7 @@ export default function ProjectManagementPanel({ projectId }: ProjectManagementP
 
           // Import files
           for (const file of importData.files) {
-            const { error: fileError } = await supabase
+            const { error: fileError } = await getSupabaseClient()
               .from('project_files')
               .insert([{
                 ...file,
@@ -129,10 +125,8 @@ export default function ProjectManagementPanel({ projectId }: ProjectManagementP
     if (!currentProject) return;
 
     try {
-      const supabase = getSupabaseClient();
-      
       // Create a share token
-      const { data: shareToken, error: tokenError } = await supabase
+      const { data: shareToken, error: tokenError } = await getSupabaseClient()
         .from('project_shares')
         .insert([{
           project_id: projectId,
@@ -172,11 +166,87 @@ export default function ProjectManagementPanel({ projectId }: ProjectManagementP
     }
   };
 
+  const toggleFavorite = async () => {
+    if (!currentProject) return;
+    try {
+      await updateProject(projectId, { isFavorite: !currentProject.isFavorite });
+      toast.success(`Project ${currentProject.isFavorite ? 'removed from' : 'added to'} favorites`);
+    } catch (error) {
+      console.error('Failed to update favorite status:', error);
+      toast.error('Failed to update favorite status');
+    }
+  };
+
+  const handleTagChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!currentProject) return;
+    const tags = e.target.value.split(',').map(tag => tag.trim());
+    try {
+      await updateProject(projectId, { tags });
+      toast.success('Tags updated successfully');
+    } catch (error) {
+      console.error('Failed to update tags:', error);
+      toast.error('Failed to update tags');
+    }
+  };
+
+  const handleDuplicate = async () => {
+    if (!currentProject) return;
+    try {
+      const newProject = { ...currentProject, id: undefined, name: `${currentProject.name} (Copy)` };
+      await updateProject(projectId, newProject);
+      toast.success('Project duplicated successfully');
+    } catch (error) {
+      console.error('Failed to duplicate project:', error);
+      toast.error('Failed to duplicate project');
+    }
+  };
+
+  const handleArchive = async () => {
+    if (!currentProject) return;
+    try {
+      await updateProject(projectId, { status: 'archived' });
+      toast.success('Project archived successfully');
+    } catch (error) {
+      console.error('Failed to archive project:', error);
+      toast.error('Failed to archive project');
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!currentProject) return;
+    try {
+      await updateProject(projectId, { status: 'deleted' });
+      toast.success('Project deleted successfully');
+    } catch (error) {
+      console.error('Failed to delete project:', error);
+      toast.error('Failed to delete project');
+    }
+  };
+
   return (
     <div className="space-y-4 p-4 bg-gray-900/50 rounded-lg border border-gray-700">
       <h3 className="text-lg font-semibold text-white">Project Management</h3>
       
       <div className="space-y-2">
+        <button
+          onClick={toggleFavorite}
+          className={`w-full flex items-center space-x-2 px-4 py-2 ${currentProject?.isFavorite ? 'bg-yellow-500' : 'bg-gray-800'} hover:bg-yellow-600 text-white rounded-md transition-colors`}
+        >
+          <Star className="h-5 w-5" />
+          <span>{currentProject?.isFavorite ? 'Unfavorite' : 'Favorite'}</span>
+        </button>
+
+        <div className="relative">
+          <input
+            type="text"
+            placeholder="Add tags, separated by commas"
+            defaultValue={currentProject?.tags?.join(', ')}
+            onBlur={handleTagChange}
+            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <Tag className="absolute right-3 top-3 h-5 w-5 text-gray-400" />
+        </div>
+
         <button
           onClick={handleExport}
           disabled={isExporting}
@@ -209,6 +279,30 @@ export default function ProjectManagementPanel({ projectId }: ProjectManagementP
         >
           <Share2 className="h-5 w-5" />
           <span>Share Project</span>
+        </button>
+
+        <button
+          onClick={handleDuplicate}
+          className="w-full flex items-center space-x-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-md transition-colors"
+        >
+          <Duplicate className="h-5 w-5" />
+          <span>Duplicate Project</span>
+        </button>
+
+        <button
+          onClick={handleArchive}
+          className="w-full flex items-center space-x-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-md transition-colors"
+        >
+          <Archive className="h-5 w-5" />
+          <span>Archive Project</span>
+        </button>
+
+        <button
+          onClick={handleDelete}
+          className="w-full flex items-center space-x-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md transition-colors"
+        >
+          <Trash className="h-5 w-5" />
+          <span>Delete Project</span>
         </button>
 
         {shareLink && (

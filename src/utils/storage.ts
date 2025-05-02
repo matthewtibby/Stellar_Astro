@@ -1,49 +1,5 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { getSupabaseClient as getSupabaseClientLib } from '../lib/supabase';
 import { FileType } from '@/src/types/store';
-
-// Get environment variables
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-// Initialize Supabase client with error handling
-let supabase: SupabaseClient | null = null;
-let supabaseError: string | null = null;
-
-try {
-  if (!supabaseUrl) {
-    console.error('Supabase URL is missing. Current value:', supabaseUrl);
-    throw new Error('NEXT_PUBLIC_SUPABASE_URL is not configured in environment variables.');
-  }
-  
-  if (!supabaseAnonKey) {
-    console.error('Supabase Anon Key is missing. Current value:', supabaseAnonKey);
-    throw new Error('NEXT_PUBLIC_SUPABASE_ANON_KEY is not configured in environment variables.');
-  }
-
-  // Validate the Supabase URL format
-  try {
-    console.log('Attempting to validate Supabase URL:', supabaseUrl);
-    new URL(supabaseUrl);
-    console.log('Supabase URL validation successful');
-  } catch (e) {
-    console.error('Supabase URL validation failed:', e);
-    throw new Error('Invalid Supabase URL format. Please check your NEXT_PUBLIC_SUPABASE_URL environment variable.');
-  }
-  
-  supabase = createClient(supabaseUrl, supabaseAnonKey);
-  console.log('Supabase client initialized successfully');
-} catch (error) {
-  console.error('Failed to initialize Supabase client:', error);
-  supabaseError = error instanceof Error ? error.message : 'Unknown error initializing Supabase';
-}
-
-// Export a function to get the Supabase client with error handling
-export function getSupabaseClient(): SupabaseClient {
-  if (!supabase) {
-    throw new Error(supabaseError || 'Supabase client not initialized');
-  }
-  return supabase;
-}
 
 // Storage bucket names
 export const STORAGE_BUCKETS = {
@@ -72,12 +28,13 @@ export const FILE_TYPE_FOLDERS: Record<FileType, string> = {
   'post-processed': 'post-processed',
 } as const;
 
-// Helper function to check if Supabase is available
+// Helper function to get Supabase client
 const checkSupabase = () => {
-  if (!supabase) {
-    throw new Error(supabaseError || 'Storage service is currently unavailable. Please try again later.');
+  try {
+    return getSupabaseClientLib();
+  } catch (e) {
+    throw new Error('Storage service is currently unavailable. Please try again later.');
   }
-  return supabase;
 };
 
 // Profile picture functions
@@ -227,7 +184,7 @@ export async function validateFitsFile(
 
 // Add a function to ensure project exists
 export async function ensureProjectExists(projectId: string): Promise<void> {
-  const client = getSupabaseClient();
+  const client = getSupabaseClientLib();
   
   // Check if projectId is a valid UUID
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -269,12 +226,12 @@ export async function uploadRawFrame(
   console.log('Starting upload for file:', file.name);
   
   try {
-    if (!supabase) {
+    if (!getSupabaseClientLib()) {
       throw new Error('Supabase client not initialized');
     }
 
     // Get authenticated user first
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    const { data: { user }, error: userError } = await getSupabaseClientLib().auth.getUser();
     if (userError || !user) {
       throw new Error('User not authenticated');
     }
@@ -298,7 +255,7 @@ export async function uploadRawFrame(
     }
 
     // Check if file already exists in this project
-    const { data: existingFiles, error: listError } = await supabase
+    const { data: existingFiles, error: listError } = await getSupabaseClientLib()
       .storage
       .from('raw-frames')
       .list(`${user.id}/${projectId}/${actualFileType}`);
@@ -314,7 +271,7 @@ export async function uploadRawFrame(
     }
 
     // Get signed upload URL
-    const { data: signedUrlData, error: signedUrlError } = await supabase
+    const { data: signedUrlData, error: signedUrlError } = await getSupabaseClientLib()
       .storage
       .from('raw-frames')
       .createSignedUploadUrl(filePath);
@@ -366,7 +323,7 @@ export async function uploadRawFrame(
         });
 
         // Verify the file was uploaded successfully
-        const { data: verifyData, error: verifyError } = await supabase
+        const { data: verifyData, error: verifyError } = await getSupabaseClientLib()
           .storage
           .from(STORAGE_BUCKETS.RAW_FRAMES)
           .list(filePath.split('/').slice(0, -1).join('/'));

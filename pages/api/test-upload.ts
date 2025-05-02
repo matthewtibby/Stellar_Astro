@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getSupabaseClient } from '@/src/utils/storage';
+import { getSupabaseClient } from '@/src/lib/supabase';
 import { createProject } from '@/src/utils/projects';
 import { uploadRawFrame } from '@/src/utils/storage';
 import fs from 'fs';
