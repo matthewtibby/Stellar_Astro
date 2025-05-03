@@ -45,6 +45,7 @@ import FileComparisonPanel from '@/src/components/FileComparisonPanel';
 import ProjectChecklist from '@/src/components/ProjectChecklist';
 import { useProjects } from '@/src/hooks/useProjects';
 import { Project, ChecklistItem } from '@/src/types/project';
+import WelcomeDashboard from '@/src/components/WelcomeDashboard';
 
 // Add these interfaces before the mockProjects array
 interface WorkflowStep {
@@ -917,179 +918,202 @@ const DashboardPage = () => {
     );
   };
 
+  // Add handler for onboarding
+  const handleShowMeAround = () => {
+    // For now, just show an alert or placeholder
+    alert('Welcome to Stellar Astro! Here is a quick tour...');
+  };
+
+  // Render WelcomeDashboard if no projects
+  if (projects.length === 0 && !showNewProject) {
+    return (
+      <WelcomeDashboard
+        userName={fullName || user?.email?.split('@')[0] || 'Astronomer'}
+        onCreateProject={handleNewProject}
+        onShowMeAround={handleShowMeAround}
+      />
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-950 to-slate-900">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(56,189,248,0.15),transparent_50%)]" />
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        {/* Add padding-top to create space below the navigation */}
-        <div className="pt-8">
-          {/* Header */}
-          <div className="flex justify-between items-center mb-8">
-            <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center">
-                <span className="text-white text-xl font-medium">
-                  {fullName ? fullName.charAt(0).toUpperCase() : <User size={24} />}
-                </span>
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-white">Welcome, {fullName || 'User'}!</h1>
-                <p className="text-gray-400">{user?.email}</p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={handleNewProject}
-                disabled={projects.length >= (subscription || mockUserSubscription).projectLimit}
-                className={`flex items-center space-x-2 px-4 py-2 rounded-md transition-colors ${
-                  projects.length >= (subscription || mockUserSubscription).projectLimit
-                    ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
-                    : 'bg-blue-600 text-white hover:bg-blue-700'
-                }`}
-              >
-                <Plus size={18} />
-                <span>New Project</span>
-              </button>
-              <Link
-                href="/community"
-                className="flex items-center space-x-2 px-4 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600 transition-colors"
-              >
-                <Share2 size={18} />
-                <span>Community</span>
-              </Link>
-            </div>
-          </div>
-
-          {/* Main Content */}
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-            {/* Sidebar */}
-            <div className="lg:col-span-1">
-              <div className="sticky top-24">
-                {/* Files Box - Add this before the View box */}
-                {renderFilesBox()}
-                
-                <div className="bg-gray-800/50 rounded-lg p-4 shadow-lg border border-gray-700 mb-6">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-semibold text-white">View</h3>
-                    <div className="flex items-center space-x-2">
-                      <div className="flex space-x-2">
-                        <button
-                          className={`p-2 rounded-md ${activeView === 'grid' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-400'}`}
-                          onClick={() => setActiveView('grid')}
-                        >
-                          <Grid size={18} />
-                        </button>
-                        <button
-                          className={`p-2 rounded-md ${activeView === 'list' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-400'}`}
-                          onClick={() => setActiveView('list')}
-                        >
-                          <List size={18} />
-                        </button>
-                      </div>
-                      <button 
-                        onClick={() => setIsViewExpanded(!isViewExpanded)}
-                        className="text-gray-400 hover:text-white transition-colors ml-2"
-                      >
-                        {isViewExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-                      </button>
-                    </div>
+    <div className="relative min-h-screen bg-cover bg-center text-white" style={{ backgroundImage: "url('/images/milkyway.jpg')" }}>
+      {/* Overlay for darkness */}
+      <div className="absolute inset-0 bg-black bg-opacity-60 z-0" />
+      <div className="relative z-10">
+        <div className="min-h-screen">
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(56,189,248,0.15),transparent_50%)]" />
+          <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+            {/* Add padding-top to create space below the navigation */}
+            <div className="pt-8">
+              {/* Header */}
+              <div className="flex justify-between items-center mb-8">
+                <div className="flex items-center space-x-4">
+                  <div className="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center">
+                    <span className="text-white text-xl font-medium">
+                      {fullName ? fullName.charAt(0).toUpperCase() : <User size={24} />}
+                    </span>
                   </div>
-                  {isViewExpanded && (
-                    <div className="space-y-2">
-                      <button className="w-full flex items-center p-2 rounded-md hover:bg-gray-700/50 text-gray-300 hover:text-white transition-colors">
-                        <FolderOpen size={18} className="mr-2" />
-                        <span>All Projects</span>
-                      </button>
-                      <button className="w-full flex items-center p-2 rounded-md hover:bg-gray-700/50 text-gray-300 hover:text-white transition-colors">
-                        <CheckCircle size={18} className="mr-2" />
-                        <span>Completed</span>
-                      </button>
-                      <button className="w-full flex items-center p-2 rounded-md hover:bg-gray-700/50 text-gray-300 hover:text-white transition-colors">
-                        <Settings size={18} className="mr-2" />
-                        <span>In Progress</span>
-                      </button>
-                    </div>
-                  )}
+                  <div>
+                    <h1 className="text-2xl font-bold text-white">Welcome, {fullName || 'User'}!</h1>
+                    <p className="text-gray-400">{user?.email}</p>
+                  </div>
                 </div>
-                {renderWorkflowSteps()}
+                <div className="flex items-center space-x-4">
+                  <button
+                    onClick={handleNewProject}
+                    disabled={projects.length >= (subscription || mockUserSubscription).projectLimit}
+                    className={`flex items-center space-x-2 px-4 py-2 rounded-md transition-colors ${
+                      projects.length >= (subscription || mockUserSubscription).projectLimit
+                        ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                        : 'bg-blue-600 text-white hover:bg-blue-700'
+                    }`}
+                  >
+                    <Plus size={18} />
+                    <span>New Project</span>
+                  </button>
+                  <Link
+                    href="/community"
+                    className="flex items-center space-x-2 px-4 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600 transition-colors"
+                  >
+                    <Share2 size={18} />
+                    <span>Community</span>
+                  </Link>
+                </div>
               </div>
-            </div>
 
-            {/* Main Content Area */}
-            <div className="lg:col-span-3">
-              {/* Breadcrumb */}
-              <div className="flex items-center space-x-2 mb-6 text-sm">
-                <button
-                  onClick={() => handleBreadcrumbClick('dashboard')}
-                  className="text-gray-400 hover:text-white transition-colors"
-                >
-                  Dashboard
-                </button>
-                <ChevronRight size={16} className="text-gray-500" />
-                {showNewProject ? (
-                  <>
+              {/* Main Content */}
+              <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+                {/* Sidebar */}
+                <div className="lg:col-span-1">
+                  <div className="sticky top-24">
+                    {/* Files Box - Add this before the View box */}
+                    {renderFilesBox()}
+                    
+                    <div className="bg-gray-800/50 rounded-lg p-4 shadow-lg border border-gray-700 mb-6">
+                      <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-lg font-semibold text-white">View</h3>
+                        <div className="flex items-center space-x-2">
+                          <div className="flex space-x-2">
+                            <button
+                              className={`p-2 rounded-md ${activeView === 'grid' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-400'}`}
+                              onClick={() => setActiveView('grid')}
+                            >
+                              <Grid size={18} />
+                            </button>
+                            <button
+                              className={`p-2 rounded-md ${activeView === 'list' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-400'}`}
+                              onClick={() => setActiveView('list')}
+                            >
+                              <List size={18} />
+                            </button>
+                          </div>
+                          <button 
+                            onClick={() => setIsViewExpanded(!isViewExpanded)}
+                            className="text-gray-400 hover:text-white transition-colors ml-2"
+                          >
+                            {isViewExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                          </button>
+                        </div>
+                      </div>
+                      {isViewExpanded && (
+                        <div className="space-y-2">
+                          <button className="w-full flex items-center p-2 rounded-md hover:bg-gray-700/50 text-gray-300 hover:text-white transition-colors">
+                            <FolderOpen size={18} className="mr-2" />
+                            <span>All Projects</span>
+                          </button>
+                          <button className="w-full flex items-center p-2 rounded-md hover:bg-gray-700/50 text-gray-300 hover:text-white transition-colors">
+                            <CheckCircle size={18} className="mr-2" />
+                            <span>Completed</span>
+                          </button>
+                          <button className="w-full flex items-center p-2 rounded-md hover:bg-gray-700/50 text-gray-300 hover:text-white transition-colors">
+                            <Settings size={18} className="mr-2" />
+                            <span>In Progress</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    {renderWorkflowSteps()}
+                  </div>
+                </div>
+
+                {/* Main Content Area */}
+                <div className="lg:col-span-3">
+                  {/* Breadcrumb */}
+                  <div className="flex items-center space-x-2 mb-6 text-sm">
                     <button
-                      onClick={() => handleBreadcrumbClick('project')}
+                      onClick={() => handleBreadcrumbClick('dashboard')}
                       className="text-gray-400 hover:text-white transition-colors"
                     >
-                      New Project
+                      Dashboard
                     </button>
                     <ChevronRight size={16} className="text-gray-500" />
-                    <span className="text-white">
-                      {workflowSteps.find(step => step.id.toString() === `step-${currentProjectId}-${currentStep}`)?.name || 'Step'}
-                    </span>
-                  </>
-                ) : activeProject ? (
-                  <>
-                    <button
-                      onClick={() => handleBreadcrumbClick('project')}
-                      className="text-white hover:text-blue-400 transition-colors"
-                    >
-                      {activeProject.name}
-                    </button>
-                    <ChevronRight size={16} className="text-gray-500" />
-                    <span className="text-white">
-                      {workflowSteps.find(step => step.id.toString() === `step-${currentProjectId}-${currentStep}`)?.name || 'Step'}
-                    </span>
-                  </>
-                ) : (
-                  <span className="text-white">All Projects</span>
-                )}
-              </div>
-
-              {/* Add project limit warning */}
-              {showLimitWarning && (
-                <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
-                  <p className="text-yellow-500">
-                    Warning: You are approaching your project limit. Free users are limited to 5 projects.
-                    Consider upgrading to Pro for unlimited projects.
-                  </p>
-                </div>
-              )}
-
-              {/* Projects or Workflow */}
-              {showNewProject || activeProject ? (
-                <div className="p-4 space-y-4">
-                  {renderStepContent(activeProject?.id || currentProjectId || '')}
-                </div>
-              ) : (
-                <>
-                  <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-xl font-semibold text-white">Your Projects</h2>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-sm text-gray-400">{projects.length} projects</span>
-                    </div>
+                    {showNewProject ? (
+                      <>
+                        <button
+                          onClick={() => handleBreadcrumbClick('project')}
+                          className="text-gray-400 hover:text-white transition-colors"
+                        >
+                          New Project
+                        </button>
+                        <ChevronRight size={16} className="text-gray-500" />
+                        <span className="text-white">
+                          {workflowSteps.find(step => step.id.toString() === `step-${currentProjectId}-${currentStep}`)?.name || 'Step'}
+                        </span>
+                      </>
+                    ) : activeProject ? (
+                      <>
+                        <button
+                          onClick={() => handleBreadcrumbClick('project')}
+                          className="text-white hover:text-blue-400 transition-colors"
+                        >
+                          {activeProject.name}
+                        </button>
+                        <ChevronRight size={16} className="text-gray-500" />
+                        <span className="text-white">
+                          {workflowSteps.find(step => step.id.toString() === `step-${currentProjectId}-${currentStep}`)?.name || 'Step'}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-white">All Projects</span>
+                    )}
                   </div>
-                  {isLoadingProjects ? (
-                    <div className="flex justify-center items-center py-12">
-                      <span className="text-gray-400 text-lg">Loading projects...</span>
+
+                  {/* Add project limit warning */}
+                  {showLimitWarning && (
+                    <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+                      <p className="text-yellow-500">
+                        Warning: You are approaching your project limit. Free users are limited to 5 projects.
+                        Consider upgrading to Pro for unlimited projects.
+                      </p>
                     </div>
-                  ) : projectsError ? (
-                    <div className="flex justify-center items-center py-12">
-                      <span className="text-red-400 text-lg">{projectsError}</span>
+                  )}
+
+                  {/* Projects or Workflow */}
+                  {showNewProject || activeProject ? (
+                    <div className="p-4 space-y-4">
+                      {renderStepContent(activeProject?.id || currentProjectId || '')}
                     </div>
-                  ) : activeView === 'grid' ? renderProjectGrid() : renderProjectList()}
-                </>
-              )}
+                  ) : (
+                    <>
+                      <div className="flex justify-between items-center mb-6">
+                        <h2 className="text-xl font-semibold text-white">Your Projects</h2>
+                        <div className="flex items-center space-x-2">
+                          <span className="text-sm text-gray-400">{projects.length} projects</span>
+                        </div>
+                      </div>
+                      {isLoadingProjects ? (
+                        <div className="flex justify-center items-center py-12">
+                          <span className="text-gray-400 text-lg">Loading projects...</span>
+                        </div>
+                      ) : projectsError ? (
+                        <div className="flex justify-center items-center py-12">
+                          <span className="text-red-400 text-lg">{projectsError}</span>
+                        </div>
+                      ) : activeView === 'grid' ? renderProjectGrid() : renderProjectList()}
+                    </>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>
