@@ -26,6 +26,18 @@ export const useUserStore = create<UserStore>()(
       setLoading: (isLoading: boolean) => set({ isLoading }),
       setError: (error: string | null) => set({ error }),
       setUser: (user: User) => {
+        // Determine subscription type and project limit
+        let subscription = user.user_metadata?.subscription;
+        if (!subscription && user.user_metadata?.plan) {
+          // Map plan to subscription type and project limit
+          if (user.user_metadata.plan === 'annual') {
+            subscription = { type: 'Annual', projectLimit: 50 };
+          } else if (user.user_metadata.plan === 'pro') {
+            subscription = { type: 'Monthly', projectLimit: 50 };
+          } else {
+            subscription = { type: 'FREE', projectLimit: 1 };
+          }
+        }
         set({
           id: user.id,
           email: user.email || '',
@@ -33,7 +45,7 @@ export const useUserStore = create<UserStore>()(
           fullName: user.user_metadata?.full_name || '',
           avatarUrl: user.user_metadata?.avatar_url || '',
           isAuthenticated: true,
-          subscription: user.user_metadata?.subscription || { type: 'FREE', projectLimit: 1 },
+          subscription: subscription || { type: 'FREE', projectLimit: 1 },
           user,
         });
       },

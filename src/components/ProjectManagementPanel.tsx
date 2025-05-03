@@ -8,6 +8,26 @@ interface ProjectManagementPanelProps {
   projectId: string;
 }
 
+// Add a mapping from project title to image and target name
+const projectThumbnails = {
+  'Andromeda Galaxy': {
+    image: '/images/andromeda.jpg',
+    target: 'Andromeda Galaxy',
+  },
+  'Eagle Nebula': {
+    image: '/images/eagle.jpg',
+    target: 'Eagle Nebula',
+  },
+  'Horsehead Nebula': {
+    image: '/images/horsehead.jpg',
+    target: 'Horsehead Nebula',
+  },
+  'Orion Nebula': {
+    image: '/images/orion.jpg',
+    target: 'Orion Nebula',
+  },
+};
+
 export default function ProjectManagementPanel({ projectId }: ProjectManagementPanelProps) {
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
