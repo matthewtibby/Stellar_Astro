@@ -461,6 +461,10 @@ const DashboardPage = () => {
         .select()
         .single();
       if (projectError) throw new Error(projectError?.message || 'Failed to create project');
+      
+      // Navigate to the project's upload workflow
+      router.push(`/dashboard/${project.id}?step=upload`);
+      
       setActiveProject({
         id: project.id,
         name: project.title,
