@@ -26,7 +26,8 @@ import {
   Star,
   LucideIcon,
   File,
-  Folder
+  Folder,
+  Trash2
 } from 'lucide-react';
 import Link from 'next/link';
 import TargetAutocomplete from '@/components/TargetAutocomplete';
@@ -46,6 +47,7 @@ import ProjectChecklist from '@/src/components/ProjectChecklist';
 import { useProjects } from '@/src/hooks/useProjects';
 import { Project, ChecklistItem } from '@/src/types/project';
 import WelcomeDashboard from '@/src/components/WelcomeDashboard';
+import AuthSync from '@/components/AuthSync';
 
 // Add these interfaces before the mockProjects array
 interface WorkflowStep {
@@ -282,8 +284,14 @@ const mockUserSubscription: UserSubscription = {
 };
 
 const FileUploadSection = ({ projectId }: { projectId: string }) => {
+  const { user, isAuthenticated } = useUserStore();
   const [validationError, setValidationError] = useState<string | null>(null);
-  const [userId, setUserId] = useState<string | null>(null);
+  const userId = user?.id;
+  console.log('FileUploadSection rendered with userId:', userId, 'isAuthenticated:', isAuthenticated, 'projectId:', projectId);
+
+  // Debug logging
+  console.log('FileUploadSection user:', user);
+  console.log('FileUploadSection isAuthenticated:', isAuthenticated);
 
   useEffect(() => {
     if (!projectId) {
@@ -292,22 +300,6 @@ const FileUploadSection = ({ projectId }: { projectId: string }) => {
       setValidationError(null);
     }
   }, [projectId]);
-
-  useEffect(() => {
-    // Get the current user's ID
-    const getCurrentUser = async () => {
-      try {
-        const supabase = getSupabaseClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          setUserId(user.id);
-        }
-      } catch (error) {
-        console.error('Error getting current user:', error);
-      }
-    };
-    getCurrentUser();
-  }, []);
 
   const handleValidationError = (error: string) => {
     setValidationError(error);
@@ -321,7 +313,7 @@ const FileUploadSection = ({ projectId }: { projectId: string }) => {
     );
   }
 
-  if (!userId) {
+  if (!isAuthenticated || !userId) {
     return (
       <div className="p-4 bg-gray-800/50 text-gray-400 rounded-md border border-gray-700">
         Please sign in to upload files.
@@ -347,7 +339,7 @@ const FileUploadSection = ({ projectId }: { projectId: string }) => {
 
 const DashboardPage = () => {
   const router = useRouter();
-  const { user, isAuthenticated, subscription, fullName } = useUserStore();
+  const { user, isAuthenticated, isLoading, subscription, fullName } = useUserStore();
   const { projects, isLoading: isLoadingProjects, error: projectsError, fetchProjects } = useProjects(user?.id, isAuthenticated);
   const [activeView, setActiveView] = useState('grid');
   const [activeProject, setActiveProject] = useState<Project | null>(null);
@@ -379,6 +371,13 @@ const DashboardPage = () => {
   const currentProjectId = params?.projectId ? (Array.isArray(params.projectId) ? params.projectId[0] : params.projectId) : null;
   const [selectedFile, setSelectedFile] = useState<StorageFile | null>(null);
   const fileListRef = useRef<{ refresh: () => void }>(null);
+  const [projectNameEdit, setProjectNameEdit] = useState('');
+  const [isSavingProjectName, setIsSavingProjectName] = useState(false);
+
+  // Debug logging
+  console.log('Zustand user:', user);
+  console.log('Zustand isAuthenticated:', isAuthenticated);
+  console.log('Zustand isLoading:', isLoading);
 
   // Function to check if there are any uploaded files
   const checkForUploadedFiles = () => {
@@ -442,13 +441,68 @@ const DashboardPage = () => {
     return true;
   };
 
-  // Update the handleNewProject function
-  const handleNewProject = () => {
-    if (!checkProjectLimits()) {
-      return;
+  // New: Create project instantly with default name
+  const handleNewProject = async () => {
+    try {
+      setIsSavingProjectName(true);
+      const supabase = getSupabaseClient();
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) throw new Error('Authentication required');
+      const { data: project, error: projectError } = await supabase
+        .from('projects')
+        .insert([{
+          title: 'Untitled Project',
+          description: '',
+          user_id: user.id,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          is_public: false
+        }])
+        .select()
+        .single();
+      if (projectError) throw new Error(projectError?.message || 'Failed to create project');
+      setActiveProject({
+        id: project.id,
+        name: project.title,
+        createdAt: new Date(project.created_at),
+        updatedAt: new Date(project.updated_at),
+        status: 'draft',
+        target: { id: '', name: '', catalogIds: [], constellation: '', category: 'other', type: 'other', commonNames: [], coordinates: { ra: '', dec: '' } },
+        steps: []
+      });
+      setProjectNameEdit(project.title);
+      setCurrentStep(0);
+      setShowNewProject(false);
+      await fetchProjects();
+    } catch (error) {
+      console.error('Error creating project:', error);
+      // Optionally show error to user
+    } finally {
+      setIsSavingProjectName(false);
     }
-    setShowNewProject(true);
-    setCurrentStep(0);
+  };
+
+  // Editable project name field and save logic
+  const handleProjectNameSave = async () => {
+    if (!activeProject || !projectNameEdit.trim()) return;
+    setIsSavingProjectName(true);
+    try {
+      const supabase = getSupabaseClient();
+      const { data: updated, error } = await supabase
+        .from('projects')
+        .update({ title: projectNameEdit.trim(), updated_at: new Date().toISOString() })
+        .eq('id', activeProject.id)
+        .select()
+        .single();
+      if (error) throw error;
+      setActiveProject({ ...activeProject, name: updated.title });
+      await fetchProjects();
+    } catch (error) {
+      console.error('Error saving project name:', error);
+      // Optionally show error to user
+    } finally {
+      setIsSavingProjectName(false);
+    }
   };
 
   const handleProjectClick = (project: Project) => {
@@ -469,9 +523,18 @@ const DashboardPage = () => {
         {projects.map((project) => (
           <div 
             key={project.id} 
-            className="bg-gray-800/50 rounded-lg overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300 cursor-pointer border border-gray-700 hover:border-blue-500"
+            className="bg-gray-800/50 rounded-lg overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300 cursor-pointer border border-gray-700 hover:border-blue-500 relative"
             onClick={() => handleProjectClick(project)}
           >
+            <div className="absolute top-2 right-2 z-10">
+              <button
+                onClick={e => { e.stopPropagation(); handleDeleteProject(project.id); }}
+                className="p-1 rounded-full bg-red-700 hover:bg-red-800 text-white shadow"
+                title="Delete Project"
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
             <div className="relative h-40 bg-gray-900">
               <div className="absolute inset-0 flex items-center justify-center">
                 <Image size={48} className="text-gray-600" />
@@ -481,7 +544,7 @@ const DashboardPage = () => {
                 <p className="text-sm text-gray-400">Last updated: {project.updatedAt instanceof Date ? project.updatedAt.toLocaleDateString() : String(project.updatedAt)}</p>
               </div>
               {project.status === "completed" && (
-                <div className="absolute top-2 right-2">
+                <div className="absolute top-2 right-8">
                   <CheckCircle size={20} className="text-green-500" />
                 </div>
               )}
@@ -509,9 +572,18 @@ const DashboardPage = () => {
         {projects.map((project) => (
           <div 
             key={project.id} 
-            className="bg-gray-800/50 rounded-lg p-4 shadow-lg hover:shadow-xl transition-all duration-300 cursor-pointer border border-gray-700 hover:border-blue-500 flex items-center"
+            className="bg-gray-800/50 rounded-lg p-4 shadow-lg hover:shadow-xl transition-all duration-300 cursor-pointer border border-gray-700 hover:border-blue-500 flex items-center relative"
             onClick={() => handleProjectClick(project)}
           >
+            <div className="absolute top-2 right-2 z-10">
+              <button
+                onClick={e => { e.stopPropagation(); handleDeleteProject(project.id); }}
+                className="p-1 rounded-full bg-red-700 hover:bg-red-800 text-white shadow"
+                title="Delete Project"
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
             <div className="w-16 h-16 bg-gray-900 rounded-md flex items-center justify-center mr-4">
               <Image size={24} className="text-gray-600" />
             </div>
@@ -743,24 +815,6 @@ const DashboardPage = () => {
     );
   };
 
-  const renderFileUpload = () => {
-    if (!currentProjectId) {
-      return (
-        <div className="bg-gray-800/50 rounded-lg p-6 shadow-lg border border-gray-700">
-          <h3 className="text-xl font-semibold text-white mb-6">Upload Files</h3>
-          <p className="text-gray-400">Please create a project first to upload files.</p>
-        </div>
-      );
-    }
-
-    return (
-      <div className="bg-gray-800/50 rounded-lg p-6 shadow-lg border border-gray-700">
-        <h3 className="text-xl font-semibold text-white mb-6">Upload Files</h3>
-        <FileUploadSection projectId={currentProjectId} />
-      </div>
-    );
-  };
-
   const renderStepContent = (projectId: string) => {
     const currentStepIndex = Math.min(currentStep, workflowSteps.length - 1);
     const step = workflowSteps[currentStepIndex];
@@ -794,6 +848,27 @@ const DashboardPage = () => {
       case 0:
         return (
           <div className="space-y-6">
+            {/* Editable project title field at the top */}
+            {activeProject && (
+              <div className="mb-4 flex items-center space-x-2">
+                <input
+                  type="text"
+                  value={projectNameEdit}
+                  onChange={e => setProjectNameEdit(e.target.value)}
+                  onFocus={e => e.target.select()}
+                  className="px-3 py-2 rounded-md bg-gray-700 text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  style={{ minWidth: 0, flex: 1 }}
+                  disabled={isSavingProjectName}
+                />
+                <button
+                  onClick={handleProjectNameSave}
+                  disabled={isSavingProjectName || !projectNameEdit.trim() || projectNameEdit.trim() === activeProject.name}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSavingProjectName ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+            )}
             <div className="bg-gray-800/50 rounded-lg p-6 shadow-lg border border-gray-700">
               <h3 className="text-xl font-semibold text-white mb-4">Upload FITS Files</h3>
               <p className="text-gray-400 mb-4">
@@ -801,22 +876,9 @@ const DashboardPage = () => {
                 <br />
                 Supported formats: .fits, .fit, .FIT, .FITS, .RAW
               </p>
+              {/* Only render FileUploadSection here, not UniversalFileUpload directly */}
               <FileUploadSection projectId={projectId} />
             </div>
-            <FileManagementPanel
-              projectId={projectId}
-              onRefresh={() => {
-                if (fileListRef.current) {
-                  fileListRef.current.refresh();
-                }
-              }}
-              onValidationError={(error) => {
-                setUploadErrors(prev => ({
-                  ...prev,
-                  [projectId]: error
-                }));
-              }}
-            />
             {renderStepNavigation()}
           </div>
         );
@@ -825,20 +887,7 @@ const DashboardPage = () => {
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-4">
-                <FileManagementPanel
-                  projectId={projectId}
-                  onRefresh={() => {
-                    if (fileListRef.current) {
-                      fileListRef.current.refresh();
-                    }
-                  }}
-                  onValidationError={(error) => {
-                    setUploadErrors(prev => ({
-                      ...prev,
-                      [projectId]: error
-                    }));
-                  }}
-                />
+                <FileUploadSection projectId={projectId} />
                 <FileComparisonPanel projectId={projectId} />
               </div>
               <div className="space-y-4">
@@ -935,190 +984,217 @@ const DashboardPage = () => {
     );
   }
 
-  return (
-    <div className="relative min-h-screen bg-cover bg-center text-white" style={{ backgroundImage: "url('/images/milkyway.jpg')" }}>
-      {/* Overlay for darkness */}
-      <div className="absolute inset-0 bg-black bg-opacity-60 z-0" />
-      <div className="relative z-10">
-        <div className="min-h-screen">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(56,189,248,0.15),transparent_50%)]" />
-          <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-            {/* Add padding-top to create space below the navigation */}
-            <div className="pt-8">
-              {/* Header */}
-              <div className="flex justify-between items-center mb-8">
-                <div className="flex items-center space-x-4">
-                  <div className="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center">
-                    <span className="text-white text-xl font-medium">
-                      {fullName ? fullName.charAt(0).toUpperCase() : <User size={24} />}
-                    </span>
-                  </div>
-                  <div>
-                    <h1 className="text-2xl font-bold text-white">Welcome, {fullName || 'User'}!</h1>
-                    <p className="text-gray-400">{user?.email}</p>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-4">
-                  <button
-                    onClick={handleNewProject}
-                    disabled={projects.length >= (subscription || mockUserSubscription).projectLimit}
-                    className={`flex items-center space-x-2 px-4 py-2 rounded-md transition-colors ${
-                      projects.length >= (subscription || mockUserSubscription).projectLimit
-                        ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
-                        : 'bg-blue-600 text-white hover:bg-blue-700'
-                    }`}
-                  >
-                    <Plus size={18} />
-                    <span>New Project</span>
-                  </button>
-                  <Link
-                    href="/community"
-                    className="flex items-center space-x-2 px-4 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600 transition-colors"
-                  >
-                    <Share2 size={18} />
-                    <span>Community</span>
-                  </Link>
-                </div>
-              </div>
+  if (isLoading) {
+    return <div className="flex justify-center items-center min-h-screen text-white text-xl">Loading...</div>;
+  }
 
-              {/* Main Content */}
-              <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-                {/* Sidebar */}
-                <div className="lg:col-span-1">
-                  <div className="sticky top-24">
-                    {/* Files Box - Add this before the View box */}
-                    {renderFilesBox()}
-                    
-                    <div className="bg-gray-800/50 rounded-lg p-4 shadow-lg border border-gray-700 mb-6">
-                      <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-lg font-semibold text-white">View</h3>
-                        <div className="flex items-center space-x-2">
-                          <div className="flex space-x-2">
-                            <button
-                              className={`p-2 rounded-md ${activeView === 'grid' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-400'}`}
-                              onClick={() => setActiveView('grid')}
+  // Add this function to handle project deletion
+  const handleDeleteProject = async (projectId: string) => {
+    if (!window.confirm('Are you sure you want to delete this project? This action cannot be undone.')) return;
+    try {
+      const supabase = getSupabaseClient();
+      const { error } = await supabase
+        .from('projects')
+        .delete()
+        .eq('id', projectId);
+      if (error) throw error;
+      await fetchProjects();
+      if (activeProject?.id === projectId) {
+        setActiveProject(null);
+      }
+    } catch (error) {
+      console.error('Error deleting project:', error);
+      // Optionally show error to user
+    }
+  };
+
+  return (
+    <>
+      <AuthSync />
+      <div className="relative min-h-screen bg-gradient-to-br from-[#0a192f] via-[#1a223f] to-[#232946] text-white" style={{ backgroundImage: "url('/images/milkyway.jpg')", backgroundSize: 'cover', backgroundPosition: 'center' }}>
+        {/* Overlay for darkness */}
+        <div className="absolute inset-0 bg-black bg-opacity-60 z-0" />
+        <div className="relative z-10">
+          <div className="min-h-screen">
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(56,189,248,0.15),transparent_50%)]" />
+            <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+              {/* Add padding-top to create space below the navigation */}
+              <div className="pt-8">
+                {/* Header */}
+                <div className="flex justify-between items-center mb-8">
+                  <div className="flex items-center space-x-4">
+                    <div className="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center">
+                      <span className="text-white text-xl font-medium">
+                        {fullName ? fullName.charAt(0).toUpperCase() : <User size={24} />}
+                      </span>
+                    </div>
+                    <div>
+                      <h1 className="text-2xl font-bold text-white">Welcome, {fullName || 'User'}!</h1>
+                      <p className="text-gray-400">{user?.email}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-4">
+                    <button
+                      onClick={handleNewProject}
+                      disabled={projects.length >= (subscription || mockUserSubscription).projectLimit}
+                      className={`flex items-center space-x-2 px-4 py-2 rounded-md transition-colors ${
+                        projects.length >= (subscription || mockUserSubscription).projectLimit
+                          ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                          : 'bg-blue-600 text-white hover:bg-blue-700'
+                      }`}
+                    >
+                      <Plus size={18} />
+                      <span>New Project</span>
+                    </button>
+                    <Link
+                      href="/community"
+                      className="flex items-center space-x-2 px-4 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600 transition-colors"
+                    >
+                      <Share2 size={18} />
+                      <span>Community</span>
+                    </Link>
+                  </div>
+                </div>
+
+                {/* Main Content */}
+                <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+                  {/* Sidebar */}
+                  <div className="lg:col-span-1">
+                    <div className="sticky top-24">
+                      {/* Files Box - Add this before the View box */}
+                      {renderFilesBox()}
+                      
+                      <div className="bg-gray-800/50 rounded-lg p-4 shadow-lg border border-gray-700 mb-6">
+                        <div className="flex justify-between items-center mb-4">
+                          <h3 className="text-lg font-semibold text-white">View</h3>
+                          <div className="flex items-center space-x-2">
+                            <div className="flex space-x-2">
+                              <button
+                                className={`p-2 rounded-md ${activeView === 'grid' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-400'}`}
+                                onClick={() => setActiveView('grid')}
+                              >
+                                <Grid size={18} />
+                              </button>
+                              <button
+                                className={`p-2 rounded-md ${activeView === 'list' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-400'}`}
+                                onClick={() => setActiveView('list')}
+                              >
+                                <List size={18} />
+                              </button>
+                            </div>
+                            <button 
+                              onClick={() => setIsViewExpanded(!isViewExpanded)}
+                              className="text-gray-400 hover:text-white transition-colors ml-2"
                             >
-                              <Grid size={18} />
-                            </button>
-                            <button
-                              className={`p-2 rounded-md ${activeView === 'list' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-400'}`}
-                              onClick={() => setActiveView('list')}
-                            >
-                              <List size={18} />
+                              {isViewExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
                             </button>
                           </div>
-                          <button 
-                            onClick={() => setIsViewExpanded(!isViewExpanded)}
-                            className="text-gray-400 hover:text-white transition-colors ml-2"
-                          >
-                            {isViewExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-                          </button>
                         </div>
+                        {isViewExpanded && (
+                          <div className="space-y-2">
+                            <button className="w-full flex items-center p-2 rounded-md hover:bg-gray-700/50 text-gray-300 hover:text-white transition-colors">
+                              <FolderOpen size={18} className="mr-2" />
+                              <span>All Projects</span>
+                            </button>
+                            <button className="w-full flex items-center p-2 rounded-md hover:bg-gray-700/50 text-gray-300 hover:text-white transition-colors">
+                              <CheckCircle size={18} className="mr-2" />
+                              <span>Completed</span>
+                            </button>
+                            <button className="w-full flex items-center p-2 rounded-md hover:bg-gray-700/50 text-gray-300 hover:text-white transition-colors">
+                              <Settings size={18} className="mr-2" />
+                              <span>In Progress</span>
+                            </button>
+                          </div>
+                        )}
                       </div>
-                      {isViewExpanded && (
-                        <div className="space-y-2">
-                          <button className="w-full flex items-center p-2 rounded-md hover:bg-gray-700/50 text-gray-300 hover:text-white transition-colors">
-                            <FolderOpen size={18} className="mr-2" />
-                            <span>All Projects</span>
+                      {renderWorkflowSteps()}
+                    </div>
+                  </div>
+
+                  {/* Main Content Area */}
+                  <div className="lg:col-span-3">
+                    {/* Breadcrumb */}
+                    <div className="flex items-center space-x-2 mb-6 text-sm">
+                      <button
+                        onClick={() => handleBreadcrumbClick('dashboard')}
+                        className="text-gray-400 hover:text-white transition-colors"
+                      >
+                        Dashboard
+                      </button>
+                      <ChevronRight size={16} className="text-gray-500" />
+                      {showNewProject ? (
+                        <>
+                          <button
+                            onClick={() => handleBreadcrumbClick('project')}
+                            className="text-gray-400 hover:text-white transition-colors"
+                          >
+                            New Project
                           </button>
-                          <button className="w-full flex items-center p-2 rounded-md hover:bg-gray-700/50 text-gray-300 hover:text-white transition-colors">
-                            <CheckCircle size={18} className="mr-2" />
-                            <span>Completed</span>
+                          <ChevronRight size={16} className="text-gray-500" />
+                          <span className="text-white">
+                            {workflowSteps[currentStep]?.name || 'Step'}
+                          </span>
+                        </>
+                      ) : activeProject ? (
+                        <>
+                          <button
+                            onClick={() => handleBreadcrumbClick('project')}
+                            className="text-white hover:text-blue-400 transition-colors"
+                          >
+                            {activeProject.name}
                           </button>
-                          <button className="w-full flex items-center p-2 rounded-md hover:bg-gray-700/50 text-gray-300 hover:text-white transition-colors">
-                            <Settings size={18} className="mr-2" />
-                            <span>In Progress</span>
-                          </button>
-                        </div>
+                          <ChevronRight size={16} className="text-gray-500" />
+                          <span className="text-white">
+                            {workflowSteps[currentStep]?.name || 'Step'}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-white">All Projects</span>
                       )}
                     </div>
-                    {renderWorkflowSteps()}
-                  </div>
-                </div>
 
-                {/* Main Content Area */}
-                <div className="lg:col-span-3">
-                  {/* Breadcrumb */}
-                  <div className="flex items-center space-x-2 mb-6 text-sm">
-                    <button
-                      onClick={() => handleBreadcrumbClick('dashboard')}
-                      className="text-gray-400 hover:text-white transition-colors"
-                    >
-                      Dashboard
-                    </button>
-                    <ChevronRight size={16} className="text-gray-500" />
-                    {showNewProject ? (
-                      <>
-                        <button
-                          onClick={() => handleBreadcrumbClick('project')}
-                          className="text-gray-400 hover:text-white transition-colors"
-                        >
-                          New Project
-                        </button>
-                        <ChevronRight size={16} className="text-gray-500" />
-                        <span className="text-white">
-                          {workflowSteps.find(step => step.id.toString() === `step-${currentProjectId}-${currentStep}`)?.name || 'Step'}
-                        </span>
-                      </>
-                    ) : activeProject ? (
-                      <>
-                        <button
-                          onClick={() => handleBreadcrumbClick('project')}
-                          className="text-white hover:text-blue-400 transition-colors"
-                        >
-                          {activeProject.name}
-                        </button>
-                        <ChevronRight size={16} className="text-gray-500" />
-                        <span className="text-white">
-                          {workflowSteps.find(step => step.id.toString() === `step-${currentProjectId}-${currentStep}`)?.name || 'Step'}
-                        </span>
-                      </>
+                    {/* Add project limit warning */}
+                    {showLimitWarning && (
+                      <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+                        <p className="text-yellow-500">
+                          Warning: You are approaching your project limit. Free users are limited to 5 projects.
+                          Consider upgrading to Pro for unlimited projects.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Projects or Workflow */}
+                    {showNewProject || activeProject ? (
+                      <div className="p-4 space-y-4">
+                        {renderStepContent(activeProject?.id || currentProjectId || '')}
+                      </div>
                     ) : (
-                      <span className="text-white">All Projects</span>
+                      <>
+                        <div className="flex justify-between items-center mb-6">
+                          <h2 className="text-xl font-semibold text-white">Your Projects</h2>
+                          <div className="flex items-center space-x-2">
+                            <span className="text-sm text-gray-400">{projects.length} projects</span>
+                          </div>
+                        </div>
+                        {isLoadingProjects ? (
+                          <div className="flex justify-center items-center py-12">
+                            <span className="text-gray-400 text-lg">Loading projects...</span>
+                          </div>
+                        ) : projectsError ? (
+                          <div className="flex justify-center items-center py-12">
+                            <span className="text-red-400 text-lg">{projectsError}</span>
+                          </div>
+                        ) : activeView === 'grid' ? renderProjectGrid() : renderProjectList()}
+                      </>
                     )}
                   </div>
-
-                  {/* Add project limit warning */}
-                  {showLimitWarning && (
-                    <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
-                      <p className="text-yellow-500">
-                        Warning: You are approaching your project limit. Free users are limited to 5 projects.
-                        Consider upgrading to Pro for unlimited projects.
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Projects or Workflow */}
-                  {showNewProject || activeProject ? (
-                    <div className="p-4 space-y-4">
-                      {renderStepContent(activeProject?.id || currentProjectId || '')}
-                    </div>
-                  ) : (
-                    <>
-                      <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-xl font-semibold text-white">Your Projects</h2>
-                        <div className="flex items-center space-x-2">
-                          <span className="text-sm text-gray-400">{projects.length} projects</span>
-                        </div>
-                      </div>
-                      {isLoadingProjects ? (
-                        <div className="flex justify-center items-center py-12">
-                          <span className="text-gray-400 text-lg">Loading projects...</span>
-                        </div>
-                      ) : projectsError ? (
-                        <div className="flex justify-center items-center py-12">
-                          <span className="text-red-400 text-lg">{projectsError}</span>
-                        </div>
-                      ) : activeView === 'grid' ? renderProjectGrid() : renderProjectList()}
-                    </>
-                  )}
                 </div>
               </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 };
 

@@ -32,6 +32,7 @@ export function UniversalFileUpload({
   onUploadComplete,
   onValidationError 
 }: UniversalFileUploadProps) {
+  console.log('UniversalFileUpload rendered with userId:', userId, 'projectId:', projectId);
   const [uploadStatuses, setUploadStatuses] = useState<UploadStatus[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [moveNotification, setMoveNotification] = useState<string | null>(null);
@@ -111,6 +112,7 @@ export function UniversalFileUpload({
   }, [filesByType, saveFilesToLocalStorage]);
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
+    console.log('onDrop called, acceptedFiles:', acceptedFiles, 'userId:', userId, 'projectId:', projectId);
     if (acceptedFiles.length === 0) return;
 
     setIsUploading(true);
