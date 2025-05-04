@@ -1,7 +1,7 @@
 import { getSupabaseClient } from '@/src/lib/supabase';
-import { createProject } from './src/utils/projects.ts';
-import { uploadRawFrame } from './src/utils/storage.ts';
-import fs from 'fs';
+import { createProject } from './src/utils/projects';
+import { uploadRawFrame } from './src/utils/storage';
+import { FileType } from './src/types/store';
 
 async function testSupabaseUpload() {
   try {
@@ -17,47 +17,42 @@ async function testSupabaseUpload() {
 
     // Create a test project
     const projectName = 'test-upload-project';
-    let project;
-    try {
-      project = await createProject(user.id, projectName);
-      console.log('Created new test project:', project);
-    } catch (e: any) {
-      if (e.message === 'A project with this name already exists') {
-        // Get the existing project
-        const { data, error } = await supabase
-          .from('projects')
-          .select('*')
-          .eq('user_id', user.id)
-          .eq('title', projectName)
-          .single();
-        
-        if (error) throw error;
-        project = data;
-        console.log('Using existing test project:', project);
-      } else {
-        throw e;
-      }
+    const project = await createProject('test-user-id', projectName);
+    console.log('Created new test project:', project);
+
+    // Read the test.fits file using the API endpoint
+    const response = await fetch('/api/file-operations', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        operation: 'readFile',
+        filePath: 'test.fits'
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to read file');
     }
 
-    // Read the test.fits file
+    const { content } = await response.json();
     const file = new File(
-      [await fs.promises.readFile('test.fits')],
+      [content],
       'test.fits',
       { type: 'application/fits' }
     );
 
     // Upload the file
     console.log('Starting file upload...');
-    const filePath = await uploadRawFrame(
-      project.id,
-      'light',
+    await uploadRawFrame(
       file,
+      project.id,
+      'light' as FileType,
       (progress) => console.log(`Upload progress: ${Math.round(progress * 100)}%`)
     );
     
-    console.log('File uploaded successfully!');
-    console.log('File path:', filePath);
-
+    console.log('Test completed successfully');
   } catch (error) {
     console.error('Test failed:', error);
   }

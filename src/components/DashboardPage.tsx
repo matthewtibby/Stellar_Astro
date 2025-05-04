@@ -4,9 +4,14 @@ import { SessionTemplate } from '@/types/session';
 import { setProjectName, setProjectDescription, setSelectedTarget, setSelectedTelescope, setSelectedCamera, setSelectedFilters } from '../store/project';
 import { useProjects } from '@/src/hooks/useProjects';
 import { Tooltip } from 'react-tooltip';
-import { toast } from 'react-hot-toast';
+import { AlertCircle, Plus, ChevronRight, File, Folder, Trash2 } from 'lucide-react';
+import { useUserStore } from '../store/userStore';
+import Link from 'next/link';
+import { handleError, ValidationError } from '@/src/utils/errorHandling';
+import { useToast } from '../hooks/useToast';
 
 const DashboardPage = () => {
+  const { user, isAuthenticated } = useUserStore();
   const { projects, fetchProjects } = useProjects();
   const [sessionTemplates, setSessionTemplates] = useState<SessionTemplate[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -77,82 +82,99 @@ const DashboardPage = () => {
     </div>
   );
 
-  const renderNewProjectForm = () => (
-    <div className="bg-gray-800 p-6 rounded-lg shadow-lg">
-      <h2 className="text-xl font-semibold text-white mb-4">New Project</h2>
-      <form onSubmit={async (e) => {
-        e.preventDefault();
-        const formData = new FormData(e.currentTarget);
-        const projectName = formData.get('projectName') as string;
-        const description = formData.get('description') as string;
+  const renderNewProjectForm = () => {
+    const [error, setError] = useState<string | null>(null);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
-        try {
-          const { data: { user } } = await getSupabaseClient().auth.getUser();
-          
-          if (!user) {
-            throw new Error('User not authenticated');
-          }
+    const handleSubmit = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setIsSubmitting(true);
+      setError(null);
 
-          const { data: project, error } = await getSupabaseClient()
-            .from('projects')
-            .insert([
-              {
-                user_id: user.id,
-                title: projectName,
-                description: description || '',
-                status: 'draft',
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString()
-              }
-            ])
-            .select()
-            .single();
+      const formData = new FormData(e.target as HTMLFormElement);
+      const name = formData.get('name') as string;
+      const description = formData.get('description') as string;
 
-          if (error) throw error;
-
-          // Refresh projects list
-          fetchProjects();
-          // Clear form
-          e.currentTarget.reset();
-        } catch (error) {
-          console.error('Error creating project:', error);
-          toast.error(error instanceof Error ? error.message : 'Failed to create project');
+      try {
+        if (!name.trim()) {
+          throw new ValidationError('Project name is required');
         }
-      }} className="space-y-4">
-        <div>
-          <label htmlFor="projectName" className="block text-sm font-medium text-gray-300 mb-1">
-            Project Name
-          </label>
-          <input
-            type="text"
-            id="projectName"
-            name="projectName"
-            required
-            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Enter project name"
-          />
-        </div>
-        <div>
-          <label htmlFor="description" className="block text-sm font-medium text-gray-300 mb-1">
-            Description (Optional)
-          </label>
-          <textarea
-            id="description"
-            name="description"
-            rows={3}
-            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Enter project description"
-          />
-        </div>
-        <button
-          type="submit"
-          className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          Create Project
-        </button>
-      </form>
-    </div>
-  );
+
+        const response = await fetch('/api/projects', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ name, description }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || 'Failed to create project');
+        }
+
+        // Refresh the projects list
+        window.location.reload();
+      } catch (error) {
+        const appError = handleError(error);
+        setError(appError.message);
+      } finally {
+        setIsSubmitting(false);
+      }
+    };
+
+    return (
+      <div className="bg-gray-800 p-6 rounded-lg shadow-lg">
+        <h2 className="text-xl font-semibold text-white mb-4">Create New Project</h2>
+        {error && (
+          <div className="p-4 bg-red-900/50 text-red-200 rounded-md border border-red-800 mb-4">
+            <div className="flex items-center space-x-2">
+              <AlertCircle className="h-5 w-5" />
+              <span>{error}</span>
+            </div>
+          </div>
+        )}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label htmlFor="name" className="block text-sm font-medium text-gray-300 mb-1">
+              Project Name
+            </label>
+            <input
+              type="text"
+              id="name"
+              name="name"
+              required
+              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Enter project name"
+            />
+          </div>
+          <div>
+            <label htmlFor="description" className="block text-sm font-medium text-gray-300 mb-1">
+              Description (Optional)
+            </label>
+            <textarea
+              id="description"
+              name="description"
+              rows={3}
+              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Enter project description"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className={`w-full px-4 py-2 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+              isSubmitting
+                ? 'bg-blue-700 cursor-not-allowed'
+                : 'bg-blue-600 hover:bg-blue-700'
+            }`}
+          >
+            {isSubmitting ? 'Creating...' : 'Create Project'}
+          </button>
+        </form>
+      </div>
+    );
+  };
 
   const renderFileUpload = () => (
     <div className="bg-gray-800 p-6 rounded-lg shadow-lg">

@@ -44,3 +44,23 @@
 - **Benefits**: Improves error handling and debugging capabilities
 - **Dependencies**: None
 - **Estimated Effort**: 1-2 hours 
+
+## Onboarding Tour Improvements
+- Integrate onboarding tour with real dashboard elements:
+  - Your Dashboard: Home page, all projects
+  - New Projects: One-click creation, demo process steps
+  - Collaborate: Real-time collaboration (placeholder for now)
+  - Community Wall: Published projects, awards, community
+- Use real element selectors and highlight actual UI
+- Remove demo/example tour when real tour is ready
+- Make tour config-driven and user-dismissable
+- Polish overlay, step navigation, and progress indicators
+
+## Collaboration Feature
+- Add real-time collaboration for projects (placeholder for now)
+- UI for inviting collaborators and working together
+- Permissions and activity feed for collaboration
+
+---
+
+(Last updated: onboarding tour audit and future plan) 

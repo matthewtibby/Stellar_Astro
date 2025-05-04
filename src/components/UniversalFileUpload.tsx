@@ -1,9 +1,11 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { validateFitsFile, uploadRawFrame, type FitsValidationResult, getFilesByType, type StorageFile, getFitsFileUrl } from '@/src/utils/storage';
+import { validateFITSFile, validateFileBatch } from '@/src/utils/fileValidation';
+import { uploadRawFrame, type StorageFile, getFitsFileUrl, getFilesByType } from '@/src/utils/storage';
 import { File, AlertCircle, Info, Upload, X, Trash2, Eye, ChevronDown, ChevronUp } from 'lucide-react';
 import { type FileType } from '@/src/types/store';
 import { spaceFacts } from '@/src/utils/spaceFacts';
+import { handleError, ValidationError } from '@/src/utils/errorHandling';
 
 type StorageFileWithMetadata = StorageFile & { metadata?: any };
 
@@ -126,15 +128,27 @@ export function UniversalFileUpload({
       total: acceptedFiles.length
     })));
 
-    for (const file of acceptedFiles) {
-      try {
-        // Validate the FITS file
-        const validationResult = await validateFitsFile(file, projectId, userId);
-        if (!validationResult.valid) {
-          throw new Error(validationResult.message || 'Invalid FITS file');
+    try {
+      // Validate all files in batch
+      const validationResults = await validateFileBatch(acceptedFiles);
+      
+      // Process each file based on validation results
+      for (let i = 0; i < acceptedFiles.length; i++) {
+        const file = acceptedFiles[i];
+        const validationResult = validationResults[i];
+
+        if (!validationResult.isValid) {
+          throw new ValidationError(validationResult.errors.join(', '));
         }
 
-        const fileType = validationResult.actual_type as FileType || activeTab;
+        const fileType = validationResult.metadata.type as FileType || activeTab;
+
+        // Update status with warnings
+        setUploadStatuses(prev => prev.map(status => 
+          status.file === file 
+            ? { ...status, warnings: validationResult.warnings } 
+            : status
+        ));
 
         // Upload the file with the type determined from validation
         await uploadRawFrame(
@@ -163,7 +177,7 @@ export function UniversalFileUpload({
           const files = newFilesByType[fileType] || [];
           const newFile: StorageFileWithMetadata = {
             name: file.name,
-            path: validationResult.file_path || `${userId}/${projectId}/${fileType}/${file.name}`,
+            path: `${userId}/${projectId}/${fileType}/${file.name}`,
             type: fileType,
             created_at: new Date().toISOString(),
             size: file.size,
@@ -177,25 +191,27 @@ export function UniversalFileUpload({
         if (fileType !== activeTab) {
           setActiveTab(fileType);
         }
-
-      } catch (error) {
-        console.error('Upload error:', error);
-        setUploadStatuses(prev => prev.map(status => 
-          status.file === file 
-            ? { 
-                ...status, 
-                status: 'error', 
-                error: error instanceof Error ? error.message : 'Upload failed' 
-              } 
-            : status
-        ));
       }
-    }
 
-    setIsUploading(false);
-    setAbortController(null);
-    if (onUploadComplete) onUploadComplete();
-  }, [projectId, userId, activeTab, onUploadComplete]);
+      setIsUploading(false);
+      setAbortController(null);
+      if (onUploadComplete) onUploadComplete();
+    } catch (error) {
+      console.error('Upload error:', error);
+      const appError = handleError(error);
+      setUploadStatuses(prev => prev.map(status => 
+        status.status === 'uploading'
+          ? { 
+              ...status, 
+              status: 'error', 
+              error: appError.message 
+            } 
+          : status
+      ));
+      onValidationError?.(appError.message);
+      setIsUploading(false);
+    }
+  }, [projectId, userId, activeTab, onUploadComplete, onValidationError]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,

@@ -2,7 +2,8 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { getSupabaseClient } from '@/src/lib/supabase';
 import { createProject } from '@/src/utils/projects';
 import { uploadRawFrame } from '@/src/utils/storage';
-import fs from 'fs';
+import { readFile } from 'fs/promises';
+import { FileType } from '@/src/types/store';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -44,7 +45,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // Read the test.fits file
-    const fileBuffer = await fs.promises.readFile('test.fits');
+    const fileBuffer = await readFile('test.fits');
     const file = new File(
       [fileBuffer],
       'test.fits',
@@ -53,17 +54,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Upload the file
     console.log('Starting file upload...');
-    const filePath = await uploadRawFrame(
-      project.id,
-      'light',
+    await uploadRawFrame(
       file,
+      project.id,
+      'light' as FileType,
       (progress) => console.log(`Upload progress: ${Math.round(progress * 100)}%`)
     );
     
     return res.status(200).json({
       success: true,
-      message: 'File uploaded successfully',
-      filePath
+      message: 'File uploaded successfully'
     });
 
   } catch (error) {
