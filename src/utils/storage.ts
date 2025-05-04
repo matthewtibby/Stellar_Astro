@@ -223,6 +223,7 @@ export async function uploadRawFrame(
   fileType: FileType,
   onProgress?: (progress: number) => void
 ): Promise<void> {
+  console.log('uploadRawFrame called with:', { file, projectId, fileType });
   console.log('Starting upload for file:', file.name);
   
   try {

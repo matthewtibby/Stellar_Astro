@@ -5,8 +5,6 @@ import { getFilesByType, validateFitsFile, uploadRawFrame, getFitsFileUrl, delet
 import { File, Trash2, Download, Eye, RefreshCw, FolderOpen, Upload, AlertCircle, Info, ChevronDown, ChevronUp, X } from 'lucide-react';
 import { type FileType, type StorageFile } from '@/src/types/store';
 import { type FitsMetadata, type FitsValidationResult, type FitsAnalysisResult } from '@/src/types/fits';
-import { useDropzone } from 'react-dropzone';
-import Image from 'next/image';
 import { createBrowserClient } from '@supabase/ssr';
 
 // Add constant for initial file types
@@ -179,12 +177,7 @@ export default function FileManagementPanel({ projectId, onRefresh, onValidation
   const [files, setFiles] = useState<StorageFile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<UploadProgress>({});
-  const [selectedFiles, setSelectedFiles] = useState<SelectedFile[]>([]);
-  const [uploadError, setUploadError] = useState<string | null>(null);
   const [currentFile, setCurrentFile] = useState<string | null>(null);
-  const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [selectedFileMetadata, setSelectedFileMetadata] = useState<NonNullable<FitsValidationResult['metadata']> | null>(null);
   const [fileWarnings, setFileWarnings] = useState<FileWarnings>({});
   const [moveNotification, setMoveNotification] = useState<string | null>(null);
@@ -247,175 +240,6 @@ export default function FileManagementPanel({ projectId, onRefresh, onValidation
     getUser();
   }, [supabase]);
 
-  // Initialize file input refs
-  useEffect(() => {
-    try {
-      // Create a container div for the file inputs
-      const container = document.createElement('div');
-      container.style.display = 'none';
-      document.body.appendChild(container);
-      
-      // Create file inputs
-      INITIAL_FILE_TYPES.forEach(type => {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = '.fits,.fit,.FIT,.FITS,.RAW';
-        input.multiple = true;
-        input.dataset.fileType = type;
-        input.style.display = 'none';
-        
-        // Store the event handler in a variable so we can remove it later
-        const handleChange = (event: Event) => {
-          const changeEvent = event as unknown as React.ChangeEvent<HTMLInputElement>;
-          handleFileChange(type)(changeEvent);
-        };
-        
-        // Store the handler on the input for cleanup
-        (input as any).__changeHandler = handleChange;
-        input.addEventListener('change', handleChange);
-        
-        container.appendChild(input);
-        fileInputRefs.current[type] = input;
-      });
-    } catch (error) {
-    }
-    
-    // Cleanup function
-    return () => {
-      try {
-        // Remove all file inputs and their event listeners
-        INITIAL_FILE_TYPES.forEach(type => {
-          const input = fileInputRefs.current[type];
-          if (input) {
-            const handler = (input as any).__changeHandler;
-            if (handler) {
-              input.removeEventListener('change', handler);
-            }
-            fileInputRefs.current[type] = null;
-          }
-        });
-        
-        // Remove the container
-        const container = document.querySelector('div[style="display: none;"]');
-        if (container?.parentNode) {
-          container.parentNode.removeChild(container);
-        }
-      } catch (error) {
-      }
-    };
-  }, []); // Empty dependency array since we only want this to run once
-
-  const handleFileChange = useCallback((type: FileType) => async (event: React.ChangeEvent<HTMLInputElement>) => {
-    event.preventDefault();
-    
-    if (!userId) {
-      setUploadError('User not authenticated');
-      return;
-    }
-
-    const files = event.target.files;
-    if (!files || files.length === 0) {
-      setUploadError('No files selected');
-      return;
-    }
-
-    const fileList = Array.from(files);
-    const validFiles: File[] = [];
-    const errors: string[] = [];
-    let abortController = new AbortController();
-
-    try {
-      // Validate file types and sizes
-      for (const file of fileList) {
-        if (!file.name.toLowerCase().endsWith('.fits') && 
-            !file.name.toLowerCase().endsWith('.fit') &&
-            !file.name.toLowerCase().endsWith('.raw')) {
-          errors.push(`${file.name}: Unsupported file type`);
-          continue;
-        }
-
-        if (file.size > 100 * 1024 * 1024) { // 100MB limit
-          errors.push(`${file.name}: File too large (max 100MB)`);
-          continue;
-        }
-
-        try {
-          console.log('[validate-fits-debug] Calling validateFitsFile with expectedType:', type);
-          const validationResult = await validateFitsFile(file, projectId, userId, type || 'light');
-          
-          if (!validationResult.valid) {
-            errors.push(`${file.name}: ${validationResult.message}`);
-          } else {
-            validFiles.push(file);
-            if (validationResult.metadata) {
-              setSelectedFileMetadata(validationResult.metadata);
-            }
-            if (validationResult.warnings.length > 0) {
-              setFileWarnings(prev => ({
-                ...prev,
-                [file.name]: validationResult.warnings
-              }));
-            }
-          }
-        } catch (error) {
-          errors.push(`${file.name}: ${error instanceof Error ? error.message : 'Validation failed'}`);
-        }
-      }
-
-      if (errors.length > 0) {
-        const errorMessage = errors.join('\n');
-        setUploadError(errorMessage);
-        onValidationError?.(errorMessage);
-        return;
-      }
-
-      if (validFiles.length > 0) {
-        const newSelectedFiles = validFiles.map(file => ({ file, type }));
-        setSelectedFiles(newSelectedFiles);
-        
-        // Start upload immediately
-        setIsUploading(true);
-        setError(null);
-        setUploadProgress({});
-
-        for (const selectedFile of newSelectedFiles) {
-          if (abortController.signal.aborted) {
-            break;
-          }
-
-          try {
-            setCurrentFile(selectedFile.file.name);
-            const filePath = await uploadRawFrame(
-              selectedFile.file,
-              projectId,
-              selectedFile.type,
-              (progress) => {
-                setUploadProgress(prev => ({
-                  ...prev,
-                  [selectedFile.file.name]: progress
-                }));
-              }
-            );
-          } catch (error) {
-            setError(error instanceof Error ? error.message : 'Failed to upload file');
-            break;
-          }
-        }
-
-        // Refresh the file list after upload
-        await loadFiles();
-        if (onRefresh) onRefresh();
-      }
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Failed to upload files');
-    } finally {
-      setIsUploading(false);
-      setSelectedFiles([]);
-      setUploadProgress({});
-      abortController.abort();
-    }
-  }, [projectId, onRefresh, onValidationError, userId]);
-
   const loadFiles = async () => {
     if (!projectId) return;
     try {
@@ -452,74 +276,6 @@ export default function FileManagementPanel({ projectId, onRefresh, onValidation
   const handleRefresh = () => {
     loadFiles();
     if (onRefresh) onRefresh();
-  };
-
-  const handleUpload = async () => {
-    if (!selectedFiles.length) return;
-    const moveMessages: string[] = [];
-    // Create a new AbortController for this upload
-    const controller = new AbortController();
-    setAbortController(controller);
-
-    try {
-      if (!supabase) {
-        throw new Error('Supabase client not initialized');
-      }
-
-      // Get authenticated user first
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError || !user) {
-        throw new Error('User not authenticated');
-      }
-
-      setIsUploading(true);
-      setError(null);
-      setUploadProgress({});
-
-      for (const selectedFile of selectedFiles) {
-        try {
-          setCurrentFile(selectedFile.file.name);
-          await uploadRawFrame(
-            selectedFile.file,
-            projectId,
-            selectedFile.type,
-            (progress) => {
-              setUploadProgress(prev => ({
-                ...prev,
-                [selectedFile.file.name]: progress
-              }));
-            }
-          );
-        } catch (error) {
-          if (error instanceof Error && error.name === 'AbortError') {
-            setError('Upload cancelled');
-            break;
-          }
-          setError(error instanceof Error ? error.message : 'Failed to upload file');
-          break;
-        }
-      }
-
-      await loadFiles();
-      if (onRefresh) onRefresh();
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Failed to upload files');
-    } finally {
-      setIsUploading(false);
-      setSelectedFiles([]);
-      setUploadProgress({});
-      setAbortController(null);
-    }
-  };
-
-  const handleCancelUpload = () => {
-    if (abortController) {
-      abortController.abort();
-      setIsUploading(false);
-      setSelectedFiles([]);
-      setUploadProgress({});
-      setAbortController(null);
-    }
   };
 
   const handleDownload = async (file: StorageFile) => {
@@ -560,21 +316,6 @@ export default function FileManagementPanel({ projectId, onRefresh, onValidation
     'aligned': <FolderOpen className="h-4 w-4" />,
     'pre-processed': <FolderOpen className="h-4 w-4" />,
     'post-processed': <FolderOpen className="h-4 w-4" />
-  };
-
-  const handleUploadClick = (type: FileType) => {
-    try {
-      const input = fileInputRefs.current[type];
-      if (input) {
-        input.value = '';
-        input.click();
-      } else {
-        alert('File upload failed: Input element not found for type: ' + type);
-        setError('File upload failed: Input element not found');
-      }
-    } catch (error) {
-      alert('Error in handleUploadClick: ' + error);
-    }
   };
 
   const handleTypeClick = (type: FileType) => {
@@ -660,131 +401,6 @@ export default function FileManagementPanel({ projectId, onRefresh, onValidation
       setPreviewUrl(null);
     }
   };
-
-  // Add cleanup on component unmount
-  useEffect(() => {
-    return () => {
-      // Clean up any ongoing uploads
-      setSelectedFiles([]);
-      setUploadProgress({});
-      setIsUploading(false);
-    };
-  }, []);
-
-  const onDrop = useCallback(async (acceptedFiles: File[]) => {
-    setUploadError(null);
-    const validFiles: SelectedFile[] = [];
-    const errors: string[] = [];
-    const moveMessages: string[] = [];
-
-    // Create a new AbortController for this upload
-    const controller = new AbortController();
-    setAbortController(controller);
-
-    try {
-      if (!supabase) {
-        throw new Error('Supabase client not initialized');
-      }
-
-      // Get authenticated user first
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError || !user) {
-        throw new Error('User not authenticated');
-      }
-
-      for (const file of acceptedFiles) {
-        try {
-          console.log('[validate-fits-debug] Calling validateFitsFile with expectedType:', activeTab);
-          const validationResult = await validateFitsFile(file, projectId, user.id, activeTab || 'light');
-          console.log('[autosort-debug] File:', file.name, 'Expected:', activeTab, 'ValidationResult:', validationResult);
-          if (validationResult.valid) {
-            validFiles.push({ file, type: activeTab });
-            if (validationResult.metadata) {
-              setSelectedFileMetadata(validationResult.metadata);
-            }
-            if (validationResult.warnings.length > 0) {
-              setFileWarnings(prev => ({
-                ...prev,
-                [file.name]: validationResult.warnings
-              }));
-            }
-          } else if (
-            validationResult.actual_type &&
-            ['light', 'dark', 'bias', 'flat'].includes(validationResult.actual_type)
-          ) {
-            // Move to correct folder
-            validFiles.push({ file, type: validationResult.actual_type as FileType });
-            moveMessages.push(
-              `We noticed you uploaded a ${validationResult.actual_type} frame in the ${activeTab} tab. We've moved it to the ${validationResult.actual_type.charAt(0).toUpperCase() + validationResult.actual_type.slice(1)} tab for you.`
-            );
-          } else {
-            errors.push(`${file.name}: ${validationResult.message}`);
-          }
-        } catch (error) {
-          errors.push(`${file.name}: ${error instanceof Error ? error.message : 'Validation failed'}`);
-        }
-      }
-
-      if (errors.length > 0) {
-        const errorMessage = errors.join('\n');
-        setUploadError(errorMessage);
-        onValidationError?.(errorMessage);
-      }
-
-      if (moveMessages.length > 0) {
-        setMoveNotification(moveMessages.join(' '));
-      }
-
-      if (validFiles.length > 0) {
-        setSelectedFiles(validFiles);
-        setIsUploading(true);
-        setError(null);
-        setUploadProgress({});
-
-        for (const selectedFile of validFiles) {
-          try {
-            setCurrentFile(selectedFile.file.name);
-            await uploadRawFrame(
-              selectedFile.file,
-              projectId,
-              selectedFile.type,
-              (progress) => {
-                setUploadProgress(prev => ({
-                  ...prev,
-                  [selectedFile.file.name]: progress
-                }));
-              }
-            );
-          } catch (error) {
-            if (error instanceof Error && error.name === 'AbortError') {
-              setError('Upload cancelled');
-              break;
-            }
-            setError(error instanceof Error ? error.message : 'Failed to upload file');
-            break;
-          }
-        }
-
-        await loadFiles();
-        if (onRefresh) onRefresh();
-      }
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Failed to upload files');
-    } finally {
-      setIsUploading(false);
-      setSelectedFiles([]);
-      setUploadProgress({});
-      setAbortController(null);
-    }
-  }, [projectId, onRefresh, onValidationError, activeTab]);
-
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    accept: {
-      'application/fits': ['.fits', '.fit', '.FIT', '.FITS', '.RAW'],
-    },
-    multiple: true,
-  });
 
   // Update the file list rendering to handle null values
   const renderFileList = (files: StorageFile[]) => {
@@ -872,12 +488,6 @@ export default function FileManagementPanel({ projectId, onRefresh, onValidation
     );
   };
 
-  // Update the upload progress display
-  const getUploadProgress = (fileName: string | null): number => {
-    if (!fileName) return 0;
-    return uploadProgress[fileName] || 0;
-  };
-
   const FilePreview = ({ file, metadata, analysis }: { file: File; metadata: FitsMetadata; analysis?: FitsAnalysisResult }) => {
     return (
       <div className="p-4 space-y-4">
@@ -936,29 +546,6 @@ export default function FileManagementPanel({ projectId, onRefresh, onValidation
         </div>
       )}
       
-      {isUploading && (
-        <div className="p-4 bg-blue-900/50 text-blue-200 rounded-md border border-blue-800">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-200 border-t-transparent" />
-              <span>Uploading {currentFile}... {getUploadProgress(currentFile) ? Math.round(getUploadProgress(currentFile) * 100) : 0}%</span>
-            </div>
-            <button
-              onClick={handleCancelUpload}
-              className="px-3 py-1 text-sm bg-red-600 hover:bg-red-700 rounded-md transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
-          <div className="mt-2 w-full bg-gray-700 rounded-full h-2">
-            <div 
-              className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-              style={{ width: `${getUploadProgress(currentFile) ? Math.round(getUploadProgress(currentFile) * 100) : 0}%` }}
-            />
-          </div>
-        </div>
-      )}
-      
       {moveNotification && (
         <div className="p-4 bg-yellow-900/50 text-yellow-200 rounded-md border border-yellow-800">
           {moveNotification}
@@ -1014,24 +601,6 @@ export default function FileManagementPanel({ projectId, onRefresh, onValidation
 
             {/* Right column with file list and upload area */}
             <div className="flex-1 p-4">
-              {/* Drag and drop area */}
-              <div
-                {...getRootProps()}
-                className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors mb-4 ${
-                  isDragActive
-                    ? 'border-blue-500 bg-blue-500/10'
-                    : 'border-gray-700 hover:border-gray-600'
-                }`}
-              >
-                <input {...getInputProps()} />
-                <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
-                <p className="text-sm text-gray-400">
-                  {isDragActive
-                    ? 'Drop the files here...'
-                    : 'Drag and drop files here, or click to select files'}
-                </p>
-              </div>
-
               {/* Search bar - only show if there are files */}
               {hasLoadedFiles && filesByType[activeTab].length > 0 && (
                 <div className="mb-4">
