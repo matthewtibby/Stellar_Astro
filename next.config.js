@@ -28,8 +28,19 @@ const nextConfig = {
   env: {
     // Add any environment variables that need to be exposed to the browser
   },
-  // Server Actions are now available by default in Next.js 14
-  // No need to enable them in experimental
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        path: false,
+      };
+    }
+    return config;
+  },
+  experimental: {
+    serverComponentsExternalPackages: ['fs', 'fs/promises'],
+  }
 }
 
 module.exports = nextConfig 
