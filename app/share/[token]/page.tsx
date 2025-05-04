@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { getSupabaseClient } from '@/src/lib/supabase';
-import { toast } from 'react-hot-toast';
+import { useToast } from '../../../src/hooks/useToast';
 import { Loader2 } from 'lucide-react';
 
 export default function SharedProjectPage() {

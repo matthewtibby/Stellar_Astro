@@ -42,7 +42,7 @@ CREATE POLICY "Project owners can access their raw frames"
     bucket_id = 'raw-frames' AND
     EXISTS (
       SELECT 1 FROM projects
-      WHERE projects.id = (storage.foldername(name))[1]::uuid
+      WHERE projects.id = (storage.foldername(name))[2]::uuid
       AND projects.user_id = auth.uid()
     )
   );
@@ -53,7 +53,7 @@ CREATE POLICY "Project owners can upload raw frames"
     bucket_id = 'raw-frames' AND
     EXISTS (
       SELECT 1 FROM projects
-      WHERE projects.id = (storage.foldername(name))[1]::uuid
+      WHERE projects.id = (storage.foldername(name))[2]::uuid
       AND projects.user_id = auth.uid()
     )
   );
@@ -64,7 +64,7 @@ CREATE POLICY "Project owners can delete their raw frames"
     bucket_id = 'raw-frames' AND
     EXISTS (
       SELECT 1 FROM projects
-      WHERE projects.id = (storage.foldername(name))[1]::uuid
+      WHERE projects.id = (storage.foldername(name))[2]::uuid
       AND projects.user_id = auth.uid()
     )
   );

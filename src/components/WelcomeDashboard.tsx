@@ -1,12 +1,20 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
+import { Plus, ChevronRight } from 'lucide-react';
+import OnboardingTour from './OnboardingTour';
+import { projectTemplates, getTemplatesByCategory } from '@/src/utils/projectTemplates';
 
 interface WelcomeDashboardProps {
   userName?: string;
   onCreateProject: () => void;
-  onShowMeAround: () => void;
 }
 
-export default function WelcomeDashboard({ userName = "Astronomer", onCreateProject, onShowMeAround }: WelcomeDashboardProps) {
+const SHOW_DEMO_TOUR = false;
+
+export default function WelcomeDashboard({ userName = "Astronomer", onCreateProject }: WelcomeDashboardProps) {
+  const [showTour, setShowTour] = useState(true);
+  const templates = getTemplatesByCategory('deep-sky');
+
   return (
     <div className="relative min-h-screen bg-cover bg-center text-white" style={{ backgroundImage: "url('/images/milkyway.jpg')" }}>
       {/* Overlay for darkness */}
@@ -25,36 +33,50 @@ export default function WelcomeDashboard({ userName = "Astronomer", onCreateProj
             >
               + Create Your First Project
             </button>
-            <button
-              className="text-white underline hover:text-gray-300 text-base"
-              onClick={onShowMeAround}
-            >
-              Show Me Around
-            </button>
           </div>
         </div>
 
-        {/* Orion Onboarding Card */}
-        <div className="mt-10 w-full max-w-sm bg-white bg-opacity-10 backdrop-blur-md rounded-2xl p-6 shadow-lg">
-          <h2 className="text-xl font-semibold mb-4">Orion Onboarding</h2>
-          <ul className="space-y-3 text-white text-sm">
-            <li>🧭 Getting Started</li>
-            <li>📁 Create Project</li>
-            <li>🛠️ Explore Tools</li>
-            <li>🌌 Community Wall</li>
-          </ul>
+        {/* Project Templates */}
+        <div className="w-full max-w-4xl">
+          <h2 className="text-xl font-semibold mb-4">Project Templates</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {templates.map((template) => (
+              <div className="bg-white bg-opacity-10 backdrop-blur-md rounded-2xl p-6 shadow-lg">
+                <h3 className="text-lg font-semibold mb-2">{template.name}</h3>
+                <p className="text-gray-300 text-sm mb-4">{template.description}</p>
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center">
+                    <span className="text-gray-400 w-24">Telescope:</span>
+                    <span>{template.recommendedEquipment.telescope.model}</span>
+                  </div>
+                  <div className="flex items-center">
+                    <span className="text-gray-400 w-24">Camera:</span>
+                    <span>{template.recommendedEquipment.camera.model}</span>
+                  </div>
+                  <div className="flex items-center">
+                    <span className="text-gray-400 w-24">Exposure:</span>
+                    <span>{template.recommendedSettings.exposure}s</span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => onCreateProject()}
+                  className="mt-4 w-full flex items-center justify-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                >
+                  <span>Use Template</span>
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Floating Orion constellation (optional) */}
-        <motion.div
-          className="absolute top-10 right-10 opacity-80"
-          initial={{ y: -10 }}
-          animate={{ y: [0, 5, 0] }}
-          transition={{ duration: 6, repeat: Infinity }}
-        >
-          <img src="/images/orion-icon.png" alt="Orion Constellation" className="w-24 h-24" />
-        </motion.div>
+        <div className="absolute bottom-0 left-0 w-full h-32 bg-gradient-to-t from-black to-transparent" />
       </div>
+
+      {SHOW_DEMO_TOUR && showTour && (
+        <OnboardingTour />
+      )}
     </div>
   );
 } 

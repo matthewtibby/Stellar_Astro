@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import fs from 'fs/promises';
+import { readFitsFile } from '../src/utils/server/fileOperations.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -106,9 +106,9 @@ async function testUpload() {
       console.log('Created new project:', project);
     }
 
-    // Read the test.fits file
+    // Read the test.fits file using the server-side utility
     const filePath = path.join(__dirname, '..', 'test.fits');
-    const fileContent = await fs.readFile(filePath);
+    const fileContent = await readFitsFile(filePath);
     
     // Generate a unique file name
     const timestamp = new Date().getTime();

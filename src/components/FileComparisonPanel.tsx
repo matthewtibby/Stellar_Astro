@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { File, X, CheckCircle, AlertCircle, ChevronDown, ChevronRight } from 'lucide-react';
 import { getSupabaseClient } from '@/src/lib/supabase';
-import { toast } from 'react-hot-toast';
+import { useToast } from '../hooks/useToast';
 
 interface FileComparisonPanelProps {
   projectId: string;
@@ -35,6 +35,7 @@ export default function FileComparisonPanel({ projectId }: FileComparisonPanelPr
   const [comparisonResults, setComparisonResults] = useState<ComparisonResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [expandedResults, setExpandedResults] = useState<Record<string, boolean>>({});
+  const { addToast } = useToast();
 
   useEffect(() => {
     loadFiles();
@@ -57,7 +58,7 @@ export default function FileComparisonPanel({ projectId }: FileComparisonPanelPr
       setFiles(filesWithMetadata);
     } catch (error) {
       console.error('Error loading files:', error);
-      toast.error('Failed to load files');
+      addToast('error', 'Failed to load files');
     }
   };
 
@@ -128,7 +129,7 @@ export default function FileComparisonPanel({ projectId }: FileComparisonPanelPr
       setSelectedFiles([]);
     } catch (error) {
       console.error('Error comparing files:', error);
-      toast.error('Failed to compare files');
+      addToast('error', 'Failed to compare files');
     } finally {
       setIsLoading(false);
     }

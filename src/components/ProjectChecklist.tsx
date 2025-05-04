@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { CheckCircle, Circle, AlertCircle, ChevronDown, ChevronRight } from 'lucide-react';
 import { useProjectStore } from '@/src/store/project';
-import { toast } from 'react-hot-toast';
+import { useToast } from '../hooks/useToast';
 
 interface ProjectChecklistProps {
   projectId: string;
@@ -117,6 +117,7 @@ export default function ProjectChecklist({ projectId }: ProjectChecklistProps) {
     export: true
   });
   const { currentProject, updateProject } = useProjectStore();
+  const { addToast } = useToast();
 
   useEffect(() => {
     if (currentProject?.steps) {
@@ -153,10 +154,10 @@ export default function ProjectChecklist({ projectId }: ProjectChecklistProps) {
       }));
 
       await updateProject(projectId, { steps });
-      toast.success('Checklist updated');
+      addToast('success', 'Checklist updated');
     } catch (error) {
       console.error('Error updating checklist:', error);
-      toast.error('Failed to update checklist');
+      addToast('error', 'Failed to update checklist');
     }
   };
 

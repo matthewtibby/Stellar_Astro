@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Share2, Download, Upload, Copy, CheckCircle, X, Star, Tag, Trash, Copy as Duplicate, Archive } from 'lucide-react';
 import { useProjectStore } from '@/src/store/project';
 import { getSupabaseClient } from '@/src/lib/supabase';
-import { toast } from 'react-hot-toast';
+import { useToast } from '../hooks/useToast';
 
 interface ProjectManagementPanelProps {
   projectId: string;
@@ -34,6 +34,7 @@ export default function ProjectManagementPanel({ projectId }: ProjectManagementP
   const [shareLink, setShareLink] = useState<string | null>(null);
   const [isCopied, setIsCopied] = useState(false);
   const { currentProject, updateProject } = useProjectStore();
+  const { addToast } = useToast();
 
   const handleExport = async () => {
     if (!currentProject) return;
@@ -71,10 +72,10 @@ export default function ProjectManagementPanel({ projectId }: ProjectManagementP
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      toast.success('Project exported successfully');
+      addToast('success', 'Project exported successfully');
     } catch (error) {
       console.error('Export failed:', error);
-      toast.error('Failed to export project');
+      addToast('error', 'Failed to export project');
     } finally {
       setIsExporting(false);
     }
@@ -125,10 +126,10 @@ export default function ProjectManagementPanel({ projectId }: ProjectManagementP
             if (fileError) throw fileError;
           }
 
-          toast.success('Project imported successfully');
+          addToast('success', 'Project imported successfully');
         } catch (error) {
           console.error('Import failed:', error);
-          toast.error('Failed to import project');
+          addToast('error', 'Failed to import project');
         } finally {
           setIsImporting(false);
         }
@@ -136,7 +137,7 @@ export default function ProjectManagementPanel({ projectId }: ProjectManagementP
       reader.readAsText(file);
     } catch (error) {
       console.error('Import failed:', error);
-      toast.error('Failed to import project');
+      addToast('error', 'Failed to import project');
       setIsImporting(false);
     }
   };
@@ -165,10 +166,10 @@ export default function ProjectManagementPanel({ projectId }: ProjectManagementP
       // Update project to be public
       await updateProject(projectId, { isPublic: true });
       
-      toast.success('Project shared successfully');
+      addToast('success', 'Project shared successfully');
     } catch (error) {
       console.error('Share failed:', error);
-      toast.error('Failed to share project');
+      addToast('error', 'Failed to share project');
     }
   };
 
@@ -179,10 +180,10 @@ export default function ProjectManagementPanel({ projectId }: ProjectManagementP
       await navigator.clipboard.writeText(shareLink);
       setIsCopied(true);
       setTimeout(() => setIsCopied(false), 2000);
-      toast.success('Link copied to clipboard');
+      addToast('success', 'Link copied to clipboard');
     } catch (error) {
       console.error('Copy failed:', error);
-      toast.error('Failed to copy link');
+      addToast('error', 'Failed to copy link');
     }
   };
 
@@ -190,10 +191,10 @@ export default function ProjectManagementPanel({ projectId }: ProjectManagementP
     if (!currentProject) return;
     try {
       await updateProject(projectId, { isFavorite: !currentProject.isFavorite });
-      toast.success(`Project ${currentProject.isFavorite ? 'removed from' : 'added to'} favorites`);
+      addToast('success', `Project ${currentProject.isFavorite ? 'removed from' : 'added to'} favorites`);
     } catch (error) {
       console.error('Failed to update favorite status:', error);
-      toast.error('Failed to update favorite status');
+      addToast('error', 'Failed to update favorite status');
     }
   };
 
@@ -202,10 +203,10 @@ export default function ProjectManagementPanel({ projectId }: ProjectManagementP
     const tags = e.target.value.split(',').map(tag => tag.trim());
     try {
       await updateProject(projectId, { tags });
-      toast.success('Tags updated successfully');
+      addToast('success', 'Tags updated successfully');
     } catch (error) {
       console.error('Failed to update tags:', error);
-      toast.error('Failed to update tags');
+      addToast('error', 'Failed to update tags');
     }
   };
 
@@ -214,10 +215,10 @@ export default function ProjectManagementPanel({ projectId }: ProjectManagementP
     try {
       const newProject = { ...currentProject, id: undefined, name: `${currentProject.name} (Copy)` };
       await updateProject(projectId, newProject);
-      toast.success('Project duplicated successfully');
+      addToast('success', 'Project duplicated successfully');
     } catch (error) {
       console.error('Failed to duplicate project:', error);
-      toast.error('Failed to duplicate project');
+      addToast('error', 'Failed to duplicate project');
     }
   };
 
@@ -225,10 +226,10 @@ export default function ProjectManagementPanel({ projectId }: ProjectManagementP
     if (!currentProject) return;
     try {
       await updateProject(projectId, { status: 'archived' });
-      toast.success('Project archived successfully');
+      addToast('success', 'Project archived successfully');
     } catch (error) {
       console.error('Failed to archive project:', error);
-      toast.error('Failed to archive project');
+      addToast('error', 'Failed to archive project');
     }
   };
 
@@ -236,10 +237,10 @@ export default function ProjectManagementPanel({ projectId }: ProjectManagementP
     if (!currentProject) return;
     try {
       await updateProject(projectId, { status: 'deleted' });
-      toast.success('Project deleted successfully');
+      addToast('success', 'Project deleted successfully');
     } catch (error) {
       console.error('Failed to delete project:', error);
-      toast.error('Failed to delete project');
+      addToast('error', 'Failed to delete project');
     }
   };
 

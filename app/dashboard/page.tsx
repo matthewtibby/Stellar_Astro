@@ -27,7 +27,8 @@ import {
   LucideIcon,
   File,
   Folder,
-  Trash2
+  Trash2,
+  AlertCircle
 } from 'lucide-react';
 import Link from 'next/link';
 import TargetAutocomplete from '@/components/TargetAutocomplete';
@@ -289,10 +290,6 @@ const FileUploadSection = ({ projectId }: { projectId: string }) => {
   const userId = user?.id;
   console.log('FileUploadSection rendered with userId:', userId, 'isAuthenticated:', isAuthenticated, 'projectId:', projectId);
 
-  // Debug logging
-  console.log('FileUploadSection user:', user);
-  console.log('FileUploadSection isAuthenticated:', isAuthenticated);
-
   useEffect(() => {
     if (!projectId) {
       setValidationError('Please create a project first before uploading files.');
@@ -325,7 +322,10 @@ const FileUploadSection = ({ projectId }: { projectId: string }) => {
     <div className="space-y-4">
       {validationError && (
         <div className="p-4 bg-red-900/50 text-red-200 rounded-md border border-red-800">
-          {validationError}
+          <div className="flex items-center space-x-2">
+            <AlertCircle className="h-5 w-5" />
+            <span>{validationError}</span>
+          </div>
         </div>
       )}
       <UniversalFileUpload 
@@ -971,19 +971,12 @@ const DashboardPage = () => {
     );
   };
 
-  // Add handler for onboarding
-  const handleShowMeAround = () => {
-    // For now, just show an alert or placeholder
-    alert('Welcome to Stellar Astro! Here is a quick tour...');
-  };
-
   // Render WelcomeDashboard if no projects
   if (projects.length === 0 && !showNewProject) {
     return (
       <WelcomeDashboard
         userName={fullName || user?.email?.split('@')[0] || 'Astronomer'}
         onCreateProject={handleNewProject}
-        onShowMeAround={handleShowMeAround}
       />
     );
   }
