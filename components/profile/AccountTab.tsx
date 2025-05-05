@@ -6,6 +6,8 @@ import { UserState } from '@/src/types/store';
 import { Camera, Check, X } from 'lucide-react';
 import Image from 'next/image';
 import { User } from '@supabase/supabase-js';
+import { getSupabaseClient } from '@/src/lib/supabase';
+import { uploadProfilePicture } from '@/src/utils/storage';
 
 interface AccountTabProps {
   user: UserState | null;
@@ -51,9 +53,6 @@ export default function AccountTab({ user }: AccountTabProps) {
     setMessage(null);
 
     try {
-      // Here you would typically make API calls to update the user profile
-      // For now, we'll just update the local state
-      
       // Validate passwords if changing
       if (formData.newPassword) {
         if (formData.newPassword !== formData.confirmPassword) {
@@ -66,7 +65,53 @@ export default function AccountTab({ user }: AccountTabProps) {
         }
       }
 
-      // Update user data
+      const supabase = getSupabaseClient();
+      let avatarUrl = supabaseUser?.user_metadata?.avatar_url || '';
+      // If avatar was changed, upload it
+      if (avatarFile && supabaseUser?.id) {
+        avatarUrl = await uploadProfilePicture(supabaseUser.id, avatarFile);
+      }
+
+      // Debug logs
+      console.log('[AccountTab] Attempting profile update for user ID:', supabaseUser?.id);
+      console.log('[AccountTab] Update payload:', {
+        username: formData.username,
+        full_name: formData.fullName,
+        avatar_url: avatarUrl,
+        updated_at: new Date().toISOString(),
+      });
+
+      // Update profiles table
+      const { error: profileError, data: profileData } = await supabase
+        .from('profiles')
+        .update({
+          username: formData.username,
+          full_name: formData.fullName,
+          avatar_url: avatarUrl,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', supabaseUser?.id)
+        .select();
+
+      console.log('[AccountTab] Supabase update result:', { profileError, profileData });
+
+      if (profileError) {
+        setMessage({ type: 'error', text: 'Failed to update profile: ' + profileError.message });
+        return;
+      }
+
+      // If password was changed, update via Supabase Auth
+      if (formData.newPassword) {
+        const { error: pwError } = await supabase.auth.updateUser({
+          password: formData.newPassword,
+        });
+        if (pwError) {
+          setMessage({ type: 'error', text: 'Failed to update password: ' + pwError.message });
+          return;
+        }
+      }
+
+      // Update Zustand state
       const updatedUser = {
         ...supabaseUser,
         id: supabaseUser?.id || '',
@@ -74,23 +119,15 @@ export default function AccountTab({ user }: AccountTabProps) {
           ...supabaseUser?.user_metadata,
           username: formData.username,
           full_name: formData.fullName,
-          avatar_url: avatarPreview || supabaseUser?.user_metadata?.avatar_url
-        }
+          avatar_url: avatarUrl,
+        },
       } as User;
-
-      // If avatar was changed, upload it
-      if (avatarFile) {
-        // Here you would upload the file to your storage service
-        // For now, we'll just use the preview URL
-        updatedUser.user_metadata.avatar_url = avatarPreview || supabaseUser?.user_metadata?.avatar_url;
-      }
-
       setUser(updatedUser);
       setMessage({ type: 'success', text: 'Profile updated successfully' });
       setIsEditing(false);
-    } catch (error) {
-      setMessage({ type: 'error', text: 'Failed to update profile' });
-      console.error('Error updating profile:', error);
+    } catch (error: any) {
+      setMessage({ type: 'error', text: 'Failed to update profile: ' + (error?.message || error) });
+      console.error('[AccountTab] Error updating profile:', error);
     }
   };
 

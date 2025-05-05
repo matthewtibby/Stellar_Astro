@@ -13,7 +13,7 @@ interface SubscriptionTabProps {
 }
 
 export default function SubscriptionTab({ user }: SubscriptionTabProps) {
-  const { setUser, user: supabaseUser } = useUserStore();
+  const { setUser, user: supabaseUser, subscriptionLoading } = useUserStore();
   const { currency } = useCurrency();
   const [isPaused, setIsPaused] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
@@ -102,6 +102,14 @@ export default function SubscriptionTab({ user }: SubscriptionTabProps) {
       console.error('Error cancelling subscription:', error);
     }
   };
+
+  if (subscriptionLoading) {
+    return (
+      <div className="flex justify-center items-center min-h-32 text-white text-lg">
+        Loading subscription details...
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -192,68 +200,22 @@ export default function SubscriptionTab({ user }: SubscriptionTabProps) {
           </div>
         )}
       </div>
-      {/* Hide upgrade options for Super users */}
-      {!isPro && !isSuper && (
-        <div className="bg-slate-800/50 rounded-lg p-6 border border-gray-700">
-          <h3 className="text-lg font-medium text-white mb-4">Upgrade Your Plan</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {!isPro && (
-              <div className="border border-gray-700 rounded-lg p-4">
-                <h4 className="text-white font-medium">Pro Monthly</h4>
-                <p className="text-2xl font-bold text-white mt-2">{formatPrice(pricing['pro-monthly'], currency)}<span className="text-sm text-gray-400">/month</span></p>
-                <ul className="mt-4 space-y-2">
-                  <li className="flex items-start text-sm text-gray-300">
-                    <Check className="h-4 w-4 text-green-500 shrink-0 mt-0.5 mr-2" />
-                    <span>Up to 50 active projects</span>
-                  </li>
-                  <li className="flex items-start text-sm text-gray-300">
-                    <Check className="h-4 w-4 text-green-500 shrink-0 mt-0.5 mr-2" />
-                    <span>Advanced processing features</span>
-                  </li>
-                  <li className="flex items-start text-sm text-gray-300">
-                    <Check className="h-4 w-4 text-green-500 shrink-0 mt-0.5 mr-2" />
-                    <span>Priority support</span>
-                  </li>
-                </ul>
-                <button
-                  onClick={() => handleUpgrade('pro-monthly')}
-                  className="mt-4 w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-                >
-                  Upgrade to Pro
-                </button>
-              </div>
-            )}
-            
-            {!isPro && (
-              <div className="border border-gray-700 rounded-lg p-4">
-                <h4 className="text-white font-medium">Pro Annual</h4>
-                <p className="text-2xl font-bold text-white mt-2">{formatPrice(pricing['pro-annual'], currency)}<span className="text-sm text-gray-400">/year</span></p>
-                <p className="text-green-400 text-sm">Save 33% compared to monthly</p>
-                <ul className="mt-4 space-y-2">
-                  <li className="flex items-start text-sm text-gray-300">
-                    <Check className="h-4 w-4 text-green-500 shrink-0 mt-0.5 mr-2" />
-                    <span>All Pro Monthly features</span>
-                  </li>
-                  <li className="flex items-start text-sm text-gray-300">
-                    <Check className="h-4 w-4 text-green-500 shrink-0 mt-0.5 mr-2" />
-                    <span>2 months free</span>
-                  </li>
-                  <li className="flex items-start text-sm text-gray-300">
-                    <Check className="h-4 w-4 text-green-500 shrink-0 mt-0.5 mr-2" />
-                    <span>Extended storage retention</span>
-                  </li>
-                </ul>
-                <button
-                  onClick={() => handleUpgrade('pro-annual')}
-                  className="mt-4 w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-                >
-                  Upgrade to Pro Annual
-                </button>
-              </div>
-            )}
-          </div>
+
+      {/* Upgrade options - greyed out and disabled for Super users */}
+      <div className={`mt-8 grid grid-cols-1 md:grid-cols-2 gap-6 ${isSuper ? 'opacity-50 pointer-events-none' : ''}`}>
+        <div className="bg-slate-800/50 rounded-lg p-6 border border-gray-700 flex flex-col">
+          <h4 className="text-lg font-semibold text-white mb-2">Pro Monthly</h4>
+          <p className="text-gray-400 mb-4">Up to 50 active projects, advanced features, priority support</p>
+          <p className="text-white font-bold text-2xl mb-4">£15.00<span className="text-base font-normal">/month</span></p>
+          <button className="px-4 py-2 rounded bg-blue-600 text-white font-semibold disabled:opacity-50" disabled={isSuper}>Upgrade to Pro</button>
         </div>
-      )}
+        <div className="bg-slate-800/50 rounded-lg p-6 border border-gray-700 flex flex-col">
+          <h4 className="text-lg font-semibold text-white mb-2">Pro Annual</h4>
+          <p className="text-gray-400 mb-4">All Pro Monthly features, 2 months free, extended storage retention</p>
+          <p className="text-white font-bold text-2xl mb-4">£120.00<span className="text-base font-normal">/year</span></p>
+          <button className="px-4 py-2 rounded bg-blue-600 text-white font-semibold disabled:opacity-50" disabled={isSuper}>Upgrade to Pro Annual</button>
+        </div>
+      </div>
 
       {/* Cancel Confirmation Modal */}
       {showCancelConfirm && (

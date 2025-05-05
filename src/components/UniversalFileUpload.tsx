@@ -14,6 +14,9 @@ interface UniversalFileUploadProps {
   userId: string;
   onUploadComplete?: () => void;
   onValidationError?: (error: string) => void;
+  onStepAutosave?: () => void;
+  isSavingStep?: boolean;
+  onSaveAndExit?: () => void;
 }
 
 interface UploadStatus {
@@ -32,7 +35,10 @@ export function UniversalFileUpload({
   projectId, 
   userId,
   onUploadComplete,
-  onValidationError 
+  onValidationError,
+  onStepAutosave,
+  isSavingStep,
+  onSaveAndExit
 }: UniversalFileUploadProps) {
   console.log('UniversalFileUpload rendered with userId:', userId, 'projectId:', projectId);
   const [uploadStatuses, setUploadStatuses] = useState<UploadStatus[]>([]);
@@ -40,6 +46,7 @@ export function UniversalFileUpload({
   const [moveNotification, setMoveNotification] = useState<string | null>(null);
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [activeTab, setActiveTab] = useState<FileType>('light');
+  const [viewAll, setViewAll] = useState(false);
   const [filesByType, setFilesByType] = useState<Record<FileType, StorageFileWithMetadata[]>>({
     'light': [],
     'dark': [],
@@ -135,13 +142,15 @@ export function UniversalFileUpload({
       // Process each file based on validation results
       for (let i = 0; i < acceptedFiles.length; i++) {
         const file = acceptedFiles[i];
-        const validationResult = validationResults[i];
+        const validationResult = validationResults.get(file.name);
 
-        if (!validationResult.isValid) {
-          throw new ValidationError(validationResult.errors.join(', '));
+        if (!validationResult || !validationResult.isValid) {
+          throw new ValidationError(
+            validationResult && validationResult.warnings ? validationResult.warnings.join(', ') : 'File validation failed.'
+          );
         }
 
-        const fileType = validationResult.metadata.type as FileType || activeTab;
+        const fileType = validationResult.metadata.frameType as FileType || activeTab;
 
         // Update status with warnings
         setUploadStatuses(prev => prev.map(status => 
@@ -196,6 +205,14 @@ export function UniversalFileUpload({
       setIsUploading(false);
       setAbortController(null);
       if (onUploadComplete) onUploadComplete();
+      if (onStepAutosave) onStepAutosave();
+      // Re-fetch files from backend to ensure UI is up to date
+      try {
+        const latestFiles = await getFilesByType(projectId);
+        setFilesByType(latestFiles);
+      } catch (fetchError) {
+        console.error('Error fetching files after upload:', fetchError);
+      }
     } catch (error) {
       console.error('Upload error:', error);
       const appError = handleError(error);
@@ -211,7 +228,7 @@ export function UniversalFileUpload({
       onValidationError?.(appError.message);
       setIsUploading(false);
     }
-  }, [projectId, userId, activeTab, onUploadComplete, onValidationError]);
+  }, [projectId, userId, activeTab, onUploadComplete, onValidationError, onStepAutosave]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -318,9 +335,17 @@ export function UniversalFileUpload({
         {['light', 'dark', 'bias', 'flat'].map((type) => (
           <button
             key={type}
-            onClick={() => setActiveTab(type as FileType)}
+            onClick={() => {
+              if (activeTab === type && !viewAll) {
+                setViewAll(true);
+                setActiveTab('light'); // default, but ignored in viewAll mode
+              } else {
+                setActiveTab(type as FileType);
+                setViewAll(false);
+              }
+            }}
             className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              activeTab === type
+              activeTab === type && !viewAll
                 ? 'bg-blue-600 text-white'
                 : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
             }`}
@@ -331,6 +356,14 @@ export function UniversalFileUpload({
             </span>
           </button>
         ))}
+        <button
+          onClick={() => setViewAll(true)}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            viewAll ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+          }`}
+        >
+          View All
+        </button>
       </div>
 
       {/* Upload Area */}
@@ -352,68 +385,115 @@ export function UniversalFileUpload({
         <p className="text-sm text-gray-500">
           Supported formats: .fits, .fit, .FIT, .FITS, .RAW
         </p>
+        {/* Inline autosave indicator */}
+        {typeof isSavingStep !== 'undefined' && (
+          <div className="flex items-center justify-center mt-2">
+            {isSavingStep ? (
+              <span className="flex items-center text-blue-400 text-sm"><svg className="animate-spin h-4 w-4 mr-1" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>Autosaving...</span>
+            ) : (
+              <span className="flex items-center text-green-400 text-sm"><svg className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>Saved</span>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* File List for Active Tab */}
+      {/* File List for Active Tab or All */}
       <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-700">
         <h3 className="text-lg font-medium text-white mb-4">
-          {activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} Frames
+          {viewAll
+            ? 'All Frames'
+            : `${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} Frames`}
           <span className="ml-2 text-sm text-gray-400">
-            ({filesByType[activeTab]?.length || 0} files)
+            {viewAll
+              ? `(${Object.values(filesByType).flat().length} files)`
+              : `(${filesByType[activeTab]?.length || 0} files)`}
           </span>
         </h3>
+        {viewAll && (
+          <div className="mb-2 p-2 bg-blue-900/30 text-blue-200 rounded text-sm text-center">
+            Viewing all frames across all types
+          </div>
+        )}
         <div className="space-y-2">
-          {filesByType[activeTab]?.map((file) => (
-            <div 
-              key={file.path} 
-              className="flex items-center p-2 bg-gray-700/50 rounded hover:bg-gray-700/70 group"
-            >
-              {/* File Name */}
-              <span className="text-sm text-gray-300 truncate max-w-xs" title={file.name}>{file.name}</span>
-              {/* Upload date */}
-              <span className="text-xs text-gray-500 ml-2">
-                {new Date(file.created_at).toLocaleDateString()}
-              </span>
-              {/* Action Icons - right aligned */}
-              <div className="flex items-center space-x-2 ml-auto">
-                {/* Preview Icon/Button */}
-                <button
-                  className="text-gray-400 hover:text-blue-400 flex items-center space-x-1 px-2 py-1 rounded hover:bg-gray-700 transition"
-                  onClick={() => handlePreview(file)}
-                  title="Preview"
-                >
-                  <Eye className="h-4 w-4" />
-                  <span className="hidden sm:inline">Preview</span>
-                </button>
-                {/* Info Icon with Tooltip/Popover */}
-                <button
-                  className="ml-2 text-gray-400 hover:text-blue-400 flex items-center"
-                  onClick={() => toggleFileExpansion(file.name)}
-                  title="Show metadata"
-                >
-                  {expandedFiles[file.name] ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                  <span className="ml-1">Metadata</span>
-                </button>
-                {/* Delete Icon (Trash) */}
-                <button
-                  className="text-gray-400 hover:text-red-500"
-                  onClick={() => handleDelete(file)}
-                  title="Delete file"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
-              {/* Collapsible metadata section */}
-              {expandedFiles[file.name] && (
-                <div className="bg-gray-900 p-3 rounded mt-2">
-                  {renderMetadataTable(file)}
+          {(viewAll
+            ? Object.entries(filesByType).flatMap(([type, files]) =>
+                files.map(file => ({ ...file, type: type as FileType }))
+              )
+            // Sort by frame type group, then by date (newest first)
+            .sort((a, b) => {
+              const typeOrder = ['light', 'dark', 'bias', 'flat'];
+              const aIndex = typeOrder.indexOf(a.type);
+              const bIndex = typeOrder.indexOf(b.type);
+              if (aIndex !== -1 && bIndex !== -1) {
+                if (aIndex !== bIndex) return aIndex - bIndex;
+              } else if (aIndex !== -1) {
+                return -1;
+              } else if (bIndex !== -1) {
+                return 1;
+              }
+              // If same type or both not in the main group, sort by date
+              return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+            })
+            : filesByType[activeTab] || []
+          )
+            .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+            .map((file) => (
+              <div 
+                key={file.path} 
+                className="flex items-center p-2 bg-gray-700/50 rounded hover:bg-gray-700/70 group"
+              >
+                {/* File Name */}
+                <span className="text-sm text-gray-300 truncate max-w-xs" title={file.name}>{file.name}</span>
+                {/* File Type (if viewAll) */}
+                {viewAll && (
+                  <span className="ml-2 px-2 py-0.5 rounded bg-gray-900 text-xs text-blue-300 border border-blue-700">
+                    {file.type}
+                  </span>
+                )}
+                {/* Upload date */}
+                <span className="text-xs text-gray-500 ml-2">
+                  {new Date(file.created_at).toLocaleDateString()}
+                </span>
+                {/* Action Icons - right aligned */}
+                <div className="flex items-center space-x-2 ml-auto">
+                  {/* Preview Icon/Button */}
+                  <button
+                    className="text-gray-400 hover:text-blue-400 flex items-center space-x-1 px-2 py-1 rounded hover:bg-gray-700 transition"
+                    onClick={() => handlePreview(file)}
+                    title="Preview"
+                  >
+                    <Eye className="h-4 w-4" />
+                    <span className="hidden sm:inline">Preview</span>
+                  </button>
+                  {/* Info Icon with Tooltip/Popover */}
+                  <button
+                    className="ml-2 text-gray-400 hover:text-blue-400 flex items-center"
+                    onClick={() => toggleFileExpansion(file.name)}
+                    title="Show metadata"
+                  >
+                    {expandedFiles[file.name] ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    <span className="ml-1">Metadata</span>
+                  </button>
+                  {/* Delete Icon (Trash) */}
+                  <button
+                    className="text-gray-400 hover:text-red-500"
+                    onClick={() => handleDelete(file)}
+                    title="Delete file"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
                 </div>
-              )}
-            </div>
-          ))}
-          {(!filesByType[activeTab] || filesByType[activeTab].length === 0) && (
+                {/* Collapsible metadata section */}
+                {expandedFiles[file.name] && (
+                  <div className="bg-gray-900 p-3 rounded mt-2">
+                    {renderMetadataTable(file)}
+                  </div>
+                )}
+              </div>
+            ))}
+          {((viewAll && Object.values(filesByType).flat().length === 0) || (!viewAll && (!filesByType[activeTab] || filesByType[activeTab].length === 0))) && (
             <p className="text-sm text-gray-400 text-center py-4">
-              No {activeTab} frames uploaded yet
+              No {viewAll ? 'frames' : activeTab + ' frames'} uploaded yet
             </p>
           )}
         </div>
@@ -514,6 +594,15 @@ export function UniversalFileUpload({
           </div>
         </div>
       )}
+      {/* Save and Exit Button */}
+      <div className="flex justify-end mt-6">
+        <button
+          className="px-6 py-2 bg-blue-600 text-white rounded-md font-semibold shadow hover:bg-blue-700 transition disabled:opacity-60"
+          onClick={onSaveAndExit}
+        >
+          Save and Exit
+        </button>
+      </div>
     </div>
   );
 } 

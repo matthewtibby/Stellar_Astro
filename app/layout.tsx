@@ -4,6 +4,10 @@ import './globals.css'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 import { CurrencyProvider } from '@/components/CurrencyProvider'
+import { ToastProvider } from '@/src/hooks/useToast'
+import ToastContainer from '@/src/components/ToastContainer'
+import ClientProviders from './ClientProviders'
+import AuthSync from '@/components/AuthSync'
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 const plusJakartaSans = Plus_Jakarta_Sans({ 
@@ -25,11 +29,14 @@ export default function RootLayout({
     <html lang="en" className={`${inter.variable} ${plusJakartaSans.variable} h-full`}>
       <body className={`${inter.className} min-h-full flex flex-col font-sans bg-black`}>
         <CurrencyProvider>
-          <Header />
-          <main className="flex-grow">
-            {children}
-          </main>
-          <Footer />
+          <ClientProviders>
+            <AuthSync />
+            <Header />
+            <main className="flex-grow">
+              {children}
+            </main>
+            <Footer />
+          </ClientProviders>
         </CurrencyProvider>
       </body>
     </html>
