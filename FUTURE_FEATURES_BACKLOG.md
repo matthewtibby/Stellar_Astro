@@ -61,6 +61,50 @@
 - UI for inviting collaborators and working together
 - Permissions and activity feed for collaboration
 
+## Dashboard Features Backlog (from dashboard_features_reference.md)
+
+### Must Have
+- Drag-and-drop upload
+  - Status: Backlog
+  - Description: Allow users to drag and drop files directly into the upload area for convenience.
+- Batch progress indicator
+  - Status: Backlog
+  - Description: Show progress for all files in a batch upload, not just individual files.
+- FITS header validation/feedback
+  - Status: Backlog
+  - Description: Validate FITS headers on upload and provide user feedback if required fields are missing or malformed.
+
+### Should Have
+- Privacy/collaborator options
+  - Status: Backlog (Partial)
+  - Description: Add UI and backend support for setting project privacy and managing collaborators.
+- Thumbnails/previews
+  - Status: Backlog (Partial)
+  - Description: Show image thumbnails or quick previews for uploaded files in the dashboard.
+
+### Nice to Have
+- Activity feed
+  - Status: Backlog (Partial)
+  - Description: Show a feed of recent project and file activity, including uploads, edits, and comments.
+- Notifications/alerts
+  - Status: Backlog (Partial)
+  - Description: In-app notification center for project events, uploads, and collaboration.
+- At-a-glance stats
+  - Status: Backlog
+  - Description: Display quick stats (total projects, images, storage, etc.) on the dashboard.
+- File organization (folders/tags)
+  - Status: Backlog
+  - Description: Support organizing files by folders and tags, with filtering/searching UI.
+- Upload speed/ETA display
+  - Status: Backlog
+  - Description: Show real-time upload speed and estimated time remaining during uploads.
+- Equipment auto-detection
+  - Status: Backlog
+  - Description: Automatically detect telescope/camera/filter info from FITS headers or metadata.
+- "Import from previous" option
+  - Status: Backlog
+  - Description: Let users import settings, templates, or files from a previous project when creating a new one.
+
 ---
 
 (Last updated: onboarding tour audit and future plan) 
