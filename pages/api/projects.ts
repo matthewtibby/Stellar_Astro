@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getSupabaseClient } from '@/src/lib/supabase';
+import { sendNotification } from '@/src/utils/sendNotification';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -32,8 +33,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .single();
 
     if (projectError) {
+      await sendNotification({
+        req,
+        eventType: 'project_created',
+        type: 'error',
+        message: `Project creation failed: ${projectError.message}`,
+      });
       return res.status(500).json({ message: projectError.message || 'Failed to create project' });
     }
+
+    await sendNotification({
+      req,
+      eventType: 'project_created',
+      type: 'success',
+      message: `Project "${name}" created successfully!`,
+    });
+
+    // TODO: Add notification logic for collaborator_changed, added_as_collaborator, invite_accepted, removed_from_project events when those actions are implemented
 
     return res.status(200).json(project);
   } catch (error) {

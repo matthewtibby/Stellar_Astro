@@ -1,5 +1,6 @@
 import { getSupabaseClient as getSupabaseClientLib } from '../lib/supabase';
 import { FileType } from '@/src/types/store';
+import { extractTagsFromFitsHeader } from './fileTagging';
 
 // Storage bucket names
 export const STORAGE_BUCKETS = {
@@ -245,6 +246,9 @@ export async function uploadRawFrame(
       throw new Error(validationResult.message || 'Invalid FITS file');
     }
 
+    // Extract tags from FITS header metadata
+    const tags = extractTagsFromFitsHeader(validationResult.metadata || {});
+
     // Get the actual file type and path from validation
     const actualFileType = validationResult.actual_type || fileType;
     const filePath = `${user.id}/${projectId}/${actualFileType}/${file.name}`;
@@ -335,6 +339,24 @@ export async function uploadRawFrame(
         }
 
         console.log('File uploaded and verified successfully to:', filePath);
+
+        // Insert file record into project_files with tags
+        const { error: insertError } = await getSupabaseClientLib()
+          .from('project_files')
+          .insert({
+            project_id: projectId,
+            user_id: user.id,
+            file_type: actualFileType,
+            file_path: filePath,
+            file_size: file.size,
+            metadata: validationResult.metadata,
+            tags: tags,
+            created_at: new Date().toISOString(),
+          });
+        if (insertError) {
+          throw new Error('Failed to insert file record: ' + insertError.message);
+        }
+
         break; // Exit the retry loop on success
       } catch (error) {
         console.error(`Attempt ${attempt} failed:`, error);

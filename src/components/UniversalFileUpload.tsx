@@ -6,6 +6,7 @@ import { File, AlertCircle, Info, Upload, X, Trash2, Eye, ChevronDown, ChevronUp
 import { type FileType } from '@/src/types/store';
 import { spaceFacts } from '@/src/utils/spaceFacts';
 import { handleError, ValidationError } from '@/src/utils/errorHandling';
+import { useToast } from '../hooks/useToast';
 
 type StorageFileWithMetadata = StorageFile & { metadata?: any };
 
@@ -67,6 +68,9 @@ export function UniversalFileUpload({
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [expandedFiles, setExpandedFiles] = useState<Record<string, boolean>>({});
+  const { addToast } = useToast();
+  const [renamingFile, setRenamingFile] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
 
   // Function to save files to localStorage
   const saveFilesToLocalStorage = useCallback((files: Record<FileType, StorageFileWithMetadata[]>) => {
@@ -328,6 +332,82 @@ export function UniversalFileUpload({
     );
   }
 
+  // Add retry logic
+  const retryUpload = async (file: File, fileType: FileType, index: number, total: number) => {
+    setUploadStatuses(prev => prev.map(status =>
+      status.file === file ? { ...status, status: 'uploading', progress: 0, error: undefined } : status
+    ));
+    try {
+      // Validate file
+      const validationResult = await validateFITSFile(file);
+      if (!validationResult.isValid) {
+        throw new ValidationError(validationResult.warnings ? validationResult.warnings.join(', ') : 'File validation failed.');
+      }
+      // Upload file
+      await uploadRawFrame(
+        file,
+        projectId,
+        fileType,
+        (progress) => {
+          setUploadStatuses(prev => prev.map(status =>
+            status.file === file ? { ...status, progress } : status
+          ));
+        }
+      );
+      setUploadStatuses(prev => prev.map(status =>
+        status.file === file ? { ...status, status: 'completed', progress: 1 } : status
+      ));
+      // Update filesByType
+      setFilesByType(prevFilesByType => {
+        const newFilesByType = { ...prevFilesByType };
+        const files = newFilesByType[fileType] || [];
+        const newFile: StorageFileWithMetadata = {
+          name: file.name,
+          path: `${userId}/${projectId}/${fileType}/${file.name}`,
+          type: fileType,
+          created_at: new Date().toISOString(),
+          size: file.size,
+          metadata: validationResult.metadata
+        };
+        newFilesByType[fileType] = [...files, newFile];
+        return newFilesByType;
+      });
+    } catch (error) {
+      const appError = handleError(error);
+      setUploadStatuses(prev => prev.map(status =>
+        status.file === file ? { ...status, status: 'error', error: appError.message } : status
+      ));
+      onValidationError?.(appError.message);
+    }
+  };
+
+  const retryAllFailed = () => {
+    uploadStatuses.filter(s => s.status === 'error').forEach(status => {
+      retryUpload(status.file, status.type || activeTab, status.index, status.total);
+    });
+  };
+
+  // Add rename handler
+  const handleRename = async (file: StorageFileWithMetadata, newName: string) => {
+    try {
+      // Update in filesByType (local only for now)
+      setFilesByType(prev => {
+        const newFilesByType = { ...prev };
+        const files = newFilesByType[file.type] || [];
+        const updatedFiles = files.map(f =>
+          f.path === file.path ? { ...f, name: newName, path: f.path.replace(file.name, newName) } : f
+        );
+        newFilesByType[file.type] = updatedFiles;
+        return newFilesByType;
+      });
+      setRenamingFile(null);
+      addToast('success', 'File renamed locally');
+      // TODO: Update in backend if supported
+    } catch (error) {
+      addToast('error', 'Failed to rename file');
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* File Type Tabs */}
@@ -442,8 +522,28 @@ export function UniversalFileUpload({
                 key={file.path} 
                 className="flex items-center p-2 bg-gray-700/50 rounded hover:bg-gray-700/70 group"
               >
-                {/* File Name */}
-                <span className="text-sm text-gray-300 truncate max-w-xs" title={file.name}>{file.name}</span>
+                {/* File Name or Rename Input */}
+                {renamingFile === file.path ? (
+                  <form
+                    onSubmit={e => {
+                      e.preventDefault();
+                      handleRename(file, renameValue);
+                    }}
+                    className="flex items-center gap-2"
+                  >
+                    <input
+                      type="text"
+                      value={renameValue}
+                      onChange={e => setRenameValue(e.target.value)}
+                      className="px-2 py-1 rounded bg-gray-900 text-white border border-gray-700 text-sm"
+                      autoFocus
+                    />
+                    <button type="submit" className="px-2 py-1 bg-blue-700 text-white rounded hover:bg-blue-800 text-xs">Save</button>
+                    <button type="button" className="px-2 py-1 bg-gray-700 text-white rounded hover:bg-gray-800 text-xs" onClick={() => setRenamingFile(null)}>Cancel</button>
+                  </form>
+                ) : (
+                  <span className="text-sm text-gray-300 truncate max-w-xs" title={file.name}>{file.name}</span>
+                )}
                 {/* File Type (if viewAll) */}
                 {viewAll && (
                   <span className="ml-2 px-2 py-0.5 rounded bg-gray-900 text-xs text-blue-300 border border-blue-700">
@@ -473,6 +573,14 @@ export function UniversalFileUpload({
                   >
                     {expandedFiles[file.name] ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                     <span className="ml-1">Metadata</span>
+                  </button>
+                  {/* Rename Icon */}
+                  <button
+                    className="text-gray-400 hover:text-yellow-400"
+                    onClick={() => { setRenamingFile(file.path); setRenameValue(file.name); }}
+                    title="Rename file"
+                  >
+                    <Info className="h-4 w-4" />
                   </button>
                   {/* Delete Icon (Trash) */}
                   <button
@@ -526,10 +634,26 @@ export function UniversalFileUpload({
                 />
               </div>
               {status.status === 'error' && (
-                <p className="text-xs text-red-400 mt-1">{status.error}</p>
+                <div className="flex items-center mt-1">
+                  <p className="text-xs text-red-400 flex-1">{status.error}</p>
+                  <button
+                    className="ml-2 px-2 py-1 bg-blue-700 text-white rounded hover:bg-blue-800 text-xs"
+                    onClick={() => retryUpload(status.file, status.type || activeTab, status.index, status.total)}
+                  >
+                    Retry
+                  </button>
+                </div>
               )}
             </div>
           ))}
+          {uploadStatuses.some(s => s.status === 'error') && (
+            <button
+              className="mt-2 px-4 py-2 bg-blue-700 text-white rounded hover:bg-blue-800 text-sm"
+              onClick={retryAllFailed}
+            >
+              Retry All Failed
+            </button>
+          )}
         </div>
       )}
 

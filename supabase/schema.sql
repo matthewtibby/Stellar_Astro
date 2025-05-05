@@ -191,6 +191,20 @@ create table likes (
   unique(user_id, post_id)
 );
 
+-- Activity log for user/project events
+create table if not exists activity_log (
+  id uuid default uuid_generate_v4() primary key,
+  user_id uuid references profiles(id) on delete cascade not null,
+  project_id uuid references projects(id) on delete cascade,
+  type text not null, -- e.g., 'project', 'file', 'workflow', 'system', 'collaboration'
+  action text not null, -- e.g., 'created', 'uploaded', 'deleted', 'renamed', 'completed', 'invited'
+  details jsonb,
+  timestamp timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+create index if not exists idx_activity_log_user_id on activity_log(user_id);
+create index if not exists idx_activity_log_project_id on activity_log(project_id);
+
 -- Grant necessary permissions to authenticated users
 grant usage on schema public to authenticated;
 grant all on all tables in schema public to authenticated;
@@ -426,4 +440,34 @@ create trigger handle_updated_at
 
 create trigger handle_updated_at
   before update on comments
-  for each row execute procedure public.handle_updated_at(); 
+  for each row execute procedure public.handle_updated_at();
+
+-- Persistent notifications for in-app notification center
+create table if not exists notifications (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid references profiles(id) on delete cascade not null,
+  type text not null, -- 'success', 'error', 'info', 'warning'
+  message text not null,
+  data jsonb,
+  read boolean default false,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+create index if not exists idx_notifications_user_id on notifications(user_id);
+create index if not exists idx_notifications_read on notifications(read);
+
+-- Folders for file organization
+create table if not exists folders (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid references profiles(id) on delete cascade not null,
+  project_id uuid references projects(id) on delete cascade not null,
+  name text not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+create index if not exists idx_folders_user_id on folders(user_id);
+create index if not exists idx_folders_project_id on folders(project_id);
+
+-- Add folder_id and tags to project_files
+alter table project_files add column if not exists folder_id uuid references folders(id) on delete set null;
+alter table project_files add column if not exists tags text[]; 

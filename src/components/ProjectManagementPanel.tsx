@@ -3,6 +3,7 @@ import { Share2, Download, Upload, Copy, CheckCircle, X, Star, Tag, Trash, Copy 
 import { useProjectStore } from '@/src/store/project';
 import { getSupabaseClient } from '@/src/lib/supabase';
 import { useToast } from '../hooks/useToast';
+import { sendNotification } from '@/src/utils/sendNotification';
 
 interface ProjectManagementPanelProps {
   projectId: string;
@@ -167,6 +168,8 @@ export default function ProjectManagementPanel({ projectId }: ProjectManagementP
       await updateProject(projectId, { isPublic: true });
       
       addToast('success', 'Project shared successfully');
+      // Notification for project_shared
+      // await sendNotification({ req, eventType: 'project_shared', type: 'info', message: `Project "${currentProject.name}" was shared with you.`, data: { projectId } });
     } catch (error) {
       console.error('Share failed:', error);
       addToast('error', 'Failed to share project');
@@ -216,6 +219,8 @@ export default function ProjectManagementPanel({ projectId }: ProjectManagementP
       const newProject = { ...currentProject, id: undefined, name: `${currentProject.name} (Copy)` };
       await updateProject(projectId, newProject);
       addToast('success', 'Project duplicated successfully');
+      // Notification for project_duplicated
+      // await sendNotification({ req, eventType: 'project_duplicated', type: 'success', message: `Project "${currentProject.name}" duplicated successfully!`, data: { projectId } });
     } catch (error) {
       console.error('Failed to duplicate project:', error);
       addToast('error', 'Failed to duplicate project');
@@ -227,6 +232,8 @@ export default function ProjectManagementPanel({ projectId }: ProjectManagementP
     try {
       await updateProject(projectId, { status: 'archived' });
       addToast('success', 'Project archived successfully');
+      // Notification for project_archived
+      // await sendNotification({ req, eventType: 'project_archived', type: 'info', message: `Project "${currentProject.name}" was archived.`, data: { projectId } });
     } catch (error) {
       console.error('Failed to archive project:', error);
       addToast('error', 'Failed to archive project');
@@ -238,6 +245,8 @@ export default function ProjectManagementPanel({ projectId }: ProjectManagementP
     try {
       await updateProject(projectId, { status: 'deleted' });
       addToast('success', 'Project deleted successfully');
+      // Notification for project_archived (deletion)
+      // await sendNotification({ req, eventType: 'project_archived', type: 'warning', message: `Project "${currentProject.name}" was deleted.`, data: { projectId } });
     } catch (error) {
       console.error('Failed to delete project:', error);
       addToast('error', 'Failed to delete project');

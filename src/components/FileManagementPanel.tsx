@@ -186,6 +186,7 @@ export default function FileManagementPanel({ projectId, onRefresh, onValidation
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  const [tagFilter, setTagFilter] = useState('');
 
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -226,6 +227,7 @@ export default function FileManagementPanel({ projectId, onRefresh, onValidation
   });
   const [expandedFiles, setExpandedFiles] = useState<ExpandedFiles>({});
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewCache, setPreviewCache] = useState<Record<string, string>>({});
 
   // Get user ID on component mount
   useEffect(() => {
@@ -299,9 +301,17 @@ export default function FileManagementPanel({ projectId, onRefresh, onValidation
     }
   };
 
-  const filteredFiles = filesByType[activeTab].filter(file => 
-    file.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Filter files by tag
+  const filteredFiles = tagFilter.trim()
+    ? filesByType[activeTab].filter(f => {
+        const tags = Array.isArray(f.metadata?.tags)
+          ? f.metadata.tags
+          : Array.isArray((f as any).tags)
+            ? (f as any).tags
+            : [];
+        return tags.some((tag: string) => tag.toLowerCase().includes(tagFilter.toLowerCase()));
+      })
+    : filesByType[activeTab];
 
   const fileTypeIcons: Record<FileType, React.ReactNode> = {
     'light': <FolderOpen className="h-4 w-4" />,
@@ -355,40 +365,42 @@ export default function FileManagementPanel({ projectId, onRefresh, onValidation
     }));
   };
 
+  // Clean up object URLs on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(previewCache).forEach(url => URL.revokeObjectURL(url));
+    };
+  }, [previewCache]);
+
   const handlePreview = async (file: StorageFile) => {
     try {
       setPreviewLoading(true);
       setPreviewError(null);
       setPreviewUrl(null);
-      
-      console.log('Starting preview for file:', file.name);
-      
+
+      // Check cache first
+      if (previewCache[file.path]) {
+        setPreviewUrl(previewCache[file.path]);
+        return;
+      }
+
       // Get the file URL from Supabase
       const fileUrl = await getFitsFileUrl(file.path);
-      console.log('Got file URL:', fileUrl);
-      
       // Send the URL to our preview endpoint
-      console.log('Sending to preview endpoint...');
       const previewResponse = await fetch('http://localhost:8000/preview-fits', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(fileUrl),
       });
-      
       if (!previewResponse.ok) {
         const errorText = await previewResponse.text();
         throw new Error(`Failed to generate preview: ${errorText}`);
       }
-      
-      // Get the image blob and create a URL
       const imageBlob = await previewResponse.blob();
-      console.log('Got preview image:', imageBlob.size, 'bytes');
       const imageUrl = URL.createObjectURL(imageBlob);
+      setPreviewCache(prev => ({ ...prev, [file.path]: imageUrl }));
       setPreviewUrl(imageUrl);
     } catch (error) {
-      console.error('Preview error:', error);
       setPreviewError(error instanceof Error ? error.message : 'Failed to generate preview');
     } finally {
       setPreviewLoading(false);
@@ -448,7 +460,6 @@ export default function FileManagementPanel({ projectId, onRefresh, onValidation
               </button>
             </div>
           </div>
-          
           {/* Show metadata if available */}
           {selectedFileMetadata && (
             <FileMetadata 
@@ -457,7 +468,6 @@ export default function FileManagementPanel({ projectId, onRefresh, onValidation
               onToggle={() => toggleFileExpansion(file.name)}
             />
           )}
-          
           {/* Show warnings if any */}
           {warnings.length > 0 && (
             <div className="mt-2 p-2 bg-yellow-900/50 rounded-md text-sm">
@@ -473,6 +483,19 @@ export default function FileManagementPanel({ projectId, onRefresh, onValidation
               </div>
             </div>
           )}
+          {/* Display tags as chips/badges */}
+          <div className="flex flex-wrap gap-1">
+            {(Array.isArray(file.metadata?.tags)
+              ? file.metadata.tags
+              : Array.isArray((file as any).tags)
+                ? (file as any).tags
+                : []
+            ).map((tag: string, i: number) => (
+              <span key={i} className="bg-blue-700 text-blue-100 text-xs px-2 py-0.5 rounded-full mr-1 mb-1">
+                {tag}
+              </span>
+            ))}
+          </div>
         </div>
       );
     });
@@ -485,56 +508,6 @@ export default function FileManagementPanel({ projectId, onRefresh, onValidation
       <span className="text-sm text-gray-400">
         {files.length} files
       </span>
-    );
-  };
-
-  const FilePreview = ({ file, metadata, analysis }: { file: File; metadata: FitsMetadata; analysis?: FitsAnalysisResult }) => {
-    return (
-      <div className="p-4 space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <h3 className="font-semibold mb-2">Basic Info</h3>
-            <p>Filename: {file.name}</p>
-            <p>Size: {(file.size / 1024 / 1024).toFixed(2)} MB</p>
-            <p>Type: {metadata.type || 'Unknown'}</p>
-          </div>
-          <div>
-            <h3 className="font-semibold mb-2">Exposure</h3>
-            <p>Exposure Time: {metadata.exposureTime || 'N/A'}s</p>
-            <p>Temperature: {metadata.temperature || 'N/A'}°C</p>
-            <p>Gain: {metadata.gain || 'N/A'}</p>
-          </div>
-        </div>
-
-        {analysis && (
-          <div className="mt-4">
-            <h3 className="font-semibold mb-2">Analysis</h3>
-            <div className="space-y-2">
-              <p>Confidence: {(analysis.confidence * 100).toFixed(1)}%</p>
-              {analysis.warnings.length > 0 && (
-                <div className="text-yellow-600">
-                  <h4 className="font-medium">Warnings:</h4>
-                  <ul className="list-disc pl-5">
-                    {analysis.warnings.map((warning: string, i: number) => (
-                      <li key={i}>{warning}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {analysis.suggestions.length > 0 && (
-                <div className="text-blue-600">
-                  <h4 className="font-medium">Suggestions:</h4>
-                  <ul className="list-disc pl-5">
-                    {analysis.suggestions.map((suggestion: string, i: number) => (
-                      <li key={i}>{suggestion}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
     );
   };
 
@@ -601,6 +574,20 @@ export default function FileManagementPanel({ projectId, onRefresh, onValidation
 
             {/* Right column with file list and upload area */}
             <div className="flex-1 p-4">
+              {/* Tag search/filter input */}
+              <div className="mb-4 flex items-center gap-2">
+                <input
+                  type="text"
+                  value={tagFilter}
+                  onChange={e => setTagFilter(e.target.value)}
+                  placeholder="Filter by tag (e.g. NGC, telescope, filter...)"
+                  className="px-3 py-2 rounded-md border border-gray-700 bg-gray-900 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                {tagFilter && (
+                  <button onClick={() => setTagFilter('')} className="ml-2 px-2 py-1 bg-gray-700 text-white rounded hover:bg-gray-600">Clear</button>
+                )}
+              </div>
+
               {/* Search bar - only show if there are files */}
               {hasLoadedFiles && filesByType[activeTab].length > 0 && (
                 <div className="mb-4">
