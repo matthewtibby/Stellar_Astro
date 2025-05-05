@@ -8,6 +8,7 @@ import Image from 'next/image';
 import { User } from '@supabase/supabase-js';
 import { getSupabaseClient } from '@/src/lib/supabase';
 import { uploadProfilePicture } from '@/src/utils/storage';
+import { sendNotification } from '@/src/utils/sendNotification';
 
 interface AccountTabProps {
   user: UserState | null;
@@ -97,6 +98,12 @@ export default function AccountTab({ user }: AccountTabProps) {
 
       if (profileError) {
         setMessage({ type: 'error', text: 'Failed to update profile: ' + profileError.message });
+        await sendNotification({
+          req: { headers: { origin: window.location.origin, authorization: '' } },
+          eventType: 'account_changed',
+          type: 'error',
+          message: 'Failed to update profile',
+        });
         return;
       }
 
@@ -107,6 +114,12 @@ export default function AccountTab({ user }: AccountTabProps) {
         });
         if (pwError) {
           setMessage({ type: 'error', text: 'Failed to update password: ' + pwError.message });
+          await sendNotification({
+            req: { headers: { origin: window.location.origin, authorization: '' } },
+            eventType: 'account_changed',
+            type: 'error',
+            message: 'Failed to update password',
+          });
           return;
         }
       }
@@ -125,8 +138,20 @@ export default function AccountTab({ user }: AccountTabProps) {
       setUser(updatedUser);
       setMessage({ type: 'success', text: 'Profile updated successfully' });
       setIsEditing(false);
+      await sendNotification({
+        req: { headers: { origin: window.location.origin, authorization: '' } },
+        eventType: 'account_changed',
+        type: 'success',
+        message: 'Profile updated successfully',
+      });
     } catch (error: any) {
       setMessage({ type: 'error', text: 'Failed to update profile: ' + (error?.message || error) });
+      await sendNotification({
+        req: { headers: { origin: window.location.origin, authorization: '' } },
+        eventType: 'account_changed',
+        type: 'error',
+        message: 'Failed to update profile',
+      });
       console.error('[AccountTab] Error updating profile:', error);
     }
   };

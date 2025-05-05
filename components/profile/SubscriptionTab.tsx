@@ -7,6 +7,7 @@ import { useCurrency } from '@/components/CurrencyProvider';
 import { formatPrice } from '@/lib/currency';
 import { Check, AlertTriangle, CreditCard, Calendar, Pause, Play } from 'lucide-react';
 import { User } from '@supabase/supabase-js';
+import { sendNotification } from '@/src/utils/sendNotification';
 
 interface SubscriptionTabProps {
   user: UserState | null;
@@ -51,8 +52,20 @@ export default function SubscriptionTab({ user }: SubscriptionTabProps) {
       
       setUser(updatedUser);
       setMessage({ type: 'success', text: `Successfully upgraded to ${plan}` });
+      await sendNotification({
+        req: { headers: { origin: window.location.origin, authorization: '' } },
+        eventType: 'subscription_changed',
+        type: 'success',
+        message: `Subscription upgraded to ${plan}`,
+      });
     } catch (error) {
       setMessage({ type: 'error', text: 'Failed to upgrade subscription' });
+      await sendNotification({
+        req: { headers: { origin: window.location.origin, authorization: '' } },
+        eventType: 'subscription_changed',
+        type: 'error',
+        message: 'Failed to upgrade subscription',
+      });
       console.error('Error upgrading subscription:', error);
     }
   };
@@ -62,8 +75,20 @@ export default function SubscriptionTab({ user }: SubscriptionTabProps) {
       // Here you would typically make an API call to pause the subscription
       setIsPaused(true);
       setMessage({ type: 'success', text: 'Subscription paused successfully' });
+      await sendNotification({
+        req: { headers: { origin: window.location.origin, authorization: '' } },
+        eventType: 'subscription_changed',
+        type: 'info',
+        message: 'Subscription paused',
+      });
     } catch (error) {
       setMessage({ type: 'error', text: 'Failed to pause subscription' });
+      await sendNotification({
+        req: { headers: { origin: window.location.origin, authorization: '' } },
+        eventType: 'subscription_changed',
+        type: 'error',
+        message: 'Failed to pause subscription',
+      });
       console.error('Error pausing subscription:', error);
     }
   };
@@ -73,8 +98,20 @@ export default function SubscriptionTab({ user }: SubscriptionTabProps) {
       // Here you would typically make an API call to resume the subscription
       setIsPaused(false);
       setMessage({ type: 'success', text: 'Subscription resumed successfully' });
+      await sendNotification({
+        req: { headers: { origin: window.location.origin, authorization: '' } },
+        eventType: 'subscription_changed',
+        type: 'info',
+        message: 'Subscription resumed',
+      });
     } catch (error) {
       setMessage({ type: 'error', text: 'Failed to resume subscription' });
+      await sendNotification({
+        req: { headers: { origin: window.location.origin, authorization: '' } },
+        eventType: 'subscription_changed',
+        type: 'error',
+        message: 'Failed to resume subscription',
+      });
       console.error('Error resuming subscription:', error);
     }
   };
@@ -97,8 +134,20 @@ export default function SubscriptionTab({ user }: SubscriptionTabProps) {
       setUser(updatedUser);
       setShowCancelConfirm(false);
       setMessage({ type: 'success', text: 'Subscription cancelled successfully' });
+      await sendNotification({
+        req: { headers: { origin: window.location.origin, authorization: '' } },
+        eventType: 'subscription_changed',
+        type: 'warning',
+        message: 'Subscription cancelled',
+      });
     } catch (error) {
       setMessage({ type: 'error', text: 'Failed to cancel subscription' });
+      await sendNotification({
+        req: { headers: { origin: window.location.origin, authorization: '' } },
+        eventType: 'subscription_changed',
+        type: 'error',
+        message: 'Failed to cancel subscription',
+      });
       console.error('Error cancelling subscription:', error);
     }
   };

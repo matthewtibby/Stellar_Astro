@@ -1,6 +1,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { Heart, MessageCircle, Camera, Telescope, Clock } from 'lucide-react'
+import React, { useState } from 'react'
 
 interface CommunityPost {
   id: string
@@ -81,16 +82,40 @@ const posts: CommunityPost[] = [
 
 export default function CommunitySection() {
   // Find the featured post (Photo of the Day)
+  const [tagFilter, setTagFilter] = useState('');
   const featuredPost = posts.find(post => post.isPhotoOfTheDay);
   // Get the remaining posts (limit to 2 for a more compact display)
   const regularPosts = posts.filter(post => !post.isPhotoOfTheDay).slice(0, 2);
+
+  // Filter posts by tag if tagFilter is set
+  const filteredPosts = tagFilter
+    ? posts.filter(post => post.tags.some(tag => tag.toLowerCase() === tagFilter.toLowerCase()))
+    : posts;
 
   return (
     <section className="relative py-24 overflow-hidden" aria-labelledby="community-heading">
       <div className="container mx-auto px-4 relative">
         <h2 id="community-heading" className="text-4xl font-bold mb-12 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">Community Wall</h2>
+        {/* Tag filter UI */}
+        <div className="mb-8 flex items-center gap-2">
+          {tagFilter && (
+            <span className="bg-blue-700 text-blue-100 text-xs px-3 py-1 rounded-full mr-2">
+              Filter: {tagFilter}
+              <button
+                className="ml-2 text-white hover:text-red-400"
+                onClick={() => setTagFilter('')}
+                title="Clear tag filter"
+              >
+                ×
+              </button>
+            </span>
+          )}
+          {!tagFilter && (
+            <span className="text-gray-400 text-sm">Click a tag below to filter posts</span>
+          )}
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {posts.map((post) => (
+          {filteredPosts.map((post) => (
             <div key={post.id} className="bg-gray-800 rounded-lg overflow-hidden shadow-lg hover:shadow-xl transition-shadow">
               <div className="relative h-48">
                 <Image
@@ -102,6 +127,19 @@ export default function CommunitySection() {
               </div>
               <div className="p-6">
                 <h3 className="text-xl font-semibold mb-2">{post.title}</h3>
+                {/* Render tags as clickable chips */}
+                <div className="flex flex-wrap gap-1 mb-2">
+                  {post.tags.map((tag) => (
+                    <button
+                      key={tag}
+                      className={`px-2 py-0.5 rounded-full text-xs font-medium mr-1 mb-1 transition-colors ${tagFilter === tag ? 'bg-blue-900 text-blue-200' : 'bg-blue-700 text-blue-100 hover:bg-blue-800'}`}
+                      onClick={() => setTagFilter(tag)}
+                      type="button"
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center">
                     <div className="relative w-8 h-8 mr-2">
