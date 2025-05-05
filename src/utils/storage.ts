@@ -583,18 +583,6 @@ export async function getFilesByType(projectId: string): Promise<Record<FileType
     const userId = user.id;
     console.log('[getFilesByType] User authenticated:', userId);
 
-    // List all files in the raw-frames bucket
-    const { data: files, error } = await client.storage
-      .from(STORAGE_BUCKETS.RAW_FRAMES)
-      .list(`${userId}/${projectId}`);
-
-    if (error) {
-      console.error('[getFilesByType] Error listing files:', error);
-      throw error;
-    }
-
-    console.log('[getFilesByType] Raw files from storage:', files);
-
     // Initialize the result object with empty arrays for each type
     const result: Record<FileType, StorageFile[]> = {
       'light': [],
@@ -611,21 +599,33 @@ export async function getFilesByType(projectId: string): Promise<Record<FileType
       'post-processed': []
     };
 
-    // Process each file and sort by type
-    for (const file of files) {
-      const pathParts = file.name.split('/');
-      if (pathParts.length >= 3) {
-        const type = pathParts[2] as FileType;
-        if (type in result) {
-          const fullPath = `${userId}/${projectId}/${file.name}`;
-          result[type].push({
-            name: pathParts[3],
-            path: fullPath,
-            size: file.metadata?.size || 0,
-            created_at: file.created_at,
-            type: type,
-            metadata: file.metadata
-          });
+    // For each type, list files in the corresponding subfolder
+    for (const type of Object.keys(result) as FileType[]) {
+      const folderPath = `${userId}/${projectId}/${type}`;
+      const { data: files, error } = await client.storage
+        .from(STORAGE_BUCKETS.RAW_FRAMES)
+        .list(folderPath);
+      if (error) {
+        // Only log error if folder doesn't exist, not a fatal error
+        if (error.message && error.message.includes('The resource was not found')) {
+          continue;
+        }
+        console.error(`[getFilesByType] Error listing files for type ${type}:`, error);
+        continue;
+      }
+      if (files && Array.isArray(files)) {
+        for (const file of files) {
+          // Only include files, not folders
+          if (file.name && !file.name.endsWith('/')) {
+            result[type].push({
+              name: file.name,
+              path: `${folderPath}/${file.name}`,
+              size: file.metadata?.size || 0,
+              created_at: file.created_at,
+              type: type,
+              metadata: file.metadata
+            });
+          }
         }
       }
     }

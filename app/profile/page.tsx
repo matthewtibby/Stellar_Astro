@@ -11,8 +11,19 @@ import SettingsTab from '@/components/profile/SettingsTab';
 
 export default function ProfilePage() {
   const router = useRouter();
-  const { user, isAuthenticated, id, email, username, fullName, avatarUrl, subscription, isLoading, error } = useUserStore();
+  const { user, isAuthenticated, id, email, username, fullName, avatarUrl, subscription, isLoading, error, subscriptionLoading } = useUserStore();
   const [activeTab, setActiveTab] = useState('account');
+  const [userRole, setUserRole] = useState<string | null>(null);
+
+  // Fetch user role on mount
+  useEffect(() => {
+    async function fetchUserRole() {
+      const supabase = (await import('@/src/lib/supabase')).getSupabaseClient();
+      const { data, error } = await supabase.rpc('get_user_role');
+      if (!error) setUserRole(data);
+    }
+    if (isAuthenticated) fetchUserRole();
+  }, [isAuthenticated]);
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -25,12 +36,23 @@ export default function ProfilePage() {
     return null; // Will redirect in useEffect
   }
 
+  if (subscriptionLoading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen text-white text-xl">
+        Loading subscription...
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-black to-gray-900 py-24">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">
             Account Settings
+            {userRole === 'super_user' && (
+              <span className="ml-4 px-3 py-1 bg-gradient-to-r from-yellow-400 to-pink-500 text-white text-xs font-bold rounded-full shadow">ADMIN</span>
+            )}
           </h1>
           <p className="mt-2 text-lg text-gray-300">
             Manage your account, subscription, and preferences

@@ -21,7 +21,9 @@ const initialState: UserState = {
 
 // Extend UserStore type to include fetchAndSetSubscription
 interface UserStoreWithSubscription extends UserStore {
-  fetchAndSetSubscription: (userId: string) => Promise<void>;
+  fetchAndSetSubscriptionAndRole: (userId: string) => Promise<void>;
+  subscriptionLoading: boolean;
+  setSubscriptionLoading: (loading: boolean) => void;
 }
 
 export const useUserStore = create<UserStoreWithSubscription>()(
@@ -29,8 +31,10 @@ export const useUserStore = create<UserStoreWithSubscription>()(
     (set, get) => ({
       ...initialState,
       user: null,
+      subscriptionLoading: false,
       setLoading: (isLoading: boolean) => set({ isLoading }),
       setError: (error: string | null) => set({ error }),
+      setSubscriptionLoading: (loading: boolean) => set({ subscriptionLoading: loading }),
       setUser: (user: User) => {
         set({
           id: user.id,
@@ -41,29 +45,36 @@ export const useUserStore = create<UserStoreWithSubscription>()(
           isAuthenticated: true,
           user,
         });
-        // Fetch subscription after setting user
-        get().fetchAndSetSubscription(user.id);
+        get().fetchAndSetSubscriptionAndRole(user.id);
       },
-      fetchAndSetSubscription: async (userId: string) => {
+      fetchAndSetSubscriptionAndRole: async (userId: string) => {
+        set({ subscriptionLoading: true });
         const supabase = getSupabaseClient();
-        const { data, error } = await supabase
-          .from('subscriptions')
-          .select('*')
-          .eq('user_id', userId)
-          .eq('status', 'active')
-          .order('current_period_end', { ascending: false })
-          .limit(1);
-
+        // Fetch both in parallel
+        const [subRes, roleRes] = await Promise.all([
+          supabase
+            .from('subscriptions')
+            .select('*')
+            .eq('user_id', userId)
+            .eq('status', 'active')
+            .order('current_period_end', { ascending: false })
+            .limit(1),
+          supabase.rpc('get_user_role'),
+        ]);
         let subscription: UserState['subscription'] = { type: 'FREE', projectLimit: 1 };
-        if (data && data.length > 0) {
-          const plan = data[0].plan;
+        if (subRes.data && subRes.data.length > 0) {
+          const plan = subRes.data[0].plan;
           if (plan === 'pro-annual') {
             subscription = { type: 'Annual', projectLimit: 50 };
           } else if (plan === 'pro-monthly') {
             subscription = { type: 'Monthly', projectLimit: 50 };
           }
         }
-        set({ subscription });
+        // Role check takes precedence
+        if (roleRes.data === 'super_user') {
+          subscription = { type: 'Super', projectLimit: 999999 };
+        }
+        set({ subscription, subscriptionLoading: false });
       },
       logout: () => set({ ...initialState, user: null }),
     }),

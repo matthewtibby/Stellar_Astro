@@ -46,9 +46,10 @@ import ProjectManagementPanel from '@/src/components/ProjectManagementPanel';
 import FileComparisonPanel from '@/src/components/FileComparisonPanel';
 import ProjectChecklist from '@/src/components/ProjectChecklist';
 import { useProjects } from '@/src/hooks/useProjects';
-import { Project, ChecklistItem } from '@/src/types/project';
+import { Project as BaseProject, ChecklistItem } from '@/src/types/project';
 import WelcomeDashboard from '@/src/components/WelcomeDashboard';
 import AuthSync from '@/components/AuthSync';
+import { useToast } from '@/src/hooks/useToast';
 
 // Add these interfaces before the mockProjects array
 interface WorkflowStep {
@@ -69,6 +70,11 @@ interface User {
   email: string;
   fullName: string;
   subscription: UserSubscription;
+}
+
+// Extend Project type to include current_step
+interface Project extends BaseProject {
+  current_step?: number;
 }
 
 // Mock project data
@@ -284,7 +290,7 @@ const mockUserSubscription: UserSubscription = {
   projectLimit: 5
 };
 
-const FileUploadSection = ({ projectId }: { projectId: string }) => {
+const FileUploadSection = ({ projectId, onStepAutosave, isSavingStep, currentStep }: { projectId: string, onStepAutosave: () => void, isSavingStep: boolean, currentStep: number }) => {
   const { user, isAuthenticated } = useUserStore();
   const [validationError, setValidationError] = useState<string | null>(null);
   const userId = user?.id;
@@ -332,6 +338,22 @@ const FileUploadSection = ({ projectId }: { projectId: string }) => {
         projectId={projectId}
         userId={userId}
         onValidationError={handleValidationError}
+        onStepAutosave={onStepAutosave}
+        isSavingStep={isSavingStep}
+        onSaveAndExit={async () => {
+          await onStepAutosave();
+          // Save current step to Supabase before exiting
+          try {
+            const supabase = getSupabaseClient();
+            await supabase
+              .from('projects')
+              .update({ current_step: currentStep })
+              .eq('id', projectId);
+          } catch (err) {
+            console.error('Failed to save current step on exit:', err);
+          }
+          window.location.href = '/dashboard';
+        }}
       />
     </div>
   );
@@ -339,7 +361,7 @@ const FileUploadSection = ({ projectId }: { projectId: string }) => {
 
 const DashboardPage = () => {
   const router = useRouter();
-  const { user, isAuthenticated, isLoading, subscription, fullName } = useUserStore();
+  const { user, isAuthenticated, isLoading, subscription, fullName, setUser, logout, subscriptionLoading, setSubscriptionLoading } = useUserStore();
   const { projects, isLoading: isLoadingProjects, error: projectsError, fetchProjects } = useProjects(user?.id, isAuthenticated);
   const [activeView, setActiveView] = useState('grid');
   const [activeProject, setActiveProject] = useState<Project | null>(null);
@@ -373,11 +395,15 @@ const DashboardPage = () => {
   const fileListRef = useRef<{ refresh: () => void }>(null);
   const [projectNameEdit, setProjectNameEdit] = useState('');
   const [isSavingProjectName, setIsSavingProjectName] = useState(false);
+  const { addToast } = useToast();
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<{ open: boolean, projectId?: string }>({ open: false });
+  const [isSavingStep, setIsSavingStep] = useState(false);
 
   // Debug logging
   console.log('Zustand user:', user);
   console.log('Zustand isAuthenticated:', isAuthenticated);
   console.log('Zustand isLoading:', isLoading);
+  console.log('activeProject', activeProject, 'showNewProject', showNewProject);
 
   // Function to check if there are any uploaded files
   const checkForUploadedFiles = () => {
@@ -397,14 +423,10 @@ const DashboardPage = () => {
     checkForUploadedFiles();
   }, []);
 
-  useEffect(() => {
-    // Redirect to login if not authenticated
-    if (!isAuthenticated) {
-      router.push('/login');
-    }
-  }, [isAuthenticated, router]);
-
-  if (!isAuthenticated) {
+  if (isLoading || subscriptionLoading) {
+    return <div className="flex justify-center items-center min-h-screen text-white text-xl">Loading...</div>;
+  }
+  if (isAuthenticated === false) {
     return null; // Don't render anything while redirecting
   }
 
@@ -441,7 +463,7 @@ const DashboardPage = () => {
     return true;
   };
 
-  // New: Create project instantly with default name
+  // Refactor handleNewProject to instantly create a draft project in the database
   const handleNewProject = async () => {
     try {
       setIsSavingProjectName(true);
@@ -451,20 +473,18 @@ const DashboardPage = () => {
       const { data: project, error: projectError } = await supabase
         .from('projects')
         .insert([{
-          title: 'Untitled Project',
+          title: '', // No name yet
           description: '',
           user_id: user.id,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-          is_public: false
+          is_public: false,
+          current_step: 0
         }])
         .select()
         .single();
       if (projectError) throw new Error(projectError?.message || 'Failed to create project');
-      
-      // Navigate to the project's upload workflow
-      router.push(`/dashboard/${project.id}?step=upload`);
-      
+      await fetchProjects();
       setActiveProject({
         id: project.id,
         name: project.title,
@@ -472,12 +492,12 @@ const DashboardPage = () => {
         updatedAt: new Date(project.updated_at),
         status: 'draft',
         target: { id: '', name: '', catalogIds: [], constellation: '', category: 'other', type: 'other', commonNames: [], coordinates: { ra: '', dec: '' } },
-        steps: []
-      });
+        steps: [],
+        current_step: 0
+      } as Project);
       setProjectNameEdit(project.title);
       setCurrentStep(0);
       setShowNewProject(false);
-      await fetchProjects();
     } catch (error) {
       console.error('Error creating project:', error);
       // Optionally show error to user
@@ -512,6 +532,12 @@ const DashboardPage = () => {
   const handleProjectClick = (project: Project) => {
     setActiveProject(project);
     setShowNewProject(false);
+    // Restore last step if available
+    if ('current_step' in project && typeof project.current_step === 'number') {
+      setCurrentStep(project.current_step);
+    } else {
+      setCurrentStep(0);
+    }
   };
 
   const handleStepClick = (stepId: string) => {
@@ -669,156 +695,6 @@ const DashboardPage = () => {
     );
   };
 
-  const renderNewProjectForm = () => {
-    const handleCreateProject = async () => {
-      if (!projectName) return;
-      try {
-        const supabase = getSupabaseClient();
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
-        if (authError || !user) {
-          throw new Error('Authentication required');
-        }
-        const { data: project, error: projectError } = await supabase
-          .from('projects')
-          .insert([{
-            title: projectName,
-            description: projectDescription || '',
-            user_id: user.id,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            is_public: false
-          }])
-          .select()
-          .single();
-        if (projectError) {
-          console.error('Project creation error:', projectError);
-          throw new Error(projectError?.message || 'Failed to create project');
-        }
-        if (!project) {
-          throw new Error('No project data returned after creation');
-        }
-        // Re-fetch projects after creation
-        await fetchProjects();
-        setActiveProject({
-          id: project.id,
-          name: project.title,
-          createdAt: new Date(project.created_at),
-          updatedAt: new Date(project.updated_at),
-          status: 'draft',
-          target: selectedTarget || {
-            id: '',
-            name: '',
-            catalogIds: [],
-            constellation: '',
-            category: 'other',
-            type: 'other',
-            commonNames: [],
-            coordinates: { ra: '', dec: '' }
-          },
-          steps: []
-        });
-        setCurrentStep(1);
-        setProjectName('');
-        setProjectDescription('');
-        setSelectedTarget(null);
-        setSelectedTelescope(null);
-        setSelectedCamera(null);
-        setSelectedFilters([]);
-      } catch (error) {
-        console.error('Error creating project:', error);
-        // TODO: Show error message to user
-      }
-    };
-
-    return (
-      <div className="bg-gray-800 p-6 rounded-lg shadow-lg">
-        <h2 className="text-xl font-semibold text-white mb-4">Create New Project</h2>
-        <div className="space-y-4">
-          <div>
-            <label htmlFor="projectName" className="block text-sm font-medium text-gray-300 mb-1">
-              Project Name
-            </label>
-            <input
-              type="text"
-              id="projectName"
-              value={projectName}
-              onChange={(e) => setProjectName(e.target.value)}
-              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="Enter project name"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">
-              Target
-            </label>
-            <TargetAutocomplete
-              onSelect={setSelectedTarget}
-              placeholder="Search for a target..."
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">
-              Telescope
-            </label>
-            <EquipmentAutocomplete
-              type="telescope"
-              onSelect={(item) => setSelectedTelescope(item as Telescope)}
-              placeholder="Search for a telescope..."
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">
-              Camera
-            </label>
-            <EquipmentAutocomplete
-              type="camera"
-              onSelect={(item) => setSelectedCamera(item as CameraType)}
-              placeholder="Search for a camera..."
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">
-              Filters (Optional)
-            </label>
-            <div className="space-y-2">
-              {selectedFilters.map((filter, index) => (
-                <div key={filter.id} className="flex items-center justify-between bg-gray-700 p-2 rounded-md">
-                  <span className="text-white">{filter.brand} {filter.model}</span>
-                  <button
-                    onClick={() => setSelectedFilters(filters => filters.filter((_, i) => i !== index))}
-                    className="text-gray-400 hover:text-white"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-              ))}
-              <EquipmentAutocomplete
-                type="filter"
-                onSelect={(filter) => setSelectedFilters([...selectedFilters, filter as Filter])}
-                placeholder="Search for a filter..."
-              />
-            </div>
-          </div>
-          <div className="flex justify-end space-x-3 mt-6">
-            <button
-              onClick={() => setShowNewProject(false)}
-              className="px-4 py-2 text-sm font-medium text-gray-300 hover:text-white"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleCreateProject}
-              disabled={!projectName}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Create Project
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
   const renderStepContent = (projectId: string) => {
     const currentStepIndex = Math.min(currentStep, workflowSteps.length - 1);
     const step = workflowSteps[currentStepIndex];
@@ -848,11 +724,46 @@ const DashboardPage = () => {
       </div>
     );
 
+    // Only allow upload if project is named and has an ID
+    const canUpload = activeProject && activeProject.name && activeProject.id;
+
+    // Autosave workflow step after file upload
+    const handleStepAutosave = async () => {
+      if (!activeProject) return;
+      setIsSavingStep(true);
+      try {
+        // Mark the 'Upload & Organize' step as completed
+        const allowedStatuses = ['completed', 'in_progress', 'pending'] as const;
+        const updatedSteps = [
+          ...activeProject.steps
+            .filter(s => s.name !== 'Upload & Organize')
+            .map(s => ({
+              ...s,
+              status: allowedStatuses.includes(s.status as any)
+                ? (s.status as typeof allowedStatuses[number])
+                : 'pending'
+            })),
+          { id: 'upload-organize', name: 'Upload & Organize', status: 'completed' as const }
+        ];
+        const supabase = getSupabaseClient();
+        await supabase
+          .from('projects')
+          .update({ steps: updatedSteps })
+          .eq('id', activeProject.id);
+        setActiveProject({ ...activeProject, steps: updatedSteps });
+        addToast('success', 'Step autosaved!');
+      } catch (error) {
+        addToast('error', 'Failed to autosave step');
+      } finally {
+        setIsSavingStep(false);
+      }
+    };
+
     switch (currentStep) {
       case 0:
         return (
           <div className="space-y-6">
-            {/* Editable project title field at the top */}
+            {/* Always show editable project title field at the top if a project is active */}
             {activeProject && (
               <div className="mb-4 flex items-center space-x-2">
                 <input
@@ -860,9 +771,11 @@ const DashboardPage = () => {
                   value={projectNameEdit}
                   onChange={e => setProjectNameEdit(e.target.value)}
                   onFocus={e => e.target.select()}
-                  className="px-3 py-2 rounded-md bg-gray-700 text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className={`px-3 py-2 rounded-md border focus:outline-none focus:ring-2 focus:ring-blue-500 ${!projectNameEdit.trim() ? 'bg-yellow-100 text-yellow-900 border-yellow-500' : 'bg-gray-700 text-white border-gray-600'}`}
                   style={{ minWidth: 0, flex: 1 }}
                   disabled={isSavingProjectName}
+                  placeholder="Enter project name"
+                  autoFocus={activeProject && !activeProject.name}
                 />
                 <button
                   onClick={handleProjectNameSave}
@@ -873,6 +786,12 @@ const DashboardPage = () => {
                 </button>
               </div>
             )}
+            {/* Show a message if the project is unnamed */}
+            {activeProject && !projectNameEdit.trim() && (
+              <div className="p-4 bg-yellow-900/50 text-yellow-200 rounded-md border border-yellow-800">
+                Please name and save your project to continue.
+              </div>
+            )}
             <div className="bg-gray-800/50 rounded-lg p-6 shadow-lg border border-gray-700">
               <h3 className="text-xl font-semibold text-white mb-4">Upload FITS Files</h3>
               <p className="text-gray-400 mb-4">
@@ -880,8 +799,14 @@ const DashboardPage = () => {
                 <br />
                 Supported formats: .fits, .fit, .FIT, .FITS, .RAW
               </p>
-              {/* Only render FileUploadSection here, not UniversalFileUpload directly */}
-              <FileUploadSection projectId={projectId} />
+              {/* Only render FileUploadSection if project is named and saved */}
+              {canUpload ? (
+                <FileUploadSection projectId={projectId} onStepAutosave={handleStepAutosave} isSavingStep={isSavingStep} currentStep={currentStep} />
+              ) : (
+                <div className="p-4 bg-yellow-900/50 text-yellow-200 rounded-md border border-yellow-800">
+                  Please name and save your project before uploading files.
+                </div>
+              )}
             </div>
             {renderStepNavigation()}
           </div>
@@ -891,7 +816,7 @@ const DashboardPage = () => {
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-4">
-                <FileUploadSection projectId={projectId} />
+                <FileUploadSection projectId={projectId} onStepAutosave={handleStepAutosave} isSavingStep={isSavingStep} currentStep={currentStep} />
                 <FileComparisonPanel projectId={projectId} />
               </div>
               <div className="space-y-4">
@@ -981,27 +906,30 @@ const DashboardPage = () => {
     );
   }
 
-  if (isLoading) {
-    return <div className="flex justify-center items-center min-h-screen text-white text-xl">Loading...</div>;
-  }
-
-  // Add this function to handle project deletion
+  // Update handleDeleteProject to use custom modal and toast
   const handleDeleteProject = async (projectId: string) => {
-    if (!window.confirm('Are you sure you want to delete this project? This action cannot be undone.')) return;
+    setShowDeleteConfirm({ open: true, projectId });
+  };
+
+  const confirmDeleteProject = async () => {
+    if (!showDeleteConfirm.projectId) return;
     try {
       const supabase = getSupabaseClient();
       const { error } = await supabase
         .from('projects')
         .delete()
-        .eq('id', projectId);
+        .eq('id', showDeleteConfirm.projectId);
       if (error) throw error;
       await fetchProjects();
-      if (activeProject?.id === projectId) {
+      if (activeProject?.id === showDeleteConfirm.projectId) {
         setActiveProject(null);
       }
+      addToast('success', 'Project deleted successfully');
     } catch (error) {
       console.error('Error deleting project:', error);
-      // Optionally show error to user
+      addToast('error', 'Failed to delete project');
+    } finally {
+      setShowDeleteConfirm({ open: false });
     }
   };
 
@@ -1032,16 +960,30 @@ const DashboardPage = () => {
                   </div>
                   <div className="flex items-center space-x-4">
                     <button
-                      onClick={handleNewProject}
+                      onClick={() => {
+                        if (projects.length >= (subscription || mockUserSubscription).projectLimit) {
+                          addToast('info', 'You have reached your project limit. Upgrade to Pro for more projects.');
+                          return;
+                        }
+                        handleNewProject();
+                      }}
                       disabled={projects.length >= (subscription || mockUserSubscription).projectLimit}
-                      className={`flex items-center space-x-2 px-4 py-2 rounded-md transition-colors ${
+                      className={`flex items-center space-x-2 px-4 py-2 rounded-md transition-colors relative ${
                         projects.length >= (subscription || mockUserSubscription).projectLimit
                           ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
                           : 'bg-blue-600 text-white hover:bg-blue-700'
                       }`}
+                      title={projects.length >= (subscription || mockUserSubscription).projectLimit
+                        ? 'Project limit reached. Upgrade to Pro for unlimited projects.'
+                        : ''}
                     >
                       <Plus size={18} />
                       <span>New Project</span>
+                      {projects.length >= (subscription || mockUserSubscription).projectLimit && (
+                        <span className="absolute -bottom-7 left-1/2 -translate-x-1/2 bg-gray-900 text-yellow-300 text-xs px-3 py-1 rounded shadow-lg border border-yellow-400 whitespace-nowrap z-50">
+                          Project limit reached. Upgrade to Pro for unlimited projects.
+                        </span>
+                      )}
                     </button>
                     <Link
                       href="/community"
@@ -1161,9 +1103,9 @@ const DashboardPage = () => {
                     )}
 
                     {/* Projects or Workflow */}
-                    {showNewProject || activeProject ? (
+                    {activeProject ? (
                       <div className="p-4 space-y-4">
-                        {renderStepContent(activeProject?.id || currentProjectId || '')}
+                        {renderStepContent(activeProject.id)}
                       </div>
                     ) : (
                       <>
@@ -1191,6 +1133,33 @@ const DashboardPage = () => {
           </div>
         </div>
       </div>
+      {showDeleteConfirm.open && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
+            <div className="flex items-center mb-4">
+              <AlertCircle className="h-6 w-6 text-red-500 mr-2" />
+              <h3 className="text-xl font-semibold text-white">Delete Project</h3>
+            </div>
+            <p className="text-gray-300 mb-6">
+              Are you sure you want to delete this project? This action cannot be undone.
+            </p>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => setShowDeleteConfirm({ open: false })}
+                className="px-4 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteProject}
+                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };

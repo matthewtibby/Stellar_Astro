@@ -7,9 +7,11 @@ export default function AuthSync() {
   useEffect(() => {
     const syncUser = async () => {
       const supabase = getSupabaseClient();
+      const { setSubscriptionLoading, setUser } = useUserStore.getState();
+      setSubscriptionLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        useUserStore.getState().setUser(user);
+        setUser(user);
       }
     };
     syncUser();
