@@ -1,4 +1,4 @@
-import { getSupabaseClient as getSupabaseClientLib } from '../lib/supabase';
+import { SupabaseClient } from '@supabase/supabase-js';
 import { FileType } from '@/src/types/store';
 import { extractTagsFromFitsHeader } from './fileTagging';
 
@@ -29,18 +29,8 @@ export const FILE_TYPE_FOLDERS: Record<FileType, string> = {
   'post-processed': 'post-processed',
 } as const;
 
-// Helper function to get Supabase client
-const checkSupabase = () => {
-  try {
-    return getSupabaseClientLib();
-  } catch (e) {
-    throw new Error('Storage service is currently unavailable. Please try again later.');
-  }
-};
-
 // Profile picture functions
-export const uploadProfilePicture = async (userId: string, file: File): Promise<string> => {
-  const client = checkSupabase();
+export const uploadProfilePicture = async (client: SupabaseClient, userId: string, file: File): Promise<string> => {
   const filePath = `${userId}/profile.${file.name.split('.').pop()}`;
   
   const { data, error } = await client.storage
@@ -64,9 +54,8 @@ export const uploadProfilePicture = async (userId: string, file: File): Promise<
 // Raw frames functions
 export type UploadProgressCallback = (progress: number) => void;
 
-export async function listRawFrames(projectId: string): Promise<string[]> {
+export async function listRawFrames(client: SupabaseClient, projectId: string): Promise<string[]> {
   try {
-    const client = checkSupabase();
     const { data: { user }, error: authError } = await client.auth.getUser();
     
     if (authError || !user) {
@@ -89,9 +78,8 @@ export async function listRawFrames(projectId: string): Promise<string[]> {
   }
 }
 
-export async function checkBucketContents(): Promise<void> {
+export async function checkBucketContents(client: SupabaseClient): Promise<void> {
   try {
-    const client = checkSupabase();
     const { data: { user }, error: authError } = await client.auth.getUser();
     
     if (authError || !user) {
@@ -184,9 +172,7 @@ export async function validateFitsFile(
 }
 
 // Add a function to ensure project exists
-export async function ensureProjectExists(projectId: string): Promise<void> {
-  const client = getSupabaseClientLib();
-  
+export async function ensureProjectExists(client: SupabaseClient, projectId: string): Promise<void> {
   // Check if projectId is a valid UUID
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (!uuidRegex.test(projectId)) {
@@ -199,17 +185,9 @@ export async function ensureProjectExists(projectId: string): Promise<void> {
       .select('*')
       .eq('id', projectId)
       .single();
-
-    if (error) {
-      console.error('Error fetching project:', error);
-      throw new Error(`Failed to fetch project: ${error.message}`);
-    }
-
-    if (!project) {
-      throw new Error('Project not found. Please create a project first.');
-    }
+    if (error) throw error;
+    if (!project) throw new Error('Project not found');
   } catch (error) {
-    console.error('Error in ensureProjectExists:', error);
     throw error;
   }
 }
@@ -219,6 +197,7 @@ const MAX_RETRIES = 3;
 
 // Update the uploadRawFrame function to include validation and retry logic
 export async function uploadRawFrame(
+  client: SupabaseClient,
   file: File,
   projectId: string,
   fileType: FileType,
@@ -228,12 +207,8 @@ export async function uploadRawFrame(
   console.log('Starting upload for file:', file.name);
   
   try {
-    if (!getSupabaseClientLib()) {
-      throw new Error('Supabase client not initialized');
-    }
-
     // Get authenticated user first
-    const { data: { user }, error: userError } = await getSupabaseClientLib().auth.getUser();
+    const { data: { user }, error: userError } = await client.auth.getUser();
     if (userError || !user) {
       throw new Error('User not authenticated');
     }
@@ -260,7 +235,7 @@ export async function uploadRawFrame(
     }
 
     // Check if file already exists in this project
-    const { data: existingFiles, error: listError } = await getSupabaseClientLib()
+    const { data: existingFiles, error: listError } = await client
       .storage
       .from('raw-frames')
       .list(`${user.id}/${projectId}/${actualFileType}`);
@@ -276,7 +251,7 @@ export async function uploadRawFrame(
     }
 
     // Get signed upload URL
-    const { data: signedUrlData, error: signedUrlError } = await getSupabaseClientLib()
+    const { data: signedUrlData, error: signedUrlError } = await client
       .storage
       .from('raw-frames')
       .createSignedUploadUrl(filePath);
@@ -328,12 +303,12 @@ export async function uploadRawFrame(
         });
 
         // Verify the file was uploaded successfully
-        const { data: verifyData, error: verifyError } = await getSupabaseClientLib()
+        const { data: verifyData, error: verifyError } = await client
           .storage
           .from(STORAGE_BUCKETS.RAW_FRAMES)
           .list(filePath.split('/').slice(0, -1).join('/'));
 
-        if (verifyError || !verifyData?.some(file => file.name === file.name)) {
+        if (verifyError || !verifyData?.some(f => f.name === file.name)) {
           console.error('File upload verification failed - file not found:', filePath);
           throw new Error('File upload verification failed');
         }
@@ -341,7 +316,7 @@ export async function uploadRawFrame(
         console.log('File uploaded and verified successfully to:', filePath);
 
         // Insert file record into project_files with tags
-        const { error: insertError } = await getSupabaseClientLib()
+        const { error: insertError } = await client
           .from('project_files')
           .insert({
             project_id: projectId,
@@ -374,11 +349,11 @@ export async function uploadRawFrame(
 
 // Master frames functions
 export const uploadMasterFrame = async (
+  client: SupabaseClient,
   projectId: string, 
   masterType: 'master-dark' | 'master-bias' | 'master-flat', 
   file: File
 ): Promise<string> => {
-  const client = checkSupabase();
   const filePath = `${projectId}/${masterType}/${file.name}`;
   
   const { data, error } = await client.storage
@@ -396,10 +371,10 @@ export const uploadMasterFrame = async (
 
 // Calibrated frames functions
 export const uploadCalibratedFrame = async (
+  client: SupabaseClient,
   projectId: string, 
   file: File
 ): Promise<string> => {
-  const client = checkSupabase();
   const filePath = `${projectId}/calibrated/${file.name}`;
   
   const { data, error } = await client.storage
@@ -417,10 +392,10 @@ export const uploadCalibratedFrame = async (
 
 // Stacked frames functions
 export const uploadStackedFrame = async (
+  client: SupabaseClient,
   projectId: string, 
   file: File
 ): Promise<string> => {
-  const client = checkSupabase();
   const filePath = `${projectId}/stacked/${file.name}`;
   
   const { data, error } = await client.storage
@@ -438,10 +413,10 @@ export const uploadStackedFrame = async (
 
 // Pre-processed image functions
 export const uploadPreProcessedImage = async (
+  client: SupabaseClient,
   projectId: string,
   file: File
 ): Promise<string> => {
-  const client = checkSupabase();
   const filePath = `${projectId}/pre-processed/${file.name}`;
   
   const { data, error } = await client.storage
@@ -459,10 +434,10 @@ export const uploadPreProcessedImage = async (
 
 // Post-processed image functions
 export const uploadPostProcessedImage = async (
+  client: SupabaseClient,
   projectId: string,
   file: File
 ): Promise<string> => {
-  const client = checkSupabase();
   const filePath = `${projectId}/post-processed/${file.name}`;
   
   const { data, error } = await client.storage
@@ -479,8 +454,7 @@ export const uploadPostProcessedImage = async (
 };
 
 // Generic download function
-export const downloadFile = async (bucket: string, filePath: string): Promise<Blob> => {
-  const client = checkSupabase();
+export const downloadFile = async (client: SupabaseClient, bucket: string, filePath: string): Promise<Blob> => {
   const { data, error } = await client.storage
     .from(bucket)
     .download(filePath);
@@ -491,8 +465,7 @@ export const downloadFile = async (bucket: string, filePath: string): Promise<Bl
 };
 
 // Generic delete function
-export async function deleteFitsFile(filePath: string): Promise<void> {
-  const client = checkSupabase();
+export async function deleteFitsFile(client: SupabaseClient, filePath: string): Promise<void> {
   const { error } = await client.storage
     .from(STORAGE_BUCKETS.RAW_FRAMES)
     .remove([filePath]);
@@ -504,8 +477,7 @@ export async function deleteFitsFile(filePath: string): Promise<void> {
 }
 
 // List files in a project folder
-export async function listProjectFiles(projectId: string): Promise<string[]> {
-  const client = checkSupabase();
+export async function listProjectFiles(client: SupabaseClient, projectId: string): Promise<string[]> {
   const { data, error } = await client.storage
     .from('fits-files')
     .list(projectId);
@@ -518,8 +490,7 @@ export async function listProjectFiles(projectId: string): Promise<string[]> {
 }
 
 // Add a function to check if a file exists in the bucket
-export async function fileExists(bucket: string, filePath: string): Promise<boolean> {
-  const client = checkSupabase();
+export async function fileExists(client: SupabaseClient, bucket: string, filePath: string): Promise<boolean> {
   try {
     const { data, error } = await client.storage
       .from(bucket)
@@ -538,11 +509,9 @@ export async function fileExists(bucket: string, filePath: string): Promise<bool
   }
 }
 
-export async function getFitsFileUrl(filePath: string): Promise<string> {
+export async function getFitsFileUrl(client: SupabaseClient, filePath: string): Promise<string> {
   try {
     console.log('[getFitsFileUrl] Getting URL for file:', filePath);
-    const client = checkSupabase();
-
     // Check if the file exists first
     const { data: fileExists, error: checkError } = await client.storage
       .from(STORAGE_BUCKETS.RAW_FRAMES)
@@ -593,10 +562,9 @@ export interface StorageFile {
   metadata?: any;
 }
 
-export async function getFilesByType(projectId: string): Promise<Record<FileType, StorageFile[]>> {
+export async function getFilesByType(client: SupabaseClient, projectId: string): Promise<Record<FileType, StorageFile[]>> {
   try {
     console.log('[getFilesByType] Starting for project:', projectId);
-    const client = checkSupabase();
     const { data: { user }, error: authError } = await client.auth.getUser();
     if (authError || !user) {
       throw new Error('User must be authenticated to fetch files');

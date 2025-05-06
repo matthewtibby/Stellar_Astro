@@ -1,17 +1,17 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { getSupabaseClient } from '@/lib/supabase'
+import { useSupabaseClient } from '@supabase/auth-helpers-react'
 
 export default function TestConnectionPage() {
   const [message, setMessage] = useState('Testing connection...')
   const [error, setError] = useState<string | null>(null)
+  const supabase = useSupabaseClient();
 
   useEffect(() => {
     async function testConnection() {
       try {
         console.log('Testing connection...')
-        const supabase = getSupabaseClient();
         const { data, error } = await supabase.from('_prisma_migrations').select('*').limit(1)
         
         if (error) {
@@ -29,7 +29,7 @@ export default function TestConnectionPage() {
     }
 
     testConnection()
-  }, [])
+  }, [supabase])
 
   return (
     <div className="min-h-screen bg-gray-100">

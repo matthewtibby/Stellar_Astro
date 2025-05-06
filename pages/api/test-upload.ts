@@ -24,7 +24,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const projectName = 'test-upload-project';
     let project;
     try {
-      project = await createProject(user.id, projectName);
+      project = await createProject(supabase, user.id, projectName);
       console.log('Created new test project:', project);
     } catch (e: any) {
       if (e.message === 'A project with this name already exists') {
@@ -54,12 +54,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Upload the file
     console.log('Starting file upload...');
-    await uploadRawFrame(
-      file,
-      project.id,
-      'light' as FileType,
-      (progress) => console.log(`Upload progress: ${Math.round(progress * 100)}%`)
-    );
+    await uploadRawFrame(supabase, file, project.id, 'light', (progress) => console.log(`Upload progress: ${Math.round(progress * 100)}%`));
     
     return res.status(200).json({
       success: true,

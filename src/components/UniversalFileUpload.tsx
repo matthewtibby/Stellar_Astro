@@ -7,6 +7,7 @@ import { type FileType } from '@/src/types/store';
 import { spaceFacts } from '@/src/utils/spaceFacts';
 import { handleError, ValidationError } from '@/src/utils/errorHandling';
 import { useToast } from '../hooks/useToast';
+import { useSupabaseClient } from '@supabase/auth-helpers-react';
 
 type StorageFileWithMetadata = StorageFile & { metadata?: any };
 
@@ -71,6 +72,7 @@ export function UniversalFileUpload({
   const { addToast } = useToast();
   const [renamingFile, setRenamingFile] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const supabase = useSupabaseClient();
 
   // Function to save files to localStorage
   const saveFilesToLocalStorage = useCallback((files: Record<FileType, StorageFileWithMetadata[]>) => {
@@ -104,7 +106,7 @@ export function UniversalFileUpload({
         const savedFiles = loadFilesFromLocalStorage();
         
         // Then fetch from server to ensure we have the latest state
-        const serverFiles = await getFilesByType(projectId);
+        const serverFiles = await getFilesByType(supabase, projectId);
         
         // Merge the files, prioritizing server files (they might be more up-to-date)
         const mergedFiles = { ...savedFiles, ...serverFiles };
@@ -117,7 +119,7 @@ export function UniversalFileUpload({
     };
 
     loadFiles();
-  }, [projectId, onValidationError, loadFilesFromLocalStorage, saveFilesToLocalStorage]);
+  }, [projectId, onValidationError, loadFilesFromLocalStorage, saveFilesToLocalStorage, supabase]);
 
   // Save files whenever they change
   useEffect(() => {
@@ -164,18 +166,13 @@ export function UniversalFileUpload({
         ));
 
         // Upload the file with the type determined from validation
-        await uploadRawFrame(
-          file,
-          projectId,
-          fileType,
-          (progress) => {
-            setUploadStatuses(prev => prev.map(status => 
-              status.file === file 
-                ? { ...status, progress } 
-                : status
-            ));
-          }
-        );
+        await uploadRawFrame(supabase, file, projectId, fileType, (progress) => {
+          setUploadStatuses(prev => prev.map(status => 
+            status.file === file 
+              ? { ...status, progress } 
+              : status
+          ));
+        });
 
         // Update status to completed
         setUploadStatuses(prev => prev.map(status => 
@@ -212,7 +209,7 @@ export function UniversalFileUpload({
       if (onStepAutosave) onStepAutosave();
       // Re-fetch files from backend to ensure UI is up to date
       try {
-        const latestFiles = await getFilesByType(projectId);
+        const latestFiles = await getFilesByType(supabase, projectId);
         setFilesByType(latestFiles);
       } catch (fetchError) {
         console.error('Error fetching files after upload:', fetchError);
@@ -232,7 +229,7 @@ export function UniversalFileUpload({
       onValidationError?.(appError.message);
       setIsUploading(false);
     }
-  }, [projectId, userId, activeTab, onUploadComplete, onValidationError, onStepAutosave]);
+  }, [projectId, userId, activeTab, onUploadComplete, onValidationError, onStepAutosave, supabase]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -269,7 +266,7 @@ export function UniversalFileUpload({
       console.log('[FITS Preview] Attempting to get signed URL for file path:', file.path);
 
       // Get the file URL from Supabase
-      const fileUrl = await getFitsFileUrl(file.path);
+      const fileUrl = await getFitsFileUrl(supabase, file.path);
       console.log('[FITS Preview] Got signed URL:', fileUrl);
 
       // Send the URL to your preview endpoint
@@ -344,16 +341,11 @@ export function UniversalFileUpload({
         throw new ValidationError(validationResult.warnings ? validationResult.warnings.join(', ') : 'File validation failed.');
       }
       // Upload file
-      await uploadRawFrame(
-        file,
-        projectId,
-        fileType,
-        (progress) => {
-          setUploadStatuses(prev => prev.map(status =>
-            status.file === file ? { ...status, progress } : status
-          ));
-        }
-      );
+      await uploadRawFrame(supabase, file, projectId, fileType, (progress) => {
+        setUploadStatuses(prev => prev.map(status =>
+          status.file === file ? { ...status, progress } : status
+        ));
+      });
       setUploadStatuses(prev => prev.map(status =>
         status.file === file ? { ...status, status: 'completed', progress: 1 } : status
       ));

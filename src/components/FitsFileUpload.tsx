@@ -6,6 +6,7 @@ import { validateFitsFile } from '../utils/fitsValidation';
 import { uploadRawFrame } from '../utils/storage';
 import { FileType } from '../types/fits';
 import { useToast, type ToastType } from '../hooks/useToast';
+import { useSupabaseClient } from '@supabase/auth-helpers-react';
 
 interface FitsFileUploadProps {
   projectId: string;
@@ -23,6 +24,7 @@ const FitsFileUpload: React.FC<FitsFileUploadProps> = ({
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const { addToast } = useToast();
+  const supabase = useSupabaseClient();
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return;
@@ -44,7 +46,7 @@ const FitsFileUpload: React.FC<FitsFileUploadProps> = ({
 
       console.log('Starting file upload...');
       // Upload the file with progress tracking
-      await uploadRawFrame(file, projectId, fileType, (progress: number) => {
+      await uploadRawFrame(supabase, file, projectId, fileType, (progress: number) => {
         console.log('Upload progress:', progress);
         setUploadProgress(progress);
       });
@@ -62,7 +64,7 @@ const FitsFileUpload: React.FC<FitsFileUploadProps> = ({
       setIsUploading(false);
       setUploadProgress(0);
     }
-  }, [projectId, userId, fileType, onUploadComplete, addToast]);
+  }, [projectId, userId, fileType, onUploadComplete, addToast, supabase]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,

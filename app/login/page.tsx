@@ -4,11 +4,12 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useUserStore } from '@/src/store/user';
-import { getSupabaseClient } from '@/src/lib/supabase';
+import { useSupabaseClient } from '@supabase/auth-helpers-react';
 import { Eye, EyeOff } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
+  const supabase = useSupabaseClient();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -21,15 +22,25 @@ export default function LoginPage() {
     setError(null);
 
     try {
-      const supabase = getSupabaseClient();
+      console.log('[LoginPage] Attempting login with email:', email, 'password: [HIDDEN]');
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
-
+      console.log('[LoginPage] supabase.auth.signInWithPassword result:', { data, error });
       if (error) throw error;
-
+      if (data?.session) {
+        // Persist the session to cookies for SSR/middleware
+        await fetch('/api/auth/set', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ event: 'SIGNED_IN', session: data.session }),
+        });
+        // Set the session in the client-side Supabase instance
+        await supabase.auth.setSession(data.session);
+      }
       if (data?.user) {
+        console.log('[LoginPage] Setting user in Zustand store:', data.user);
         useUserStore.getState().setUser(data.user);
         router.push('/dashboard');
       }

@@ -3,10 +3,11 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import SubscriptionSelection from '@/components/SubscriptionSelection';
-import { getSupabaseClient } from '@/src/lib/supabase';
+import { useSupabaseClient } from '@supabase/auth-helpers-react';
 
 export default function PlanSelectionPage() {
   const router = useRouter();
+  const supabase = useSupabaseClient();
 
   // Check if user has completed the first step of signup
   useEffect(() => {
@@ -18,7 +19,7 @@ export default function PlanSelectionPage() {
     } else {
       // Check if the user is confirmed
       (async () => {
-        const supabase = getSupabaseClient();
+        // const supabase = getSupabaseClient();
         const { data: { user } } = await supabase.auth.getUser();
         if (user && !user.email_confirmed_at) {
           router.push('/signup/verify-email');

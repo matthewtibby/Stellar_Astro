@@ -1,20 +1,24 @@
 "use client";
 import { useEffect } from "react";
-import { getSupabaseClient } from "@/src/lib/supabase";
+import { useSupabaseClient } from '@supabase/auth-helpers-react';
 import { useUserStore } from "@/src/store/user";
 
 export default function AuthSync() {
+  const supabase = useSupabaseClient();
   useEffect(() => {
     const syncUser = async () => {
-      const supabase = getSupabaseClient();
       const { setSubscriptionLoading, setUser } = useUserStore.getState();
       setSubscriptionLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user }, error } = await supabase.auth.getUser();
+      console.log('[AuthSync] supabase.auth.getUser() result:', { user, error });
       if (user) {
+        console.log('[AuthSync] Setting user in Zustand store:', user);
         setUser(user);
+      } else {
+        console.log('[AuthSync] No user found, not authenticated.');
       }
     };
     syncUser();
-  }, []);
+  }, [supabase]);
   return null;
 } 

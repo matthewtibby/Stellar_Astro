@@ -1,9 +1,11 @@
 import { getSupabaseClient } from '@/lib/supabase'
 import { NextResponse } from 'next/server'
 
+// Create the shared Supabase client once
+const supabase = getSupabaseClient();
+
 export async function GET() {
   try {
-    const supabase = getSupabaseClient();
     const { data, error } = await supabase.from('_prisma_migrations').select('*').limit(1)
     
     if (error) {

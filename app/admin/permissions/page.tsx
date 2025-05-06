@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { getSupabaseClient } from '@/lib/supabase';
+import { useSupabaseClient } from '@supabase/auth-helpers-react';
 import { useUserStore } from '@/src/store/user';
 
 interface PermissionError {
@@ -27,6 +27,7 @@ export default function PermissionsDashboard() {
   const [loading, setLoading] = useState(true);
   const { user } = useUserStore();
   const [isAdmin, setIsAdmin] = useState(false);
+  const supabase = useSupabaseClient();
 
   useEffect(() => {
     checkAdminStatus();
@@ -35,7 +36,6 @@ export default function PermissionsDashboard() {
   }, []);
 
   const checkAdminStatus = async () => {
-    const supabase = getSupabaseClient();
     const { data: { user: currentUser } } = await supabase.auth.getUser();
     if (currentUser?.role === 'admin') {
       setIsAdmin(true);
@@ -43,7 +43,6 @@ export default function PermissionsDashboard() {
   };
 
   const fetchErrors = async () => {
-    const supabase = getSupabaseClient();
     const { data, error } = await supabase
       .from('maintenance.permission_errors')
       .select('*')
@@ -73,7 +72,6 @@ export default function PermissionsDashboard() {
   };
 
   const fetchStats = async () => {
-    const supabase = getSupabaseClient();
     const { data, error } = await supabase
       .rpc('maintenance.check_permission_errors');
 
@@ -86,14 +84,12 @@ export default function PermissionsDashboard() {
   };
 
   const handleFixPermissions = async () => {
-    const supabase = getSupabaseClient();
     await supabase.rpc('maintenance.auto_fix_permissions');
     await fetchErrors();
     await fetchStats();
   };
 
   const handleMarkResolved = async (errorId: string) => {
-    const supabase = getSupabaseClient();
     await supabase
       .from('maintenance.permission_errors')
       .update({ resolved: true })

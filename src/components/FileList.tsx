@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { getFilesByType, type StorageFile } from '@/src/utils/storage';
 import { File, Trash2, Download, Eye } from 'lucide-react';
 import { type FileType } from '@/src/types/store';
+import { useSupabaseClient } from '@supabase/auth-helpers-react';
 
 interface FileListProps {
   projectId: string;
@@ -15,12 +16,13 @@ export function FileList({ projectId, fileType, onFileSelect }: FileListProps) {
   const [files, setFiles] = useState<StorageFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const supabase = useSupabaseClient();
 
   useEffect(() => {
     const loadFiles = async () => {
       try {
         setLoading(true);
-        const filesByType = await getFilesByType(projectId);
+        const filesByType = await getFilesByType(supabase, projectId);
         setFiles(filesByType[fileType] || []);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load files');
@@ -30,7 +32,7 @@ export function FileList({ projectId, fileType, onFileSelect }: FileListProps) {
     };
 
     loadFiles();
-  }, [projectId, fileType]);
+  }, [projectId, fileType, supabase]);
 
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 Bytes';

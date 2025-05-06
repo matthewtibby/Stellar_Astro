@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { getSupabaseClient } from '@/src/lib/supabase';
+import { useSupabaseClient } from '@supabase/auth-helpers-react';
 import { useToast } from '../../../src/hooks/useToast';
 import { Loader2 } from 'lucide-react';
 
 export default function SharedProjectPage() {
   const params = useParams();
   const router = useRouter();
+  const supabase = useSupabaseClient();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -22,7 +23,7 @@ export default function SharedProjectPage() {
 
       try {
         const token = params.token as string;
-        const supabase = getSupabaseClient();
+        // const supabase = getSupabaseClient();
 
         // Get share token details
         const { data: shareToken, error: tokenError } = await supabase

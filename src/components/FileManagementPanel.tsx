@@ -6,6 +6,7 @@ import { File, Trash2, Download, Eye, RefreshCw, FolderOpen, Upload, AlertCircle
 import { type FileType, type StorageFile } from '@/src/types/store';
 import { type FitsMetadata, type FitsValidationResult, type FitsAnalysisResult } from '@/src/types/fits';
 import { createBrowserClient } from '@supabase/ssr';
+import { useSupabaseClient } from '@supabase/auth-helpers-react';
 
 // Add constant for initial file types
 const INITIAL_FILE_TYPES: FileType[] = ['light', 'dark', 'bias', 'flat'];
@@ -188,10 +189,7 @@ export default function FileManagementPanel({ projectId, onRefresh, onValidation
   const [userId, setUserId] = useState<string | null>(null);
   const [tagFilter, setTagFilter] = useState('');
 
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+  const supabase = useSupabaseClient();
 
   const [filesByType, setFilesByType] = useState<FilesByType>({
     'light': [],
@@ -246,7 +244,7 @@ export default function FileManagementPanel({ projectId, onRefresh, onValidation
     if (!projectId) return;
     try {
       setLoading(true);
-      const files = await getFilesByType(projectId);
+      const files = await getFilesByType(supabase, projectId);
       setFilesByType(files);
       setError(null);
       setHasLoadedFiles(true);
@@ -282,7 +280,7 @@ export default function FileManagementPanel({ projectId, onRefresh, onValidation
 
   const handleDownload = async (file: StorageFile) => {
     try {
-      const url = await getFitsFileUrl(file.path);
+      const url = await getFitsFileUrl(supabase, file.path);
       window.open(url, '_blank');
     } catch (error) {
       console.error('Error downloading file:', error);
@@ -292,7 +290,7 @@ export default function FileManagementPanel({ projectId, onRefresh, onValidation
 
   const handleDeleteFile = async (file: StorageFile) => {
     try {
-      await deleteFitsFile(file.path);
+      await deleteFitsFile(supabase, file.path);
       // Refresh the file list
       await loadFiles();
       if (onRefresh) onRefresh();
@@ -385,7 +383,7 @@ export default function FileManagementPanel({ projectId, onRefresh, onValidation
       }
 
       // Get the file URL from Supabase
-      const fileUrl = await getFitsFileUrl(file.path);
+      const fileUrl = await getFitsFileUrl(supabase, file.path);
       // Send the URL to our preview endpoint
       const previewResponse = await fetch('http://localhost:8000/preview-fits', {
         method: 'POST',

@@ -1,20 +1,20 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { getSupabaseClient } from '@/src/lib/supabase';
+import { useSupabaseClient } from '@supabase/auth-helpers-react';
 
 export default function VerifyEmailPage() {
   const [resent, setResent] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+  const supabase = useSupabaseClient();
 
   const resendEmail = async () => {
     setError('');
     setResent(false);
     setIsLoading(true);
     try {
-      const supabase = getSupabaseClient();
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       if (user && user.email) {
         const { error } = await supabase.auth.resend({

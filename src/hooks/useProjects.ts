@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback } from 'react';
-import { getSupabaseClient } from '@/src/lib/supabase';
+import { useSupabaseClient } from '@supabase/auth-helpers-react';
 import { Project } from '@/src/types/project';
 
 // Define allowed sort fields
 const allowedSortFields = ['created_at', 'name'];
 
 export function useProjects(userId?: string, isAuthenticated?: boolean) {
+  const supabaseClient = useSupabaseClient();
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,7 +37,7 @@ export function useProjects(userId?: string, isAuthenticated?: boolean) {
       });
 
       // Verify authentication state
-      const { data: { user }, error: authError } = await getSupabaseClient().auth.getUser();
+      const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
       if (authError) {
         console.error('Authentication check failed:', authError);
         throw new Error('Failed to verify authentication status');
@@ -50,7 +51,7 @@ export function useProjects(userId?: string, isAuthenticated?: boolean) {
         throw new Error('User authentication mismatch');
       }
 
-      let query = getSupabaseClient()
+      let query = supabaseClient
         .from('projects')
         .select('*')
         .eq('user_id', userId);
@@ -115,7 +116,7 @@ export function useProjects(userId?: string, isAuthenticated?: boolean) {
     } finally {
       setIsLoading(false);
     }
-  }, [userId, isAuthenticated]);
+  }, [userId, isAuthenticated, supabaseClient]);
 
   useEffect(() => {
     if (isAuthenticated && userId) {

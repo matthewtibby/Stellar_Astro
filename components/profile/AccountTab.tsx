@@ -6,7 +6,7 @@ import { UserState } from '@/src/types/store';
 import { Camera, Check, X } from 'lucide-react';
 import Image from 'next/image';
 import { User } from '@supabase/supabase-js';
-import { getSupabaseClient } from '@/src/lib/supabase';
+import { useSupabaseClient } from '@supabase/auth-helpers-react';
 import { uploadProfilePicture } from '@/src/utils/storage';
 import { sendNotification } from '@/src/utils/sendNotification';
 
@@ -16,6 +16,7 @@ interface AccountTabProps {
 
 export default function AccountTab({ user }: AccountTabProps) {
   const { setUser, user: supabaseUser } = useUserStore();
+  const supabase = useSupabaseClient();
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
     username: user?.username || '',
@@ -66,11 +67,10 @@ export default function AccountTab({ user }: AccountTabProps) {
         }
       }
 
-      const supabase = getSupabaseClient();
       let avatarUrl = supabaseUser?.user_metadata?.avatar_url || '';
       // If avatar was changed, upload it
       if (avatarFile && supabaseUser?.id) {
-        avatarUrl = await uploadProfilePicture(supabaseUser.id, avatarFile);
+        avatarUrl = await uploadProfilePicture(supabase, supabaseUser.id, avatarFile);
       }
 
       // Debug logs

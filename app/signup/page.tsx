@@ -3,11 +3,12 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { getSupabaseClient } from '@/src/lib/supabase';
+import { useSupabaseClient } from '@supabase/auth-helpers-react';
 import { Eye, EyeOff } from 'lucide-react';
 
 export default function SignUp() {
   const router = useRouter();
+  const supabase = useSupabaseClient();
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -94,7 +95,6 @@ export default function SignUp() {
 
     setIsLoading(true);
     try {
-      const supabase = getSupabaseClient();
       const { data, error } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,

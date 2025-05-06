@@ -8,9 +8,11 @@ import { User, CreditCard, Settings } from 'lucide-react';
 import AccountTab from '@/components/profile/AccountTab';
 import SubscriptionTab from '@/components/profile/SubscriptionTab';
 import SettingsTab from '@/components/profile/SettingsTab';
+import { useSupabaseClient } from '@supabase/auth-helpers-react';
 
 export default function ProfilePage() {
   const router = useRouter();
+  const supabase = useSupabaseClient();
   const { user, isAuthenticated, id, email, username, fullName, avatarUrl, subscription, isLoading, error, subscriptionLoading } = useUserStore();
   const [activeTab, setActiveTab] = useState('account');
   const [userRole, setUserRole] = useState<string | null>(null);
@@ -18,12 +20,11 @@ export default function ProfilePage() {
   // Fetch user role on mount
   useEffect(() => {
     async function fetchUserRole() {
-      const supabase = (await import('@/src/lib/supabase')).getSupabaseClient();
       const { data, error } = await supabase.rpc('get_user_role');
       if (!error) setUserRole(data);
     }
     if (isAuthenticated) fetchUserRole();
-  }, [isAuthenticated]);
+  }, [isAuthenticated, supabase]);
 
   // Redirect to login if not authenticated
   useEffect(() => {

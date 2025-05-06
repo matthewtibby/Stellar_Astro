@@ -17,7 +17,7 @@ async function testSupabaseUpload() {
 
     // Create a test project
     const projectName = 'test-upload-project';
-    const project = await createProject('test-user-id', projectName);
+    const project = await createProject(supabase, 'test-user-id', projectName);
     console.log('Created new test project:', project);
 
     // Read the test.fits file using the API endpoint
@@ -45,12 +45,7 @@ async function testSupabaseUpload() {
 
     // Upload the file
     console.log('Starting file upload...');
-    await uploadRawFrame(
-      file,
-      project.id,
-      'light' as FileType,
-      (progress) => console.log(`Upload progress: ${Math.round(progress * 100)}%`)
-    );
+    await uploadRawFrame(supabase, file, project.id, 'light' as FileType, (progress) => console.log(`Upload progress: ${Math.round(progress * 100)}%`));
     
     console.log('Test completed successfully');
   } catch (error) {

@@ -1,8 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Project, ProjectMetadata } from '@/types/store';
-import { getSupabaseClient } from '@/src/lib/supabase';
-import { PostgrestError } from '@supabase/supabase-js';
+import { PostgrestError, SupabaseClient } from '@supabase/supabase-js';
 
 interface ProjectStore {
   currentProject: Project | null;
@@ -12,12 +11,12 @@ interface ProjectStore {
   lastSaved: string | null;
   
   // Actions
-  createProject: (project: Omit<Project, 'id' | 'createdAt' | 'updatedAt' | 'version'>) => Promise<void>;
-  updateProject: (projectId: string, updates: Partial<Project>) => Promise<void>;
-  deleteProject: (projectId: string) => Promise<void>;
-  loadProject: (projectId: string) => Promise<void>;
+  createProject: (supabase: SupabaseClient, project: Omit<Project, 'id' | 'createdAt' | 'updatedAt' | 'version'>) => Promise<void>;
+  updateProject: (supabase: SupabaseClient, projectId: string, updates: Partial<Project>) => Promise<void>;
+  deleteProject: (supabase: SupabaseClient, projectId: string) => Promise<void>;
+  loadProject: (supabase: SupabaseClient, projectId: string) => Promise<void>;
   setCurrentProject: (project: Project | null) => void;
-  autoSaveProject: () => Promise<void>;
+  autoSaveProject: (supabase: SupabaseClient) => Promise<void>;
 }
 
 const initialState = {
@@ -33,10 +32,10 @@ export const useProjectStore = create<ProjectStore>()(
     (set, get) => ({
       ...initialState,
 
-      createProject: async (projectData) => {
+      createProject: async (supabase, projectData) => {
         set({ isLoading: true, error: null });
         try {
-          const { data: { user } } = await getSupabaseClient().auth.getUser();
+          const { data: { user } } = await supabase.auth.getUser();
           
           if (!user) throw new Error('User not authenticated');
 
@@ -52,12 +51,7 @@ export const useProjectStore = create<ProjectStore>()(
           console.log('Supabase user object:', user);
           console.log('Inserting project:', newProject);
 
-          const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-          const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-          console.log('Supabase URL:', supabaseUrl);
-          console.log('Supabase Anon/Public Key:', supabaseKey);
-
-          const { data: project, error } = await getSupabaseClient()
+          const { data: project, error } = await supabase
             .from('projects')
             .insert([newProject])
             .select()
@@ -78,7 +72,7 @@ export const useProjectStore = create<ProjectStore>()(
         }
       },
 
-      updateProject: async (projectId, updates) => {
+      updateProject: async (supabase, projectId, updates) => {
         set({ isLoading: true, error: null });
         try {
           const currentProject = get().currentProject;
@@ -92,7 +86,7 @@ export const useProjectStore = create<ProjectStore>()(
             updatedAt: new Date().toISOString(),
           };
 
-          const { data: project, error } = await getSupabaseClient()
+          const { data: project, error } = await supabase
             .from('projects')
             .update(updatedProject)
             .eq('id', projectId)
@@ -116,10 +110,10 @@ export const useProjectStore = create<ProjectStore>()(
         }
       },
 
-      deleteProject: async (projectId) => {
+      deleteProject: async (supabase, projectId) => {
         set({ isLoading: true, error: null });
         try {
-          const { error } = await getSupabaseClient()
+          const { error } = await supabase
             .from('projects')
             .delete()
             .eq('id', projectId);
@@ -138,10 +132,10 @@ export const useProjectStore = create<ProjectStore>()(
         }
       },
 
-      loadProject: async (projectId) => {
+      loadProject: async (supabase, projectId) => {
         set({ isLoading: true, error: null });
         try {
-          const { data: project, error } = await getSupabaseClient()
+          const { data: project, error } = await supabase
             .from('projects')
             .select('*')
             .eq('id', projectId)
@@ -163,12 +157,12 @@ export const useProjectStore = create<ProjectStore>()(
         set({ currentProject: project });
       },
 
-      autoSaveProject: async () => {
+      autoSaveProject: async (supabase) => {
         const currentProject = get().currentProject;
         if (!currentProject) return;
 
         try {
-          await get().updateProject(currentProject.id, currentProject);
+          await get().updateProject(supabase, currentProject.id, currentProject);
         } catch (error) {
           console.error('Auto-save failed:', error);
         }

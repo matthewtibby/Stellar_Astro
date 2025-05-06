@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Share2, Download, Upload, Copy, CheckCircle, X, Star, Tag, Trash, Copy as Duplicate, Archive } from 'lucide-react';
 import { useProjectStore } from '@/src/store/project';
-import { getSupabaseClient } from '@/src/lib/supabase';
+import { useSupabaseClient } from '@supabase/auth-helpers-react';
 import { useToast } from '../hooks/useToast';
 import { sendNotification } from '@/src/utils/sendNotification';
 
@@ -36,6 +36,7 @@ export default function ProjectManagementPanel({ projectId }: ProjectManagementP
   const [isCopied, setIsCopied] = useState(false);
   const { currentProject, updateProject } = useProjectStore();
   const { addToast } = useToast();
+  const supabaseClient = useSupabaseClient();
 
   const handleExport = async () => {
     if (!currentProject) return;
@@ -43,7 +44,7 @@ export default function ProjectManagementPanel({ projectId }: ProjectManagementP
     setIsExporting(true);
     try {
       // Get all files associated with the project
-      const { data: files, error: filesError } = await getSupabaseClient()
+      const { data: files, error: filesError } = await supabaseClient
         .from('project_files')
         .select('*')
         .eq('project_id', projectId);
@@ -99,7 +100,7 @@ export default function ProjectManagementPanel({ projectId }: ProjectManagementP
           }
 
           // Create new project
-          const { data: newProject, error: projectError } = await getSupabaseClient()
+          const { data: newProject, error: projectError } = await supabaseClient
             .from('projects')
             .insert([{
               ...importData.project,
@@ -115,7 +116,7 @@ export default function ProjectManagementPanel({ projectId }: ProjectManagementP
 
           // Import files
           for (const file of importData.files) {
-            const { error: fileError } = await getSupabaseClient()
+            const { error: fileError } = await supabaseClient
               .from('project_files')
               .insert([{
                 ...file,
@@ -148,7 +149,7 @@ export default function ProjectManagementPanel({ projectId }: ProjectManagementP
 
     try {
       // Create a share token
-      const { data: shareToken, error: tokenError } = await getSupabaseClient()
+      const { data: shareToken, error: tokenError } = await supabaseClient
         .from('project_shares')
         .insert([{
           project_id: projectId,
@@ -165,7 +166,7 @@ export default function ProjectManagementPanel({ projectId }: ProjectManagementP
       setShareLink(shareLink);
 
       // Update project to be public
-      await updateProject(projectId, { isPublic: true });
+      await updateProject(supabaseClient, projectId, { isPublic: true });
       
       addToast('success', 'Project shared successfully');
       // Notification for project_shared
@@ -193,7 +194,7 @@ export default function ProjectManagementPanel({ projectId }: ProjectManagementP
   const toggleFavorite = async () => {
     if (!currentProject) return;
     try {
-      await updateProject(projectId, { isFavorite: !currentProject.isFavorite });
+      await updateProject(supabaseClient, projectId, { isFavorite: !currentProject.isFavorite });
       addToast('success', `Project ${currentProject.isFavorite ? 'removed from' : 'added to'} favorites`);
     } catch (error) {
       console.error('Failed to update favorite status:', error);
@@ -205,7 +206,7 @@ export default function ProjectManagementPanel({ projectId }: ProjectManagementP
     if (!currentProject) return;
     const tags = e.target.value.split(',').map(tag => tag.trim());
     try {
-      await updateProject(projectId, { tags });
+      await updateProject(supabaseClient, projectId, { tags });
       addToast('success', 'Tags updated successfully');
     } catch (error) {
       console.error('Failed to update tags:', error);
@@ -217,7 +218,7 @@ export default function ProjectManagementPanel({ projectId }: ProjectManagementP
     if (!currentProject) return;
     try {
       const newProject = { ...currentProject, id: undefined, name: `${currentProject.name} (Copy)` };
-      await updateProject(projectId, newProject);
+      await updateProject(supabaseClient, projectId, newProject);
       addToast('success', 'Project duplicated successfully');
       // Notification for project_duplicated
       // await sendNotification({ req, eventType: 'project_duplicated', type: 'success', message: `Project "${currentProject.name}" duplicated successfully!`, data: { projectId } });
@@ -230,7 +231,7 @@ export default function ProjectManagementPanel({ projectId }: ProjectManagementP
   const handleArchive = async () => {
     if (!currentProject) return;
     try {
-      await updateProject(projectId, { status: 'archived' });
+      await updateProject(supabaseClient, projectId, { status: 'archived' });
       addToast('success', 'Project archived successfully');
       // Notification for project_archived
       // await sendNotification({ req, eventType: 'project_archived', type: 'info', message: `Project "${currentProject.name}" was archived.`, data: { projectId } });
@@ -243,7 +244,7 @@ export default function ProjectManagementPanel({ projectId }: ProjectManagementP
   const handleDelete = async () => {
     if (!currentProject) return;
     try {
-      await updateProject(projectId, { status: 'deleted' });
+      await updateProject(supabaseClient, projectId, { status: 'deleted' });
       addToast('success', 'Project deleted successfully');
       // Notification for project_archived (deletion)
       // await sendNotification({ req, eventType: 'project_archived', type: 'warning', message: `Project "${currentProject.name}" was deleted.`, data: { projectId } });

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { File, X, CheckCircle, AlertCircle, ChevronDown, ChevronRight } from 'lucide-react';
-import { getSupabaseClient } from '@/src/lib/supabase';
+import { useSupabaseClient } from '@supabase/auth-helpers-react';
 import { useToast } from '../hooks/useToast';
 
 interface FileComparisonPanelProps {
@@ -30,6 +30,7 @@ interface ComparisonResult {
 }
 
 export default function FileComparisonPanel({ projectId }: FileComparisonPanelProps) {
+  const supabaseClient = useSupabaseClient();
   const [files, setFiles] = useState<FileMetadata[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
   const [comparisonResults, setComparisonResults] = useState<ComparisonResult[]>([]);
@@ -43,7 +44,7 @@ export default function FileComparisonPanel({ projectId }: FileComparisonPanelPr
 
   const loadFiles = async () => {
     try {
-      const { data, error } = await getSupabaseClient()
+      const { data, error } = await supabaseClient
         .from('project_files')
         .select('*')
         .eq('project_id', projectId);

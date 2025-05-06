@@ -1,8 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { UserStore, UserState } from '@/types/store';
-import { User } from '@supabase/supabase-js';
-import { getSupabaseClient } from '@/src/lib/supabase';
+import { User, SupabaseClient } from '@supabase/supabase-js';
 
 const initialState: UserState = {
   id: '',
@@ -21,9 +20,10 @@ const initialState: UserState = {
 
 // Extend UserStore type to include fetchAndSetSubscription
 interface UserStoreWithSubscription extends UserStore {
-  fetchAndSetSubscriptionAndRole: (userId: string) => Promise<void>;
+  fetchAndSetSubscriptionAndRole: (supabase: SupabaseClient, userId: string) => Promise<void>;
   subscriptionLoading: boolean;
   setSubscriptionLoading: (loading: boolean) => void;
+  setUserWithClient: (user: User, supabase: SupabaseClient) => void;
 }
 
 export const useUserStore = create<UserStoreWithSubscription>()(
@@ -45,11 +45,21 @@ export const useUserStore = create<UserStoreWithSubscription>()(
           isAuthenticated: true,
           user,
         });
-        get().fetchAndSetSubscriptionAndRole(user.id);
       },
-      fetchAndSetSubscriptionAndRole: async (userId: string) => {
+      setUserWithClient: (user: User, supabase: SupabaseClient) => {
+        set({
+          id: user.id,
+          email: user.email || '',
+          username: user.user_metadata?.username || '',
+          fullName: user.user_metadata?.full_name || '',
+          avatarUrl: user.user_metadata?.avatar_url || '',
+          isAuthenticated: true,
+          user,
+        });
+        get().fetchAndSetSubscriptionAndRole(supabase, user.id);
+      },
+      fetchAndSetSubscriptionAndRole: async (supabase, userId: string) => {
         set({ subscriptionLoading: true });
-        const supabase = getSupabaseClient();
         // Fetch both in parallel
         const [subRes, roleRes] = await Promise.all([
           supabase

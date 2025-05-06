@@ -43,7 +43,6 @@ import FitsFileUpload from '@/src/components/FitsFileUpload';
 import StepsIndicator from '@/src/components/StepsIndicator';
 import FileManagementPanel from '@/src/components/FileManagementPanel';
 import { type StorageFile } from '@/src/utils/storage';
-import { getSupabaseClient } from '@/src/lib/supabase';
 import { generateUUID } from '@/src/utils/uuid';
 import { UniversalFileUpload } from '@/src/components/UniversalFileUpload';
 import ProjectManagementPanel from '@/src/components/ProjectManagementPanel';
@@ -59,6 +58,7 @@ import { DashboardTourProvider, useDashboardTour } from '@/src/components/Onboar
 import ActivityFeed from '../components/ActivityFeed';
 import NotificationCenter from '../components/NotificationCenter';
 import DashboardStats from '../components/DashboardStats';
+import { useSupabaseClient } from '@supabase/auth-helpers-react';
 
 // Add these interfaces before the mockProjects array
 interface WorkflowStep {
@@ -173,7 +173,7 @@ const defaultChecklist: ChecklistItem[] = [
   }
 ];
 
-const FileUploadSection = ({ projectId, onStepAutosave, isSavingStep, currentStep }: { projectId: string, onStepAutosave: () => void, isSavingStep: boolean, currentStep: number }) => {
+const FileUploadSection = ({ projectId, onStepAutosave, isSavingStep, currentStep, supabase }: { projectId: string, onStepAutosave: () => void, isSavingStep: boolean, currentStep: number, supabase: any }) => {
   const { user, isAuthenticated } = useUserStore();
   const [validationError, setValidationError] = useState<string | null>(null);
   const userId = user?.id;
@@ -227,7 +227,6 @@ const FileUploadSection = ({ projectId, onStepAutosave, isSavingStep, currentSte
           await onStepAutosave();
           // Save current step to Supabase before exiting
           try {
-            const supabase = getSupabaseClient();
             await supabase
               .from('projects')
               .update({ current_step: currentStep })
@@ -342,6 +341,8 @@ const DashboardPage = () => {
   // Add state for privacy
   const [isPublic, setIsPublic] = useState(false);
 
+  const supabase = useSupabaseClient();
+
   // Debug logging
   console.log('Zustand user:', user);
   console.log('Zustand isAuthenticated:', isAuthenticated);
@@ -453,9 +454,11 @@ const DashboardPage = () => {
         setIsSavingProjectName(false);
         return;
       }
-      const supabase = getSupabaseClient();
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-      if (authError || !user) throw new Error('Authentication required');
+      if (!user) {
+        addToast('error', 'You must be logged in to create a project.');
+        setIsSavingProjectName(false);
+        return;
+      }
       const { data: project, error: projectError } = await supabase
         .from('projects')
         .insert([{
@@ -511,7 +514,6 @@ const DashboardPage = () => {
     }
     setIsSavingProjectName(true);
     try {
-      const supabase = getSupabaseClient();
       const { data: updated, error } = await supabase
         .from('projects')
         .update({ title: projectNameEdit.trim(), updated_at: new Date().toISOString() })
@@ -797,7 +799,6 @@ const DashboardPage = () => {
             })),
           { id: 'upload-organize', name: 'Upload & Organize', status: 'completed' as const }
         ];
-        const supabase = getSupabaseClient();
         await supabase
           .from('projects')
           .update({ steps: updatedSteps })
@@ -855,7 +856,7 @@ const DashboardPage = () => {
               </p>
               {/* Only render FileUploadSection if project is named and saved */}
               {canUpload ? (
-                <FileUploadSection projectId={projectId} onStepAutosave={handleStepAutosave} isSavingStep={isSavingStep} currentStep={currentStep} />
+                <FileUploadSection projectId={projectId} onStepAutosave={handleStepAutosave} isSavingStep={isSavingStep} currentStep={currentStep} supabase={supabase} />
               ) : (
                 <div className="p-4 bg-yellow-900/50 text-yellow-200 rounded-md border border-yellow-800">
                   Please name and save your project before uploading files.
@@ -870,7 +871,7 @@ const DashboardPage = () => {
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-4">
-                <FileUploadSection projectId={projectId} onStepAutosave={handleStepAutosave} isSavingStep={isSavingStep} currentStep={currentStep} />
+                <FileUploadSection projectId={projectId} onStepAutosave={handleStepAutosave} isSavingStep={isSavingStep} currentStep={currentStep} supabase={supabase} />
                 <FileComparisonPanel projectId={projectId} />
               </div>
               <div className="space-y-4">
@@ -968,7 +969,6 @@ const DashboardPage = () => {
   const confirmDeleteProject = async () => {
     if (!showDeleteConfirm.projectId) return;
     try {
-      const supabase = getSupabaseClient();
       const { error } = await supabase
         .from('projects')
         .delete()
@@ -997,7 +997,6 @@ const DashboardPage = () => {
   // Add handleToggleFavorite function
   const handleToggleFavorite = async (project: Project) => {
     try {
-      const supabase = getSupabaseClient();
       await supabase
         .from('projects')
         .update({ is_favorite: !project.isFavorite })
@@ -1011,7 +1010,6 @@ const DashboardPage = () => {
   // Add handleTagEdit function (inline tag editing for each project)
   const handleTagEdit = async (project: Project, tags: string[]) => {
     try {
-      const supabase = getSupabaseClient();
       await supabase
         .from('projects')
         .update({ tags })
@@ -1025,8 +1023,6 @@ const DashboardPage = () => {
   // Add handleDuplicateProject and handleArchiveProject functions
   const handleDuplicateProject = async (project: Project) => {
     try {
-      const supabase = getSupabaseClient();
-      // Duplicate project with a new id and name
       const { data: newProject, error } = await supabase
         .from('projects')
         .insert({
@@ -1049,7 +1045,6 @@ const DashboardPage = () => {
 
   const handleArchiveProject = async (project: Project) => {
     try {
-      const supabase = getSupabaseClient();
       await supabase
         .from('projects')
         .update({ status: 'archived' })
