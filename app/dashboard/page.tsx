@@ -348,6 +348,13 @@ const DashboardPage = () => {
   console.log('Zustand isLoading:', isLoading);
   console.log('activeProject', activeProject, 'showNewProject', showNewProject);
 
+  // Redirect unconfirmed users to verify email page
+  useEffect(() => {
+    if (user && !user.email_confirmed_at) {
+      router.push('/signup/verify-email');
+    }
+  }, [user, router]);
+
   // Function to check if there are any uploaded files
   const checkForUploadedFiles = () => {
     const hasFiles = Object.values(uploadedFiles).some(files => files.length > 0);

@@ -70,12 +70,12 @@ function PaymentPageContent() {
   });
   
   // Get the selected plan from URL parameters
-  const planId = searchParams.get('plan') || 'free';
-  const selectedPlan = planDetails[planId as keyof typeof planDetails];
+  const planId = searchParams?.get('plan') || 'free';
+  const selectedPlan = planDetails[planId as keyof typeof planDetails] || planDetails['free'];
 
   // Redirect to plan selection if no plan is selected
   useEffect(() => {
-    if (!searchParams.get('plan')) {
+    if (!searchParams || !searchParams.get('plan')) {
       router.push('/signup/plan');
     }
   }, [searchParams, router]);

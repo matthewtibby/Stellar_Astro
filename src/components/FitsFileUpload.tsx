@@ -44,7 +44,7 @@ const FitsFileUpload: React.FC<FitsFileUploadProps> = ({
 
       console.log('Starting file upload...');
       // Upload the file with progress tracking
-      await uploadRawFrame(projectId, fileType, file, (progress: number) => {
+      await uploadRawFrame(file, projectId, fileType, (progress: number) => {
         console.log('Upload progress:', progress);
         setUploadProgress(progress);
       });

@@ -40,11 +40,22 @@ export const useProjectStore = create<ProjectStore>()(
           
           if (!user) throw new Error('User not authenticated');
 
-          const newProject: Omit<Project, 'id' | 'createdAt' | 'updatedAt'> = {
+          const safeTitle = projectData.title && projectData.title.trim() ? projectData.title.trim() : 'Untitled Project';
+
+          const newProject = {
             ...projectData,
-            userId: user.id,
+            title: safeTitle,
+            user_id: user.id,
             version: 1,
           };
+
+          console.log('Supabase user object:', user);
+          console.log('Inserting project:', newProject);
+
+          const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+          const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+          console.log('Supabase URL:', supabaseUrl);
+          console.log('Supabase Anon/Public Key:', supabaseKey);
 
           const { data: project, error } = await getSupabaseClient()
             .from('projects')

@@ -1,4 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import { useSession, useSupabaseClient } from '@supabase/auth-helpers-react';
 import { Folder, Image as ImageIcon, Clock, Zap, Star, HardDrive, Users, Share2 } from 'lucide-react';
 
 const statIcons = {
@@ -35,12 +37,19 @@ export default function DashboardStats() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const router = useRouter();
+  const session = useSession();
+  const supabase = useSupabaseClient();
 
   const fetchStats = async () => {
     setLoading(true);
     setError(null);
     try {
       const res = await fetch('/api/dashboard-stats', { credentials: 'include' });
+      if (res.status === 401) {
+        router.push('/login');
+        return;
+      }
       if (!res.ok) throw new Error('Failed to fetch stats');
       const data = await res.json();
       setStats(data);
@@ -52,6 +61,11 @@ export default function DashboardStats() {
   };
 
   useEffect(() => {
+    if (!session) {
+      setError('You must be logged in to view dashboard stats.');
+      setLoading(false);
+      return;
+    }
     fetchStats();
     intervalRef.current = setInterval(fetchStats, 30000); // 30 seconds
     const handleFocus = () => fetchStats();
@@ -60,7 +74,7 @@ export default function DashboardStats() {
       if (intervalRef.current) clearInterval(intervalRef.current);
       window.removeEventListener('focus', handleFocus);
     };
-  }, []);
+  }, [session]);
 
   if (loading) return <div className="text-white py-8">Loading stats...</div>;
   if (error) return <div className="text-red-400 py-8">{error}</div>;

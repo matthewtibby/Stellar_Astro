@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { getSupabaseClient } from '@/src/lib/supabase';
+import { Eye, EyeOff } from 'lucide-react';
 
 export default function SignUp() {
   const router = useRouter();
@@ -25,6 +27,8 @@ export default function SignUp() {
     hasNumber: false,
     hasSpecial: false,
   });
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const validateForm = () => {
     const newErrors: {
@@ -90,22 +94,21 @@ export default function SignUp() {
 
     setIsLoading(true);
     try {
-      // Here you would typically make an API call to create the user
-      // For now, we'll just simulate a successful signup
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Store the signup data in session storage
-      sessionStorage.setItem('signupData', JSON.stringify({
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase.auth.signUp({
         email: formData.email,
-        // Don't store the password in session storage in a real app
-        // This is just for demonstration purposes
-      }));
+        password: formData.password,
+      });
 
-      // Redirect to the plan selection page
+      if (error) throw error;
+
+      // Optionally, set user in your store here
+      // useUserStore.getState().setUser(data.user);
+
+      // Redirect to plan selection page
       router.push('/signup/plan');
     } catch (error) {
-      console.error('Signup failed:', error);
-      setErrors({ email: 'Signup failed. Please try again.' });
+      setErrors({ email: error instanceof Error ? error.message : 'Signup failed. Please try again.' });
     } finally {
       setIsLoading(false);
     }
@@ -163,11 +166,11 @@ export default function SignUp() {
                 <label htmlFor="password" className="block text-sm font-medium text-gray-300">
                   Password
                 </label>
-                <div className="mt-2">
+                <div className="mt-2 relative">
                   <input
                     id="password"
                     name="password"
-                    type="password"
+                    type={showPassword ? 'text' : 'password'}
                     required
                     autoComplete="new-password"
                     value={formData.password}
@@ -181,6 +184,15 @@ export default function SignUp() {
                     } placeholder:text-gray-500 focus:border-primary focus:ring-1 focus:ring-primary sm:text-sm`}
                     placeholder="Create a password"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200 focus:outline-none"
+                    tabIndex={-1}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  </button>
                 </div>
                 <div className="mt-2">
                   <div className="h-1 w-full bg-gray-700 rounded-full overflow-hidden">
@@ -233,11 +245,11 @@ export default function SignUp() {
                 <label htmlFor="confirm-password" className="block text-sm font-medium text-gray-300">
                   Confirm Password
                 </label>
-                <div className="mt-2">
+                <div className="mt-2 relative">
                   <input
                     id="confirm-password"
                     name="confirm-password"
-                    type="password"
+                    type={showConfirmPassword ? 'text' : 'password'}
                     required
                     autoComplete="new-password"
                     value={formData.confirmPassword}
@@ -251,6 +263,15 @@ export default function SignUp() {
                     } placeholder:text-gray-500 focus:border-primary focus:ring-1 focus:ring-primary sm:text-sm`}
                     placeholder="Confirm your password"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword((v) => !v)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200 focus:outline-none"
+                    tabIndex={-1}
+                    aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  </button>
                 </div>
               </div>
 

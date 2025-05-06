@@ -65,13 +65,13 @@ function SuccessPageContent() {
   const { currency } = useCurrency();
   
   // Get the selected plan from URL parameters
-  const planId = searchParams.get('plan') || 'free';
+  const planId = searchParams?.get('plan') || 'free';
   const selectedPlan = planDetails[planId as keyof typeof planDetails];
   const isFreePlan = planId === 'free';
 
   // Redirect to plan selection if no plan is selected
   useEffect(() => {
-    if (!searchParams.get('plan')) {
+    if (!searchParams || !searchParams.get('plan')) {
       router.push('/signup/plan');
     }
   }, [searchParams, router]);
@@ -129,12 +129,20 @@ function SuccessPageContent() {
             <h3 className="text-lg font-medium text-white mb-4">What's Next?</h3>
             <ul className="space-y-4">
               {!isFreePlan && (
-                <li className="flex items-start">
-                  <CheckCircle className="h-5 w-5 text-green-500 shrink-0 mt-0.5" />
-                  <span className="ml-3 text-gray-300">
-                    We've sent a confirmation email with your receipt and subscription details.
-                  </span>
-                </li>
+                <>
+                  <li className="flex items-start">
+                    <CheckCircle className="h-5 w-5 text-green-500 shrink-0 mt-0.5" />
+                    <span className="ml-3 text-gray-300">
+                      We've sent a confirmation email with your receipt and subscription details.
+                    </span>
+                  </li>
+                  <li className="flex items-start">
+                    <CheckCircle className="h-5 w-5 text-yellow-400 shrink-0 mt-0.5" />
+                    <span className="ml-3 text-yellow-200 font-semibold">
+                      You must verify your email before you can log in or access your dashboard.
+                    </span>
+                  </li>
+                </>
               )}
               <li className="flex items-start">
                 <CheckCircle className="h-5 w-5 text-green-500 shrink-0 mt-0.5" />
@@ -152,13 +160,23 @@ function SuccessPageContent() {
           </div>
 
           <div className="mt-8 text-center">
-            <Link 
-              href="/dashboard" 
-              className="inline-flex items-center justify-center rounded-lg bg-gradient-to-r from-purple-600 to-blue-600 px-8 py-4 text-lg font-semibold text-white shadow-xl shadow-primary/50 hover:from-purple-700 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 transition-all duration-200 transform hover:scale-105"
-            >
-              Go to Dashboard
-              <ArrowRight className="ml-2 h-5 w-5" />
-            </Link>
+            {isFreePlan ? (
+              <Link 
+                href="/dashboard" 
+                className="inline-flex items-center justify-center rounded-lg bg-gradient-to-r from-purple-600 to-blue-600 px-8 py-4 text-lg font-semibold text-white shadow-xl shadow-primary/50 hover:from-purple-700 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 transition-all duration-200 transform hover:scale-105"
+              >
+                Go to Dashboard
+                <ArrowRight className="ml-2 h-5 w-5" />
+              </Link>
+            ) : (
+              <Link 
+                href="/login" 
+                className="inline-flex items-center justify-center rounded-lg bg-gradient-to-r from-purple-600 to-blue-600 px-8 py-4 text-lg font-semibold text-white shadow-xl shadow-primary/50 hover:from-purple-700 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 transition-all duration-200 transform hover:scale-105"
+              >
+                Go to Login
+                <ArrowRight className="ml-2 h-5 w-5" />
+              </Link>
+            )}
           </div>
         </div>
       </div>

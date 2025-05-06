@@ -1,19 +1,14 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getSupabaseAdminClient } from '@/src/lib/supabase';
+import { createServerSupabaseClient } from '@supabase/auth-helpers-nextjs';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const supabase = getSupabaseAdminClient();
-  const token = req.headers.authorization?.split('Bearer ')[1];
-  let userId = null;
-  if (token) {
-    try {
-      const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
-      userId = payload.sub;
-    } catch (e) {}
+  const supabase = createServerSupabaseClient({ req, res });
+  const { data: { user } } = await supabase.auth.getUser();
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  if (!user) {
+    return res.status(401).json({ error: 'Unauthorized: You must be logged in to access dashboard stats.' });
   }
-  if (!userId) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+  const userId = user.id;
 
   // Total projects
   const { count: totalProjects } = await supabase

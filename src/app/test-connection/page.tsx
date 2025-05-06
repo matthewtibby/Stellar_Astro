@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase'
+import { getSupabaseClient } from '@/lib/supabase'
 
 export default function TestConnectionPage() {
   const [message, setMessage] = useState('Testing connection...')
@@ -11,6 +11,7 @@ export default function TestConnectionPage() {
     async function testConnection() {
       try {
         console.log('Testing connection...')
+        const supabase = getSupabaseClient();
         const { data, error } = await supabase.from('_prisma_migrations').select('*').limit(1)
         
         if (error) {
