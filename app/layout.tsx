@@ -8,6 +8,8 @@ import { ToastProvider } from '@/src/hooks/useToast'
 import ToastContainer from '@/src/components/ToastContainer'
 import ClientProviders from './ClientProviders'
 import AuthSync from '@/components/AuthSync'
+import { supabase } from '@/src/lib/supabaseClient'
+import SupabaseProvider from './SupabaseProvider'
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 const plusJakartaSans = Plus_Jakarta_Sans({ 
@@ -28,16 +30,18 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} ${plusJakartaSans.variable} h-full`}>
       <body className={`${inter.className} min-h-full flex flex-col font-sans bg-black`}>
-        <CurrencyProvider>
-          <ClientProviders>
-            <AuthSync />
-            <Header />
-            <main className="flex-grow">
-              {children}
-            </main>
-            <Footer />
-          </ClientProviders>
-        </CurrencyProvider>
+        <SupabaseProvider>
+          <CurrencyProvider>
+            <ClientProviders>
+              <AuthSync />
+              <Header />
+              <main className="flex-grow">
+                {children}
+              </main>
+              <Footer />
+            </ClientProviders>
+          </CurrencyProvider>
+        </SupabaseProvider>
       </body>
     </html>
   )
