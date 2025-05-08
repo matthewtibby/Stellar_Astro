@@ -22,6 +22,18 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
   console.log('[middleware] User authenticated:', user.id);
+  const setCookie = res.headers.get('set-cookie');
+  if (setCookie) {
+    console.log('[MIDDLEWARE] Set-Cookie:', setCookie);
+  }
+  // Always clear the legacy cookie on every SSR request
+  const legacyCookie = req.cookies.get('sb-wxannuklwbocdheqhmbx-auth-token');
+  if (legacyCookie && legacyCookie.value.startsWith('base64-')) {
+    res.headers.append(
+      'Set-Cookie',
+      'sb-wxannuklwbocdheqhmbx-auth-token=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax'
+    );
+  }
   return res;
 }
 

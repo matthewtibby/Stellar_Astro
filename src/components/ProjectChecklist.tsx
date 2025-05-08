@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { CheckCircle, Circle, AlertCircle, ChevronDown, ChevronRight } from 'lucide-react';
 import { useProjectStore } from '@/src/store/project';
 import { useToast } from '../hooks/useToast';
+import { useSupabaseClient } from '../../app/SupabaseProvider';
 
 interface ProjectChecklistProps {
   projectId: string;
@@ -118,6 +119,7 @@ export default function ProjectChecklist({ projectId }: ProjectChecklistProps) {
   });
   const { currentProject, updateProject } = useProjectStore();
   const { addToast } = useToast();
+  const supabase = useSupabaseClient();
 
   useEffect(() => {
     if (currentProject?.steps) {
@@ -153,7 +155,7 @@ export default function ProjectChecklist({ projectId }: ProjectChecklistProps) {
         completedAt: item.completedAt
       }));
 
-      await updateProject(projectId, { steps });
+      await updateProject(supabase, projectId, { steps });
       addToast('success', 'Checklist updated');
     } catch (error) {
       console.error('Error updating checklist:', error);

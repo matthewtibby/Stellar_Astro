@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useUserStore } from '@/src/store/user';
-import { useSupabaseClient } from '@supabase/auth-helpers-react';
+import { useSupabaseClient } from '../SupabaseProvider';
 import { Eye, EyeOff } from 'lucide-react';
 
 export default function LoginPage() {
@@ -22,30 +22,42 @@ export default function LoginPage() {
     setError(null);
 
     try {
-      console.log('[LoginPage] Attempting login with email:', email, 'password: [HIDDEN]');
+      console.log('[LoginPage] Attempting login with:', email);
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
-      console.log('[LoginPage] supabase.auth.signInWithPassword result:', { data, error });
-      if (error) throw error;
-      if (data?.session) {
-        // Persist the session to cookies for SSR/middleware
-        await fetch('/api/auth/set', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ event: 'SIGNED_IN', session: data.session }),
-        });
-        // Set the session in the client-side Supabase instance
-        await supabase.auth.setSession(data.session);
+      console.log('[LoginPage] signInWithPassword result:', { data, error });
+
+      if (error) {
+        setError(error.message);
+        return;
       }
-      if (data?.user) {
-        console.log('[LoginPage] Setting user in Zustand store:', data.user);
-        useUserStore.getState().setUser(data.user);
-        router.push('/dashboard');
+
+      if (!data?.session) {
+        setError('No session returned from Supabase.');
+        return;
       }
+
+      // Optionally, update Zustand store here if needed
+      if (data.user) {
+        const { setUserWithClient, setLoading, setSubscriptionLoading } = useUserStore.getState();
+        if (setUserWithClient) setUserWithClient(data.user, supabase);
+        if (setLoading) setLoading(false);
+        if (setSubscriptionLoading) setSubscriptionLoading(false);
+      }
+
+      // Redirect to API route to set SSR session cookie and then to dashboard
+      const params = new URLSearchParams({
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token,
+        redirect: '/dashboard',
+      });
+      window.location.href = `/api/auth/set?${params.toString()}`;
+      return;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred during login');
+      console.error('[LoginPage] Login error:', err);
     } finally {
       setIsLoading(false);
     }
@@ -101,6 +113,7 @@ export default function LoginPage() {
                     onChange={(e) => setEmail(e.target.value)}
                     className="block w-full rounded-md bg-black/50 px-3 py-2 text-white border border-gray-700 placeholder:text-gray-500 focus:border-primary focus:ring-1 focus:ring-primary sm:text-sm"
                     placeholder="Enter your email"
+                    disabled={isLoading}
                   />
                 </div>
               </div>
@@ -120,6 +133,7 @@ export default function LoginPage() {
                     onChange={(e) => setPassword(e.target.value)}
                     className="block w-full rounded-md bg-black/50 px-3 py-2 text-white border border-gray-700 placeholder:text-gray-500 focus:border-primary focus:ring-1 focus:ring-primary sm:text-sm"
                     placeholder="Enter your password"
+                    disabled={isLoading}
                   />
                   <button
                     type="button"
@@ -152,7 +166,7 @@ export default function LoginPage() {
                   disabled={isLoading}
                   className="flex w-full justify-center rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isLoading ? 'Signing in...' : 'Sign in'}
+                  {isLoading ? 'Logging in...' : 'Login'}
                 </button>
               </div>
             </form>

@@ -6,7 +6,7 @@ import { validateFitsFile } from '../utils/fitsValidation';
 import { uploadRawFrame } from '../utils/storage';
 import { FileType } from '../types/fits';
 import { useToast, type ToastType } from '../hooks/useToast';
-import { useSupabaseClient } from '@supabase/auth-helpers-react';
+import { useSupabaseClient } from '../../app/SupabaseProvider';
 
 interface FitsFileUploadProps {
   projectId: string;

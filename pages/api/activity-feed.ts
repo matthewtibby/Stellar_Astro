@@ -1,5 +1,5 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
-import { getSupabaseAdminClient } from '@/src/lib/supabase';
+import { NextApiRequest, NextApiResponse } from 'next';
+import { createServerClient } from '@supabase/ssr';
 
 function groupByDate(events: any[]) {
   const groups: Record<string, any[]> = {};
@@ -19,21 +19,27 @@ function groupByDate(events: any[]) {
   return Object.entries(groups).map(([group, items]) => ({ group, items }));
 }
 
+function apiRouteCookieAdapter(req: NextApiRequest, res: NextApiResponse) {
+  return {
+    get: (key: string) => req.cookies[key],
+    set: (key: string, value: string, options: any) => {
+      res.setHeader('Set-Cookie', `${key}=${value}; Path=/; HttpOnly`);
+    },
+    getAll: () => Object.entries(req.cookies).map(([name, value]) => ({ name, value })),
+  };
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const supabase = getSupabaseAdminClient();
-  // Get user from JWT in Authorization header (if present)
-  const token = req.headers.authorization?.split('Bearer ')[1];
-  let userId = null;
-  if (token) {
-    // Supabase JWTs are just JWTs, so decode to get user id
-    try {
-      const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
-      userId = payload.sub;
-    } catch (e) {}
-  }
-  if (!userId) {
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { cookies: apiRouteCookieAdapter(req, res) }
+  );
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
+  const userId = user.id;
 
   const { project, eventType, dateRange, limit = 100 } = req.query;
   let query = supabase
@@ -62,4 +68,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const grouped = groupByDate(withProjectName);
   res.status(200).json({ feed: grouped });
+
+  const setCookie = res.getHeader('Set-Cookie');
+  if (setCookie) {
+    console.log('[API activity-feed] Set-Cookie:', setCookie);
+  }
 } 

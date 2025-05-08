@@ -69,12 +69,22 @@ function SuccessPageContent() {
   const selectedPlan = planDetails[planId as keyof typeof planDetails];
   const isFreePlan = planId === 'free';
 
-  // Redirect to plan selection if no plan is selected
+  // Enforce step: must have completed previous steps
   useEffect(() => {
-    if (!searchParams || !searchParams.get('plan')) {
-      router.push('/signup/plan');
+    if (typeof window !== 'undefined') {
+      if (isFreePlan) {
+        const planSelected = sessionStorage.getItem('planSelected');
+        if (!planSelected) {
+          router.push('/signup/plan');
+        }
+      } else {
+        const paymentComplete = sessionStorage.getItem('paymentComplete');
+        if (!paymentComplete) {
+          router.push('/signup/payment');
+        }
+      }
     }
-  }, [searchParams, router]);
+  }, [router, isFreePlan]);
 
   // If no plan is selected, show loading state
   if (!selectedPlan) {
@@ -128,21 +138,19 @@ function SuccessPageContent() {
           <div className="mb-8">
             <h3 className="text-lg font-medium text-white mb-4">What's Next?</h3>
             <ul className="space-y-4">
+              <li className="flex items-start">
+                <CheckCircle className="h-5 w-5 text-yellow-400 shrink-0 mt-0.5" />
+                <span className="ml-3 text-yellow-200 font-semibold">
+                  You must verify your email before you can log in or access your dashboard.
+                </span>
+              </li>
               {!isFreePlan && (
-                <>
-                  <li className="flex items-start">
-                    <CheckCircle className="h-5 w-5 text-green-500 shrink-0 mt-0.5" />
-                    <span className="ml-3 text-gray-300">
-                      We've sent a confirmation email with your receipt and subscription details.
-                    </span>
-                  </li>
-                  <li className="flex items-start">
-                    <CheckCircle className="h-5 w-5 text-yellow-400 shrink-0 mt-0.5" />
-                    <span className="ml-3 text-yellow-200 font-semibold">
-                      You must verify your email before you can log in or access your dashboard.
-                    </span>
-                  </li>
-                </>
+                <li className="flex items-start">
+                  <CheckCircle className="h-5 w-5 text-green-500 shrink-0 mt-0.5" />
+                  <span className="ml-3 text-gray-300">
+                    We've sent a confirmation email with your receipt and subscription details.
+                  </span>
+                </li>
               )}
               <li className="flex items-start">
                 <CheckCircle className="h-5 w-5 text-green-500 shrink-0 mt-0.5" />

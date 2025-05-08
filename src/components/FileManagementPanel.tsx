@@ -6,7 +6,7 @@ import { File, Trash2, Download, Eye, RefreshCw, FolderOpen, Upload, AlertCircle
 import { type FileType, type StorageFile } from '@/src/types/store';
 import { type FitsMetadata, type FitsValidationResult, type FitsAnalysisResult } from '@/src/types/fits';
 import { createBrowserClient } from '@supabase/ssr';
-import { useSupabaseClient } from '@supabase/auth-helpers-react';
+import { useSupabaseClient } from '../../app/SupabaseProvider';
 
 // Add constant for initial file types
 const INITIAL_FILE_TYPES: FileType[] = ['light', 'dark', 'bias', 'flat'];

@@ -1,7 +1,7 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useSupabaseClient } from '@supabase/auth-helpers-react';
+import { useSupabaseClient } from '../../SupabaseProvider';
 
 export default function VerifyEmailPage() {
   const [resent, setResent] = useState(false);
@@ -9,6 +9,24 @@ export default function VerifyEmailPage() {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
   const supabase = useSupabaseClient();
+
+  // Enforce step: must have completed previous steps
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const planSelected = sessionStorage.getItem('planSelected');
+      const paymentComplete = sessionStorage.getItem('paymentComplete');
+      if (!planSelected && !paymentComplete) {
+        router.push('/signup/plan');
+      } else if (planSelected && !paymentComplete) {
+        // Free plan
+        // ok
+      } else if (!planSelected && paymentComplete) {
+        // Paid plan, but planSelected missing (shouldn't happen)
+        router.push('/signup/plan');
+      }
+      // else: both set, ok
+    }
+  }, [router]);
 
   const resendEmail = async () => {
     setError('');

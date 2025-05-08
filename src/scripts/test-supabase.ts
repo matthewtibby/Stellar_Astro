@@ -1,11 +1,14 @@
-import { getSupabaseClient } from '@/lib/supabase'
+import { createClient } from '@supabase/supabase-js'
 import * as dotenv from 'dotenv'
 
 // Load environment variables from .env.local
 dotenv.config({ path: '.env.local' })
 
 // Create the shared Supabase client once
-const supabase = getSupabaseClient();
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 
 async function testConnection() {
   try {

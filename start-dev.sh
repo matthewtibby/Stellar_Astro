@@ -1,4 +1,5 @@
 #!/bin/bash
+set -x
 
 # Function to cleanup processes on exit
 cleanup() {
@@ -15,9 +16,6 @@ cleanup() {
     pkill -9 -f "next dev" || true
     exit 0
 }
-
-# Set up cleanup on script exit
-trap cleanup SIGINT SIGTERM EXIT
 
 # Function to check if a port is in use
 is_port_in_use() {
@@ -41,11 +39,14 @@ kill_port_process() {
     fi
 }
 
-# Clear any existing processes and ports
+# Initial cleanup (no trap yet)
 echo "Cleaning up existing processes..."
 kill_port_process 3000
 kill_port_process 8000
 sleep 2
+
+# Now set up cleanup on script exit
+trap cleanup SIGINT SIGTERM EXIT
 
 # Verify ports are available
 if is_port_in_use 8000; then
@@ -78,16 +79,22 @@ for i in {1..30}; do
     sleep 1
 done
 
+# Parse --port argument for Next.js
+NEXT_PORT=3002
+if [[ "$1" == "--port" && -n "$2" ]]; then
+  NEXT_PORT=$2
+fi
+
 # Start Next.js development server
 echo "Starting Next.js development server..."
 cd ..
-PORT=3000 npx next dev &
+PORT=$NEXT_PORT npx next dev -p $NEXT_PORT &
 NEXT_PID=$!
 
 # Wait for Next.js to start
 echo "Waiting for Next.js to start..."
 for i in {1..30}; do
-    if curl -s http://localhost:3000 > /dev/null; then
+    if curl -s http://localhost:$NEXT_PORT > /dev/null; then
         echo "Next.js is ready"
         break
     fi
@@ -100,7 +107,7 @@ for i in {1..30}; do
 done
 
 echo "Servers started successfully"
-echo "Next.js running on http://localhost:3000"
+echo "Next.js running on http://localhost:$NEXT_PORT"
 echo "Python worker running on http://localhost:8000"
 
 # Wait for all background processes

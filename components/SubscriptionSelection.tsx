@@ -60,7 +60,12 @@ const plans: Plan[] = [
   }
 ];
 
-export default function SubscriptionSelection() {
+// Add prop type
+interface SubscriptionSelectionProps {
+  onPlanSelected?: (plan: string) => void;
+}
+
+export default function SubscriptionSelection({ onPlanSelected }: SubscriptionSelectionProps) {
   const [selectedPlan, setSelectedPlan] = useState<string>('free');
   const { currency } = useCurrency();
   const router = useRouter();
@@ -70,12 +75,15 @@ export default function SubscriptionSelection() {
   };
 
   const handleContinue = () => {
-    // For free plan, skip payment page and go directly to success
-    if (selectedPlan === 'free') {
-      router.push(`/signup/success?plan=${selectedPlan}`);
+    if (onPlanSelected) {
+      onPlanSelected(selectedPlan);
     } else {
-      // For paid plans, go to payment page
-      router.push(`/signup/payment?plan=${selectedPlan}`);
+      // fallback: old behavior
+      if (selectedPlan === 'free') {
+        router.push(`/signup/success?plan=${selectedPlan}`);
+      } else {
+        router.push(`/signup/payment?plan=${selectedPlan}`);
+      }
     }
   };
 

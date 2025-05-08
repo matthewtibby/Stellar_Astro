@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { File, X, CheckCircle, AlertCircle, ChevronDown, ChevronRight } from 'lucide-react';
-import { useSupabaseClient } from '@supabase/auth-helpers-react';
+import { useSupabaseClient } from '../../app/SupabaseProvider';
 import { useToast } from '../hooks/useToast';
 
 interface FileComparisonPanelProps {

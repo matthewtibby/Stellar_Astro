@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSupabaseClient, useSession } from '../SupabaseProvider';
 
 interface ActivityFeedItem {
   id: string;
@@ -80,6 +81,8 @@ async function fetchActivityFeed({ eventType, project, dateRange, jwt }: FetchAc
 }
 
 export default function ActivityFeed() {
+  const supabase = useSupabaseClient();
+  const session = useSession();
   const [eventType, setEventType] = useState<string>('All');
   const [project, setProject] = useState<string>('All');
   const [dateRange, setDateRange] = useState<string>('Yesterday');
@@ -90,22 +93,9 @@ export default function ActivityFeed() {
   const [jwt, setJwt] = useState<string>('');
   const [projectOptions, setProjectOptions] = useState<string[]>(['All']);
 
-  // Get JWT from Supabase client (client-side only)
   useEffect(() => {
-    async function getJwt() {
-      try {
-        const { createClient } = await import('@supabase/supabase-js');
-        const url = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
-        const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
-        const supabase = createClient(url, anonKey);
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.access_token) setJwt(session.access_token);
-      } catch (e) {
-        setError('Could not get authentication token.');
-      }
-    }
-    getJwt();
-  }, []);
+    if (session?.access_token) setJwt(session.access_token);
+  }, [session]);
 
   // Fetch feed data
   useEffect(() => {

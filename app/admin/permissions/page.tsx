@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useSupabaseClient } from '@supabase/auth-helpers-react';
+import { useSupabaseClient } from '../../SupabaseProvider';
 import { useUserStore } from '@/src/store/user';
 
 interface PermissionError {

@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { getFilesByType, type StorageFile } from '@/src/utils/storage';
 import { File, Trash2, Download, Eye } from 'lucide-react';
 import { type FileType } from '@/src/types/store';
-import { useSupabaseClient } from '@supabase/auth-helpers-react';
+import { useSupabaseClient } from '../../app/SupabaseProvider';
 
 interface FileListProps {
   projectId: string;

@@ -6,7 +6,7 @@ import { UserState } from '@/src/types/store';
 import { Camera, Check, X } from 'lucide-react';
 import Image from 'next/image';
 import { User } from '@supabase/supabase-js';
-import { useSupabaseClient } from '@supabase/auth-helpers-react';
+import { useSupabaseClient } from '../../app/SupabaseProvider';
 import { uploadProfilePicture } from '@/src/utils/storage';
 import { sendNotification } from '@/src/utils/sendNotification';
 

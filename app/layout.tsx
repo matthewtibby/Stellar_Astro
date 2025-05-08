@@ -8,8 +8,9 @@ import { ToastProvider } from '@/src/hooks/useToast'
 import ToastContainer from '@/src/components/ToastContainer'
 import ClientProviders from './ClientProviders'
 import AuthSync from '@/components/AuthSync'
-import { supabase } from '@/src/lib/supabaseClient'
 import SupabaseProvider from './SupabaseProvider'
+import { createServerClient } from '@supabase/ssr'
+import { getSSRClientCookies } from '@/src/lib/ssrCookies'
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 const plusJakartaSans = Plus_Jakarta_Sans({ 
@@ -22,15 +23,23 @@ export const metadata: Metadata = {
   description: 'Transform your images with advanced AI processing and cloud integration.',
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  // Get session from cookies for initial hydration
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { cookies: getSSRClientCookies() }
+  );
+  const { data: { session } } = await supabase.auth.getSession();
+
   return (
     <html lang="en" className={`${inter.variable} ${plusJakartaSans.variable} h-full`}>
       <body className={`${inter.className} min-h-full flex flex-col font-sans bg-black`}>
-        <SupabaseProvider>
+        <SupabaseProvider initialSession={session ?? undefined}>
           <CurrencyProvider>
             <ClientProviders>
               <AuthSync />

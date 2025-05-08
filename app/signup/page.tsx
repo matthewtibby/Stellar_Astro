@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useSupabaseClient } from '@supabase/auth-helpers-react';
+import { useSupabaseClient } from '../SupabaseProvider';
 import { Eye, EyeOff } from 'lucide-react';
 
 export default function SignUp() {
@@ -99,12 +99,17 @@ export default function SignUp() {
         email: formData.email,
         password: formData.password,
       });
-
-      if (error) throw error;
-
-      // Optionally, set user in your store here
-      // useUserStore.getState().setUser(data.user);
-
+      console.log('[SignUp] signUp result:', data, error);
+      const session = data.session;
+      console.log('[SignUp] Session after signUp:', session);
+      // Log cookies in the browser
+      if (typeof window !== 'undefined') {
+        console.log('[SignUp] Document cookies after signUp:', document.cookie);
+      }
+      // Set signupComplete flag for step enforcement
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('signupComplete', 'true');
+      }
       // Redirect to plan selection page
       router.push('/signup/plan');
     } catch (error) {

@@ -1,8 +1,26 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
-import { getSupabaseClient } from '@/src/lib/supabase';
+import { NextApiRequest, NextApiResponse } from 'next';
+import { createServerClient } from '@supabase/ssr';
 import { sendNotification } from '@/src/utils/sendNotification';
 
+function apiRouteCookieAdapter(req: NextApiRequest, res: NextApiResponse) {
+  return {
+    get: (key: string) => req.cookies[key],
+    set: (key: string, value: string, options: any) => {
+      res.setHeader('Set-Cookie', `${key}=${value}; Path=/; HttpOnly`);
+    },
+    getAll: () => Object.entries(req.cookies).map(([name, value]) => ({ name, value })),
+  };
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { cookies: apiRouteCookieAdapter(req, res) }
+  );
+
+  console.log('[API DEBUG] Incoming cookies:', req.headers.cookie);
+
   if (req.method !== 'POST') {
     return res.status(405).json({ message: 'Method not allowed' });
   }
@@ -13,7 +31,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ message: 'Project name is required' });
     }
 
-    const supabase = getSupabaseClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
       return res.status(401).json({ message: 'Authentication required' });
@@ -50,6 +67,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
 
     // TODO: Add notification logic for collaborator_changed, added_as_collaborator, invite_accepted, removed_from_project events when those actions are implemented
+
+    const setCookie = res.getHeader('Set-Cookie');
+    if (setCookie) {
+      console.log('[API projects] Set-Cookie:', setCookie);
+    }
 
     return res.status(200).json(project);
   } catch (error) {

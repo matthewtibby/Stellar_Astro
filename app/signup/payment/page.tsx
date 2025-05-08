@@ -68,17 +68,25 @@ function PaymentPageContent() {
     cvv: '',
     nameOnCard: '',
   });
-  
-  // Get the selected plan from URL parameters
-  const planId = searchParams?.get('plan') || 'free';
-  const selectedPlan = planDetails[planId as keyof typeof planDetails] || planDetails['free'];
+  const [planId, setPlanId] = useState<string | null>(null);
 
-  // Redirect to plan selection if no plan is selected
   useEffect(() => {
-    if (!searchParams || !searchParams.get('plan')) {
+    let plan = searchParams?.get('plan');
+    if (!plan && typeof window !== 'undefined') {
+      plan = sessionStorage.getItem('planSelected');
+    }
+    if (!plan) {
       router.push('/signup/plan');
+    } else {
+      setPlanId(plan);
     }
   }, [searchParams, router]);
+
+  if (!planId) {
+    return <div>Loading...</div>;
+  }
+
+  const selectedPlan = planDetails[planId as keyof typeof planDetails] || planDetails['free'];
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -107,20 +115,13 @@ function PaymentPageContent() {
     e.preventDefault();
     // Here you would integrate with your payment processor
     console.log('Processing payment...', formData, 'for plan:', planId);
-    // After successful payment, redirect to success page with plan info
-    router.push(`/signup/success?plan=${planId}`);
+    // After successful payment, set paymentComplete and redirect
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('paymentComplete', 'true');
+      const plan = sessionStorage.getItem('planSelected') || 'free';
+      router.push(`/signup/success?plan=${plan}`);
+    }
   };
-
-  // If no plan is selected, show loading state
-  if (!selectedPlan) {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-black to-gray-900 py-24">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <p className="text-white">Loading...</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-black to-gray-900 py-24">

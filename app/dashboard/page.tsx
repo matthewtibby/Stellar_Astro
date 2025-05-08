@@ -58,7 +58,7 @@ import { DashboardTourProvider, useDashboardTour } from '@/src/components/Onboar
 import ActivityFeed from '../components/ActivityFeed';
 import NotificationCenter from '../components/NotificationCenter';
 import DashboardStats from '../components/DashboardStats';
-import { useSupabaseClient } from '@supabase/auth-helpers-react';
+import { useSupabaseClient, useSession } from '../SupabaseProvider';
 
 // Add these interfaces before the mockProjects array
 interface WorkflowStep {
@@ -286,7 +286,9 @@ function TakeTourButton() {
 const DashboardPage = () => {
   const router = useRouter();
   const { user, isAuthenticated, isLoading, subscription, fullName, setUser, logout, subscriptionLoading, setSubscriptionLoading } = useUserStore();
-  const { projects, isLoading: isLoadingProjects, error: projectsError, fetchProjects } = useProjects(user?.id, isAuthenticated);
+  const session = useSession();
+  const userId = session?.user?.id;
+  const { projects, isLoading: isLoadingProjects, error: projectsError, fetchProjects } = useProjects();
   const [activeView, setActiveView] = useState('grid');
   const [activeProject, setActiveProject] = useState<Project | null>(null);
   const [showNewProject, setShowNewProject] = useState(false);
@@ -376,10 +378,10 @@ const DashboardPage = () => {
 
   // Update fetchProjects when controls change (add filterFavorites and filterTag)
   useEffect(() => {
-    if (isAuthenticated && user?.id) {
+    if (session && userId) {
       fetchProjects(searchTerm, filterStatus, sortBy, sortOrder);
     }
-  }, [searchTerm, filterStatus, sortBy, sortOrder, isAuthenticated, user?.id]);
+  }, [searchTerm, filterStatus, sortBy, sortOrder, session, userId]);
 
   // Add filter logic for favorites and tags
   const filteredProjects = projects.filter(project => {

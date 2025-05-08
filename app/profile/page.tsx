@@ -8,7 +8,7 @@ import { User, CreditCard, Settings } from 'lucide-react';
 import AccountTab from '@/components/profile/AccountTab';
 import SubscriptionTab from '@/components/profile/SubscriptionTab';
 import SettingsTab from '@/components/profile/SettingsTab';
-import { useSupabaseClient } from '@supabase/auth-helpers-react';
+import { useSupabaseClient } from '../SupabaseProvider';
 
 export default function ProfilePage() {
   const router = useRouter();

@@ -1,19 +1,27 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
-import { getSupabaseAdminClient } from '@/src/lib/supabase';
+import { NextApiRequest, NextApiResponse } from 'next';
+import { createServerClient } from '@supabase/ssr';
+
+function apiRouteCookieAdapter(req: NextApiRequest, res: NextApiResponse) {
+  return {
+    get: (key: string) => req.cookies[key],
+    set: (key: string, value: string, options: any) => {
+      res.setHeader('Set-Cookie', `${key}=${value}; Path=/; HttpOnly`);
+    },
+    getAll: () => Object.entries(req.cookies).map(([name, value]) => ({ name, value })),
+  };
+}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const supabase = getSupabaseAdminClient();
-  const token = req.headers.authorization?.split('Bearer ')[1];
-  let userId = null;
-  if (token) {
-    try {
-      const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
-      userId = payload.sub;
-    } catch (e) {}
-  }
-  if (!userId) {
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { cookies: apiRouteCookieAdapter(req, res) }
+  );
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
+  const userId = user.id;
 
   if (req.method === 'PATCH') {
     const { id, folderId, tags } = req.body;

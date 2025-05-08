@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { useSupabaseClient } from '@supabase/auth-helpers-react';
+import { useSupabaseClient } from '../../SupabaseProvider';
 import { useToast } from '../../../src/hooks/useToast';
 import { Loader2 } from 'lucide-react';
 

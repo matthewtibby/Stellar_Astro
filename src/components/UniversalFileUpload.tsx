@@ -7,7 +7,7 @@ import { type FileType } from '@/src/types/store';
 import { spaceFacts } from '@/src/utils/spaceFacts';
 import { handleError, ValidationError } from '@/src/utils/errorHandling';
 import { useToast } from '../hooks/useToast';
-import { useSupabaseClient } from '@supabase/auth-helpers-react';
+import { useSupabaseClient } from '../../app/SupabaseProvider';
 
 type StorageFileWithMetadata = StorageFile & { metadata?: any };
 

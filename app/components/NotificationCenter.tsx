@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useSupabaseClient, useSession } from '../SupabaseProvider';
 
 interface Notification {
   id: string;
@@ -29,23 +30,12 @@ export default function NotificationCenter() {
   const [error, setError] = useState('');
   const [jwt, setJwt] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const supabase = useSupabaseClient();
+  const session = useSession();
 
-  // Get JWT from Supabase client (client-side only)
   useEffect(() => {
-    async function getJwt() {
-      try {
-        const { createClient } = await import('@supabase/supabase-js');
-        const url = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
-        const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
-        const supabase = createClient(url, anonKey);
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.access_token) setJwt(session.access_token);
-      } catch (e) {
-        setError('Could not get authentication token.');
-      }
-    }
-    getJwt();
-  }, []);
+    if (session?.access_token) setJwt(session.access_token);
+  }, [session]);
 
   // Fetch notifications
   const fetchNotifications = async () => {

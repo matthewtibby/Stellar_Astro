@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useSupabaseClient } from '@supabase/auth-helpers-react'
+import { useSupabaseClient } from '../../../app/SupabaseProvider'
 
 export default function TestPage() {
   const [message, setMessage] = useState('Testing connection...')

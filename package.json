@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "./start-dev.sh",
-    "dev:next": "next dev",
+    "dev:next": "next dev -p 3002",
     "dev:python": "cd python-worker && ./run.sh",
     "build": "next build",
     "start": "next start",
@@ -12,20 +12,19 @@
     "scaffold": "node cli/scaffold.js",
     "create": "node cli/scaffold.js create",
     "init": "node cli/scaffold.js init",
-    "deploy": "node cli/scaffold.js deploy",
+    "deploy": "npm run clean && npm run build && vercel --prod",
     "deploy:preview": "node cli/scaffold.js deploy --preview",
     "deploy:firebase": "node cli/scaffold.js deploy --firebase",
     "test": "node cli/scaffold.js test",
     "test:setup": "node cli/scaffold.js test --setup",
     "init-env": "node cli/scaffold.js init-env",
-    "help": "node cli/scaffold.js help"
+    "help": "node cli/scaffold.js help",
+    "clean": "rm -rf .next"
   },
   "dependencies": {
     "@heroicons/react": "^2.1.1",
     "@radix-ui/react-tabs": "^1.1.8",
     "@stripe/stripe-js": "^7.1.0",
-    "@supabase/auth-helpers-nextjs": "^0.10.0",
-    "@supabase/auth-helpers-react": "^0.5.0",
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.49.4",
     "@types/cheerio": "^0.22.35",

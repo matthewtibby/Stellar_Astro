@@ -1,8 +1,10 @@
 import { useEffect, useRef } from 'react';
 import { useProjectStore } from '@/src/store/project';
+import { useSupabaseClient } from '../../app/SupabaseProvider';
 
 export function useAutoSave(debounceTime = 2000) {
   const { currentProject, autoSaveProject } = useProjectStore();
+  const supabase = useSupabaseClient();
   const timeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
 
   useEffect(() => {
@@ -15,7 +17,7 @@ export function useAutoSave(debounceTime = 2000) {
 
     // Set a new timeout
     timeoutRef.current = setTimeout(() => {
-      autoSaveProject();
+      autoSaveProject(supabase);
     }, debounceTime);
 
     // Cleanup function
@@ -24,5 +26,5 @@ export function useAutoSave(debounceTime = 2000) {
         clearTimeout(timeoutRef.current);
       }
     };
-  }, [currentProject, autoSaveProject, debounceTime]);
+  }, [currentProject, autoSaveProject, debounceTime, supabase]);
 } 

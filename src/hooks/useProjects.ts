@@ -1,12 +1,14 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useSupabaseClient } from '@supabase/auth-helpers-react';
+import { useSupabaseClient, useSession } from '../../app/SupabaseProvider';
 import { Project } from '@/src/types/project';
 
 // Define allowed sort fields
 const allowedSortFields = ['created_at', 'name'];
 
-export function useProjects(userId?: string, isAuthenticated?: boolean) {
+export function useProjects(passedUserId?: string) {
   const supabaseClient = useSupabaseClient();
+  const session = useSession();
+  const userId = passedUserId || session?.user?.id;
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -17,13 +19,11 @@ export function useProjects(userId?: string, isAuthenticated?: boolean) {
       setError('User ID is required to fetch projects');
       return;
     }
-
-    if (!isAuthenticated) {
-      console.warn('fetchProjects: User is not authenticated');
+    if (!session) {
+      console.warn('fetchProjects: No session available');
       setError('Authentication is required to fetch projects');
       return;
     }
-
     setIsLoading(true);
     setError(null);
     try {
@@ -33,49 +33,27 @@ export function useProjects(userId?: string, isAuthenticated?: boolean) {
         sortBy, 
         sortOrder, 
         userId,
-        isAuthenticated 
+        session
       });
-
-      // Verify authentication state
-      const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
-      if (authError) {
-        console.error('Authentication check failed:', authError);
-        throw new Error('Failed to verify authentication status');
-      }
-
-      if (!user || user.id !== userId) {
-        console.error('User ID mismatch:', { 
-          expected: userId, 
-          actual: user?.id 
-        });
-        throw new Error('User authentication mismatch');
-      }
-
       let query = supabaseClient
         .from('projects')
         .select('*')
         .eq('user_id', userId);
-
       // Apply search
       if (searchTerm) {
         query = query.ilike('name', `%${searchTerm}%`);
       }
-
       // Apply filter
       if (filterStatus) {
         query = query.eq('status', filterStatus);
       }
-
       // Validate and apply sorting
       const safeSortBy = allowedSortFields.includes(sortBy) ? sortBy : 'created_at';
       console.log('Ordering by:', safeSortBy, 'ascending:', sortOrder === 'asc');
       query = query.order(safeSortBy, { ascending: sortOrder === 'asc' });
-
       // Log the final query object
       console.log('Final query object:', query);
-      
       const { data, error: queryError } = await query;
-      
       if (queryError) {
         console.error('Supabase query error:', {
           code: queryError.code,
@@ -85,7 +63,6 @@ export function useProjects(userId?: string, isAuthenticated?: boolean) {
         });
         throw queryError;
       }
-
       // Normalize createdAt, updatedAt, and steps[].completedAt to Date objects
       const normalized = (data || []).map((p: any) => ({
         ...p,
@@ -98,7 +75,6 @@ export function useProjects(userId?: string, isAuthenticated?: boolean) {
             }))
           : [],
       }));
-      
       setProjects(normalized);
       if (!normalized.length) {
         setError('No projects found. Create your first project!');
@@ -111,18 +87,18 @@ export function useProjects(userId?: string, isAuthenticated?: boolean) {
       console.error('fetchProjects error:', {
         error: err,
         userId,
-        isAuthenticated
+        session
       });
     } finally {
       setIsLoading(false);
     }
-  }, [userId, isAuthenticated, supabaseClient]);
+  }, [userId, session, supabaseClient]);
 
   useEffect(() => {
-    if (isAuthenticated && userId) {
+    if (session && userId) {
       fetchProjects();
     }
-  }, [isAuthenticated, userId, fetchProjects]);
+  }, [session, userId, fetchProjects]);
 
   return { projects, isLoading, error, fetchProjects };
 } 

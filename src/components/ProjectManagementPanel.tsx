@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Share2, Download, Upload, Copy, CheckCircle, X, Star, Tag, Trash, Copy as Duplicate, Archive } from 'lucide-react';
 import { useProjectStore } from '@/src/store/project';
-import { useSupabaseClient } from '@supabase/auth-helpers-react';
+import { useSupabaseClient } from '../../app/SupabaseProvider';
 import { useToast } from '../hooks/useToast';
 import { sendNotification } from '@/src/utils/sendNotification';
 

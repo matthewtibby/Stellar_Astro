@@ -1,6 +1,6 @@
 "use client";
 import { useEffect } from "react";
-import { useSupabaseClient } from '@supabase/auth-helpers-react';
+import { useSupabaseClient } from '../../app/SupabaseProvider';
 import { useUserStore } from "@/src/store/user";
 
 export default function AuthSync() {

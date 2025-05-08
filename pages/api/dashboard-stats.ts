@@ -1,8 +1,22 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
-import { createServerSupabaseClient } from '@supabase/auth-helpers-nextjs';
+import { NextApiRequest, NextApiResponse } from 'next';
+import { createServerClient } from '@supabase/ssr';
+
+function apiRouteCookieAdapter(req: NextApiRequest, res: NextApiResponse) {
+  return {
+    get: (key: string) => req.cookies[key],
+    set: (key: string, value: string, options: any) => {
+      res.setHeader('Set-Cookie', `${key}=${value}; Path=/; HttpOnly`);
+    },
+    getAll: () => Object.entries(req.cookies).map(([name, value]) => ({ name, value })),
+  };
+}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const supabase = createServerSupabaseClient({ req, res });
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { cookies: apiRouteCookieAdapter(req, res) }
+  );
   const { data: { user } } = await supabase.auth.getUser();
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (!user) {
@@ -87,4 +101,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     sharedProjects: sharedProjects || 0,
     collaboratorProjects: collaboratorProjects || 0,
   });
+
+  const setCookie = res.getHeader('Set-Cookie');
+  if (setCookie) {
+    console.log('[API dashboard-stats] Set-Cookie:', setCookie);
+  }
 } 
