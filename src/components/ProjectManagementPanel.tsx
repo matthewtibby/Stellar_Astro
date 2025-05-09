@@ -1,7 +1,8 @@
+'use client';
 import { useState } from 'react';
 import { Share2, Download, Upload, Copy, CheckCircle, X, Star, Tag, Trash, Copy as Duplicate, Archive } from 'lucide-react';
 import { useProjectStore } from '@/src/store/project';
-import { getSupabaseClient } from '@/src/lib/supabase';
+import { getBrowserClient } from '@/src/lib/supabase';
 import { useToast } from '../hooks/useToast';
 import { sendNotification } from '@/src/utils/sendNotification';
 
@@ -32,10 +33,9 @@ const projectThumbnails = {
 export default function ProjectManagementPanel({ projectId }: ProjectManagementPanelProps) {
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
-  const [shareLink, setShareLink] = useState<string | null>(null);
-  const [isCopied, setIsCopied] = useState(false);
   const { currentProject, updateProject } = useProjectStore();
   const { addToast } = useToast();
+  const supabase = getBrowserClient();
 
   const handleExport = async () => {
     if (!currentProject) return;
@@ -43,7 +43,7 @@ export default function ProjectManagementPanel({ projectId }: ProjectManagementP
     setIsExporting(true);
     try {
       // Get all files associated with the project
-      const { data: files, error: filesError } = await getSupabaseClient()
+      const { data: files, error: filesError } = await supabase
         .from('project_files')
         .select('*')
         .eq('project_id', projectId);
@@ -99,7 +99,7 @@ export default function ProjectManagementPanel({ projectId }: ProjectManagementP
           }
 
           // Create new project
-          const { data: newProject, error: projectError } = await getSupabaseClient()
+          const { data: newProject, error: projectError } = await supabase
             .from('projects')
             .insert([{
               ...importData.project,
@@ -115,7 +115,7 @@ export default function ProjectManagementPanel({ projectId }: ProjectManagementP
 
           // Import files
           for (const file of importData.files) {
-            const { error: fileError } = await getSupabaseClient()
+            const { error: fileError } = await supabase
               .from('project_files')
               .insert([{
                 ...file,
@@ -140,53 +140,6 @@ export default function ProjectManagementPanel({ projectId }: ProjectManagementP
       console.error('Import failed:', error);
       addToast('error', 'Failed to import project');
       setIsImporting(false);
-    }
-  };
-
-  const handleShare = async () => {
-    if (!currentProject) return;
-
-    try {
-      // Create a share token
-      const { data: shareToken, error: tokenError } = await getSupabaseClient()
-        .from('project_shares')
-        .insert([{
-          project_id: projectId,
-          created_at: new Date().toISOString(),
-          expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7 days
-        }])
-        .select()
-        .single();
-
-      if (tokenError) throw tokenError;
-
-      // Generate share link
-      const shareLink = `${window.location.origin}/share/${shareToken.id}`;
-      setShareLink(shareLink);
-
-      // Update project to be public
-      await updateProject(projectId, { isPublic: true });
-      
-      addToast('success', 'Project shared successfully');
-      // Notification for project_shared
-      // await sendNotification({ req, eventType: 'project_shared', type: 'info', message: `Project "${currentProject.name}" was shared with you.`, data: { projectId } });
-    } catch (error) {
-      console.error('Share failed:', error);
-      addToast('error', 'Failed to share project');
-    }
-  };
-
-  const handleCopyLink = async () => {
-    if (!shareLink) return;
-
-    try {
-      await navigator.clipboard.writeText(shareLink);
-      setIsCopied(true);
-      setTimeout(() => setIsCopied(false), 2000);
-      addToast('success', 'Link copied to clipboard');
-    } catch (error) {
-      console.error('Copy failed:', error);
-      addToast('error', 'Failed to copy link');
     }
   };
 
@@ -304,14 +257,6 @@ export default function ProjectManagementPanel({ projectId }: ProjectManagementP
         </div>
 
         <button
-          onClick={handleShare}
-          className="w-full flex items-center space-x-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md transition-colors"
-        >
-          <Share2 className="h-5 w-5" />
-          <span>Share Project</span>
-        </button>
-
-        <button
           onClick={handleDuplicate}
           className="w-full flex items-center space-x-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-md transition-colors"
         >
@@ -334,29 +279,6 @@ export default function ProjectManagementPanel({ projectId }: ProjectManagementP
           <Trash className="h-5 w-5" />
           <span>Delete Project</span>
         </button>
-
-        {shareLink && (
-          <div className="mt-4 p-3 bg-gray-800 rounded-md">
-            <div className="flex items-center space-x-2">
-              <input
-                type="text"
-                value={shareLink}
-                readOnly
-                className="flex-1 px-3 py-2 bg-gray-700 text-white rounded-md"
-              />
-              <button
-                onClick={handleCopyLink}
-                className="p-2 bg-gray-700 hover:bg-gray-600 rounded-md transition-colors"
-              >
-                {isCopied ? (
-                  <CheckCircle className="h-5 w-5 text-green-500" />
-                ) : (
-                  <Copy className="h-5 w-5 text-gray-400" />
-                )}
-              </button>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

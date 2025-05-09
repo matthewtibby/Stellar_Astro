@@ -8,6 +8,7 @@ import { User, CreditCard, Settings } from 'lucide-react';
 import AccountTab from '@/components/profile/AccountTab';
 import SubscriptionTab from '@/components/profile/SubscriptionTab';
 import SettingsTab from '@/components/profile/SettingsTab';
+import { getBrowserClient } from '@/src/lib/supabase';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -18,7 +19,7 @@ export default function ProfilePage() {
   // Fetch user role on mount
   useEffect(() => {
     async function fetchUserRole() {
-      const supabase = (await import('@/src/lib/supabase')).getSupabaseClient();
+      const supabase = getBrowserClient();
       const { data, error } = await supabase.rpc('get_user_role');
       if (!error) setUserRole(data);
     }

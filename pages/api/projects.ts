@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getSupabaseClient } from '@/src/lib/supabase';
+import { getSupabaseAdminClient } from '@/src/lib/supabase';
 import { sendNotification } from '@/src/utils/sendNotification';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -13,7 +13,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ message: 'Project name is required' });
     }
 
-    const supabase = getSupabaseClient();
+    const supabase = getSupabaseAdminClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
       return res.status(401).json({ message: 'Authentication required' });
