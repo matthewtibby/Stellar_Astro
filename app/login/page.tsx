@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useUserStore } from '@/src/store/user';
-import { getSupabaseClient } from '@/src/lib/supabase';
+import { getBrowserClient } from '@/src/lib/supabase';
 import { Eye, EyeOff } from 'lucide-react';
 
 export default function LoginPage() {
@@ -21,11 +21,13 @@ export default function LoginPage() {
     setError(null);
 
     try {
-      const supabase = getSupabaseClient();
+      const supabase = getBrowserClient();
+      console.log('[LOGIN] Attempting login with:', { email, password: '[HIDDEN]' });
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
+      console.log('[LOGIN] Supabase response:', { data, error });
 
       if (error) throw error;
 
@@ -34,6 +36,7 @@ export default function LoginPage() {
         router.push('/dashboard');
       }
     } catch (err) {
+      console.error('[LOGIN] Error during login:', err);
       setError(err instanceof Error ? err.message : 'An error occurred during login');
     } finally {
       setIsLoading(false);

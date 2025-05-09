@@ -1,7 +1,7 @@
-import { getSupabaseClient } from '@/src/lib/supabase';
+import { getSupabaseAdminClient } from '@/src/lib/supabase';
 
 export async function checkProjectNameExists(userId: string, projectName: string): Promise<boolean> {
-  const client = getSupabaseClient();
+  const client = getSupabaseAdminClient();
   
   const { data, error } = await client
     .from('projects')
@@ -19,7 +19,7 @@ export async function checkProjectNameExists(userId: string, projectName: string
 }
 
 export async function createProject(userId: string, projectName: string, description?: string) {
-  const client = getSupabaseClient();
+  const client = getSupabaseAdminClient();
 
   // First check if a project with this name already exists
   const nameExists = await checkProjectNameExists(userId, projectName);

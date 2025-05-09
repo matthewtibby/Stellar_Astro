@@ -1,3 +1,4 @@
+'use client';
 import type { Metadata } from 'next'
 import { Inter, Plus_Jakarta_Sans } from 'next/font/google'
 import './globals.css'
@@ -8,19 +9,13 @@ import { ToastProvider } from '@/src/hooks/useToast'
 import ToastContainer from '@/src/components/ToastContainer'
 import ClientProviders from './ClientProviders'
 import AuthSync from '@/components/AuthSync'
-import { supabase } from '@/src/lib/supabaseClient'
-import SupabaseProvider from './SupabaseProvider'
+import ClientLayout from './client-layout'
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 const plusJakartaSans = Plus_Jakarta_Sans({ 
   subsets: ['latin'],
   variable: '--font-plus-jakarta-sans'
 })
-
-export const metadata: Metadata = {
-  title: 'Stellar Astro - AI-Powered Image Processing',
-  description: 'Transform your images with advanced AI processing and cloud integration.',
-}
 
 export default function RootLayout({
   children,
@@ -30,18 +25,13 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} ${plusJakartaSans.variable} h-full`}>
       <body className={`${inter.className} min-h-full flex flex-col font-sans bg-black`}>
-        <SupabaseProvider>
-          <CurrencyProvider>
-            <ClientProviders>
-              <AuthSync />
-              <Header />
-              <main className="flex-grow">
-                {children}
-              </main>
-              <Footer />
-            </ClientProviders>
-          </CurrencyProvider>
-        </SupabaseProvider>
+        <CurrencyProvider>
+          <ClientProviders>
+            <ClientLayout>
+              {children}
+            </ClientLayout>
+          </ClientProviders>
+        </CurrencyProvider>
       </body>
     </html>
   )

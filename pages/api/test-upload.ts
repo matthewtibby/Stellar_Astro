@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getSupabaseClient } from '@/src/lib/supabase';
+import { getSupabaseAdminClient } from '@/src/lib/supabase';
 import { createProject } from '@/src/utils/projects';
 import { uploadRawFrame } from '@/src/utils/storage';
 import { readFile } from 'fs/promises';
@@ -12,7 +12,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     // Get Supabase client
-    const supabase = getSupabaseClient();
+    const supabase = getSupabaseAdminClient();
     
     // Check authentication
     const { data: { user }, error: authError } = await supabase.auth.getUser();

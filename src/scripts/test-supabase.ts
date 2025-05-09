@@ -1,4 +1,4 @@
-import { getSupabaseClient } from '@/lib/supabase'
+import { getBrowserClient } from '@/lib/supabase'
 import * as dotenv from 'dotenv'
 
 // Load environment variables from .env.local
@@ -10,7 +10,8 @@ async function testConnection() {
     console.log('URL:', process.env.NEXT_PUBLIC_SUPABASE_URL)
     console.log('Anon Key:', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? 'Present' : 'Missing')
     
-    const { data, error } = await getSupabaseClient().from('_prisma_migrations').select('*').limit(1)
+    const supabase = getBrowserClient();
+    const { data, error } = await supabase.from('_prisma_migrations').select('*').limit(1)
     
     if (error) {
       console.error('Error:', error.message)

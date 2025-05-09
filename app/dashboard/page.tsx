@@ -43,7 +43,7 @@ import FitsFileUpload from '@/src/components/FitsFileUpload';
 import StepsIndicator from '@/src/components/StepsIndicator';
 import FileManagementPanel from '@/src/components/FileManagementPanel';
 import { type StorageFile } from '@/src/utils/storage';
-import { getSupabaseClient } from '@/src/lib/supabase';
+import { getBrowserClient } from '@/src/lib/supabase';
 import { generateUUID } from '@/src/utils/uuid';
 import { UniversalFileUpload } from '@/src/components/UniversalFileUpload';
 import ProjectManagementPanel from '@/src/components/ProjectManagementPanel';
@@ -227,7 +227,7 @@ const FileUploadSection = ({ projectId, onStepAutosave, isSavingStep, currentSte
           await onStepAutosave();
           // Save current step to Supabase before exiting
           try {
-            const supabase = getSupabaseClient();
+            const supabase = getBrowserClient();
             await supabase
               .from('projects')
               .update({ current_step: currentStep })
@@ -402,6 +402,9 @@ const DashboardPage = () => {
     }
   }, [selectedTemplateId, showNewProject]);
 
+  // Add debug log before any return
+  console.log('projects', projects, 'isLoading', isLoading, 'subscriptionLoading', subscriptionLoading, 'showNewProject', showNewProject, 'activeProject', activeProject);
+
   if (isLoading || subscriptionLoading) {
     return <div className="flex justify-center items-center min-h-screen text-white text-xl">Loading...</div>;
   }
@@ -445,17 +448,27 @@ const DashboardPage = () => {
   // Refactor handleNewProject to instantly create a draft project in the database
   const handleNewProject = async () => {
     try {
+      console.log('[DEBUG] handleNewProject called');
       setIsSavingProjectName(true);
       // Duplicate name validation
       const existingNames = projects.map(p => (p.name || p.title || '').toLowerCase());
+      console.log('[DEBUG] Existing project names:', existingNames);
       if (existingNames.includes('')) {
         addToast('error', 'A project with no name already exists. Please name your projects.');
         setIsSavingProjectName(false);
         return;
       }
-      const supabase = getSupabaseClient();
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-      if (authError || !user) throw new Error('Authentication required');
+      const supabase = getBrowserClient();
+      console.log('[DEBUG] Supabase client instance:', supabase);
+      console.log('[DASHBOARD] Fetching user with supabase.auth.getUser()');
+      const userResponse = await supabase.auth.getUser();
+      console.log('[DASHBOARD] getUser full response:', userResponse);
+      const { data: { user }, error: authError } = userResponse;
+      if (authError || !user) {
+        console.error('[DEBUG] Auth error or missing user:', { authError, user });
+        throw new Error('Authentication required');
+      }
+      console.log('[DEBUG] User found:', user);
       const { data: project, error: projectError } = await supabase
         .from('projects')
         .insert([{
@@ -469,19 +482,23 @@ const DashboardPage = () => {
         }])
         .select()
         .single();
-      if (projectError) throw new Error(projectError?.message || 'Failed to create project');
+      if (projectError) {
+        console.error('[DEBUG] Project creation error:', projectError);
+        throw new Error(projectError?.message || 'Failed to create project');
+      }
+      console.log('[DEBUG] Project created:', project);
       await fetchProjects();
       setActiveProject({
         id: project.id,
         name: project.title,
-        createdAt: new Date(project.created_at),
-        updatedAt: new Date(project.updated_at),
+        createdAt: project.created_at ? new Date(String(project.created_at)) : new Date(),
+        updatedAt: project.updated_at ? new Date(String(project.updated_at)) : new Date(),
         status: 'draft',
         target: { id: '', name: '', catalogIds: [], constellation: '', category: 'other', type: 'other', commonNames: [], coordinates: { ra: '', dec: '' } },
         steps: [],
         current_step: 0
       } as Project);
-      setProjectNameEdit(project.title);
+      setProjectNameEdit(String(project.title));
       setCurrentStep(0);
       setShowNewProject(false);
       addToast('success', 'Project created!');
@@ -491,7 +508,7 @@ const DashboardPage = () => {
         if (workflowArea) workflowArea.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 200);
     } catch (error) {
-      console.error('Error creating project:', error);
+      console.error('[DEBUG] Error creating project:', error);
       // Optionally show error to user
     } finally {
       setIsSavingProjectName(false);
@@ -511,7 +528,7 @@ const DashboardPage = () => {
     }
     setIsSavingProjectName(true);
     try {
-      const supabase = getSupabaseClient();
+      const supabase = getBrowserClient();
       const { data: updated, error } = await supabase
         .from('projects')
         .update({ title: projectNameEdit.trim(), updated_at: new Date().toISOString() })
@@ -519,7 +536,7 @@ const DashboardPage = () => {
         .select()
         .single();
       if (error) throw error;
-      setActiveProject({ ...activeProject, name: updated.title });
+      setActiveProject({ ...activeProject, name: String(updated.title) });
       await fetchProjects();
     } catch (error) {
       console.error('Error saving project name:', error);
@@ -797,7 +814,7 @@ const DashboardPage = () => {
             })),
           { id: 'upload-organize', name: 'Upload & Organize', status: 'completed' as const }
         ];
-        const supabase = getSupabaseClient();
+        const supabase = getBrowserClient();
         await supabase
           .from('projects')
           .update({ steps: updatedSteps })
@@ -951,7 +968,7 @@ const DashboardPage = () => {
   };
 
   // Render WelcomeDashboard if no projects
-  if (projects.length === 0 && !showNewProject) {
+  if (!isLoading && !subscriptionLoading && projects.length === 0 && !showNewProject) {
     return (
       <WelcomeDashboard
         userName={fullName || user?.email?.split('@')[0] || 'Astronomer'}
@@ -968,7 +985,7 @@ const DashboardPage = () => {
   const confirmDeleteProject = async () => {
     if (!showDeleteConfirm.projectId) return;
     try {
-      const supabase = getSupabaseClient();
+      const supabase = getBrowserClient();
       const { error } = await supabase
         .from('projects')
         .delete()
@@ -997,7 +1014,7 @@ const DashboardPage = () => {
   // Add handleToggleFavorite function
   const handleToggleFavorite = async (project: Project) => {
     try {
-      const supabase = getSupabaseClient();
+      const supabase = getBrowserClient();
       await supabase
         .from('projects')
         .update({ is_favorite: !project.isFavorite })
@@ -1011,7 +1028,7 @@ const DashboardPage = () => {
   // Add handleTagEdit function (inline tag editing for each project)
   const handleTagEdit = async (project: Project, tags: string[]) => {
     try {
-      const supabase = getSupabaseClient();
+      const supabase = getBrowserClient();
       await supabase
         .from('projects')
         .update({ tags })
@@ -1022,10 +1039,10 @@ const DashboardPage = () => {
     }
   };
 
-  // Add handleDuplicateProject and handleArchiveProject functions
+  // Add handleDuplicateProject function
   const handleDuplicateProject = async (project: Project) => {
     try {
-      const supabase = getSupabaseClient();
+      const supabase = getBrowserClient();
       // Duplicate project with a new id and name
       const { data: newProject, error } = await supabase
         .from('projects')
@@ -1047,9 +1064,10 @@ const DashboardPage = () => {
     }
   };
 
+  // Add handleArchiveProject function
   const handleArchiveProject = async (project: Project) => {
     try {
-      const supabase = getSupabaseClient();
+      const supabase = getBrowserClient();
       await supabase
         .from('projects')
         .update({ status: 'archived' })
@@ -1060,6 +1078,20 @@ const DashboardPage = () => {
       addToast('error', 'Failed to archive project');
     }
   };
+
+  if (!isLoading && filteredProjects.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen text-white">
+        <p>No projects found. Create your first project!</p>
+        <button
+          className="mt-4 px-4 py-2 bg-blue-600 rounded"
+          onClick={() => setShowNewProject(true)}
+        >
+          New Project
+        </button>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -1328,21 +1360,17 @@ const DashboardPage = () => {
                         </div>
                       ) : (
                         <>
-                          <div className="flex justify-between items-center mb-6">
-                            <h2 className="text-xl font-semibold text-white">Your Projects</h2>
-                            <div className="flex items-center space-x-2">
-                              <span className="text-sm text-gray-400">{projects.length} projects</span>
-                            </div>
+                          <div className="flex flex-col items-center justify-center mb-8">
+                            <h2 className="text-2xl font-bold text-white mb-2">Welcome back!</h2>
+                            <p className="text-gray-400 mb-4">Select a project to continue or start a new one.</p>
+                            <button
+                              className="px-4 py-2 bg-blue-600 rounded text-white mb-4"
+                              onClick={() => setShowNewProject(true)}
+                            >
+                              New Project
+                            </button>
                           </div>
-                          {isLoadingProjects ? (
-                            <div className="flex justify-center items-center py-12">
-                              <span className="text-gray-400 text-lg">Loading projects...</span>
-                            </div>
-                          ) : projectsError ? (
-                            <div className="flex justify-center items-center py-12">
-                              <span className="text-red-400 text-lg">{projectsError}</span>
-                            </div>
-                          ) : activeView === 'grid' ? renderProjectGrid() : renderProjectList()}
+                          {activeView === 'grid' ? renderProjectGrid() : renderProjectList()}
                         </>
                       )}
                     </div>

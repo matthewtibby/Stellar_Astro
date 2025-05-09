@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { getSupabaseClient } from '@/src/lib/supabase';
+import { getBrowserClient } from '@/src/lib/supabase';
 import { Eye, EyeOff } from 'lucide-react';
 
 export default function SignUp() {
@@ -94,7 +94,7 @@ export default function SignUp() {
 
     setIsLoading(true);
     try {
-      const supabase = getSupabaseClient();
+      const supabase = getBrowserClient();
       const { data, error } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
@@ -102,8 +102,10 @@ export default function SignUp() {
 
       if (error) throw error;
 
-      // Optionally, set user in your store here
-      // useUserStore.getState().setUser(data.user);
+      // Store signup data in sessionStorage for the next step
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem('signupData', JSON.stringify({ email: formData.email }));
+      }
 
       // Redirect to plan selection page
       router.push('/signup/plan');

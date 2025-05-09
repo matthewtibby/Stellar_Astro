@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { getSupabaseClient } from '@/src/lib/supabase';
+import { getBrowserClient } from '@/src/lib/supabase';
 
 export default function VerifyEmailPage() {
   const [resent, setResent] = useState(false);
@@ -14,7 +14,7 @@ export default function VerifyEmailPage() {
     setResent(false);
     setIsLoading(true);
     try {
-      const supabase = getSupabaseClient();
+      const supabase = getBrowserClient();
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       if (user && user.email) {
         const { error } = await supabase.auth.resend({
