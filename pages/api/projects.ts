@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { createServerClient } from '@supabase/ssr';
 import { getSupabaseAdminClient } from '@/src/lib/supabase';
 import { sendNotification } from '@/src/utils/sendNotification';
 
@@ -13,13 +14,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ message: 'Project name is required' });
     }
 
-    const supabase = getSupabaseAdminClient();
+    // Convert req.cookies to the expected format for createServerClient
+    const cookies = {
+      get: (key: string) => req.cookies[key],
+      getAll: () => Object.entries(req.cookies).map(([name, value]) => ({ name, value })),
+      set: () => {},
+      delete: () => {},
+    };
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { cookies }
+    );
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
       return res.status(401).json({ message: 'Authentication required' });
     }
 
-    const { data: project, error: projectError } = await supabase
+    // Use admin client for privileged insert
+    const adminSupabase = getSupabaseAdminClient();
+    const { data: project, error: projectError } = await adminSupabase
       .from('projects')
       .insert([{
         title: name,
