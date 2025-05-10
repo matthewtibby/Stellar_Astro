@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { useSession, useSupabaseClient } from '@supabase/auth-helpers-react';
 import { Folder, Image as ImageIcon, Clock, Zap, Star, HardDrive, Users, Share2 } from 'lucide-react';
+import { createClient } from '@/utils/supabase/client';
 
 const statIcons = {
   totalProjects: <Folder className="h-7 w-7 text-blue-400" />,
@@ -28,24 +28,23 @@ function formatStorage(bytes: number) {
   return bytes + ' B';
 }
 
-export default function DashboardStats() {
+export default function DashboardStats({ user }: { user: { id: string; email: string } | null }) {
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const session = useSession();
-  const supabase = useSupabaseClient();
+  const supabase = createClient();
 
   const fetchStats = async () => {
     setLoading(true);
     setError(null);
     try {
-      if (!session?.user) {
+      if (!user?.id) {
         setError('You must be logged in to view dashboard stats.');
         setLoading(false);
         return;
       }
-      const userId = session.user.id;
+      const userId = user.id;
       // Fetch all the stats in parallel
       // First, fetch the user's projects to get their IDs
       const { data: userProjects } = await supabase.from('projects').select('id').eq('user_id', userId);
@@ -109,7 +108,7 @@ export default function DashboardStats() {
       if (intervalRef.current) clearInterval(intervalRef.current);
       window.removeEventListener('focus', handleFocus);
     };
-  }, [session]);
+  }, [user]);
 
   if (loading) return <div className="text-white py-8">Loading stats...</div>;
   if (error) return <div className="text-red-400 py-8">{error}</div>;
