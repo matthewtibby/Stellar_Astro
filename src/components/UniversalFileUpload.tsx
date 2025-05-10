@@ -71,6 +71,11 @@ export function UniversalFileUpload({
   const { addToast } = useToast();
   const [renamingFile, setRenamingFile] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [batchStartTime, setBatchStartTime] = useState<number | null>(null);
+  const [batchTotalBytes, setBatchTotalBytes] = useState(0);
+  const [batchUploadedBytes, setBatchUploadedBytes] = useState(0);
+  const [batchSpeed, setBatchSpeed] = useState(0); // bytes/sec
+  const [batchETA, setBatchETA] = useState<number | null>(null);
 
   // Function to save files to localStorage
   const saveFilesToLocalStorage = useCallback((files: Record<FileType, StorageFileWithMetadata[]>) => {
@@ -129,6 +134,12 @@ export function UniversalFileUpload({
     if (acceptedFiles.length === 0) return;
 
     setIsUploading(true);
+    setBatchStartTime(Date.now());
+    const totalBytes = acceptedFiles.reduce((sum, file) => sum + file.size, 0);
+    setBatchTotalBytes(totalBytes);
+    setBatchUploadedBytes(0);
+    setBatchSpeed(0);
+    setBatchETA(null);
     setUploadStatuses(acceptedFiles.map((file, index) => ({
       file,
       type: activeTab,
@@ -142,75 +153,55 @@ export function UniversalFileUpload({
     try {
       // Validate all files in batch
       const validationResults = await validateFileBatch(acceptedFiles);
-      
-      // Process each file based on validation results
+      let uploadedBytes = 0;
       for (let i = 0; i < acceptedFiles.length; i++) {
         const file = acceptedFiles[i];
         const validationResult = validationResults.get(file.name);
-
         if (!validationResult || !validationResult.isValid) {
           throw new ValidationError(
             validationResult && validationResult.warnings ? validationResult.warnings.join(', ') : 'File validation failed.'
           );
         }
-
         const fileType = validationResult.metadata.frameType as FileType || activeTab;
-
-        // Update status with warnings
-        setUploadStatuses(prev => prev.map(status => 
-          status.file === file 
-            ? { ...status, warnings: validationResult.warnings } 
+        setUploadStatuses(prev => prev.map(status =>
+          status.file === file
+            ? { ...status, warnings: validationResult.warnings }
             : status
         ));
-
-        // Upload the file with the type determined from validation
+        // Track per-file upload start time
+        const fileStartTime = Date.now();
         await uploadRawFrame(
           file,
           projectId,
           fileType,
           (progress) => {
-            setUploadStatuses(prev => prev.map(status => 
-              status.file === file 
-                ? { ...status, progress } 
+            setUploadStatuses(prev => prev.map(status =>
+              status.file === file
+                ? { ...status, progress }
                 : status
             ));
+            // Update batch uploaded bytes
+            const fileUploaded = Math.round(file.size * progress);
+            const newBatchUploaded = uploadedBytes + fileUploaded;
+            setBatchUploadedBytes(newBatchUploaded);
+            // Calculate speed and ETA
+            const elapsed = (Date.now() - (batchStartTime || fileStartTime)) / 1000; // seconds
+            if (elapsed > 0) {
+              const speed = newBatchUploaded / elapsed; // bytes/sec
+              setBatchSpeed(speed);
+              if (speed > 0) {
+                setBatchETA((totalBytes - newBatchUploaded) / speed);
+              }
+            }
           }
         );
-
-        // Update status to completed
-        setUploadStatuses(prev => prev.map(status => 
-          status.file === file 
-            ? { ...status, status: 'completed', progress: 1 } 
-            : status
-        ));
-
-        // Update the filesByType state for the correct file type
-        setFilesByType(prevFilesByType => {
-          const newFilesByType = { ...prevFilesByType };
-          const files = newFilesByType[fileType] || [];
-          const newFile: StorageFileWithMetadata = {
-            name: file.name,
-            path: `${userId}/${projectId}/${fileType}/${file.name}`,
-            type: fileType,
-            created_at: new Date().toISOString(),
-            size: file.size,
-            metadata: validationResult.metadata
-          };
-          newFilesByType[fileType] = [...files, newFile];
-          return newFilesByType;
-        });
-
-        // Switch to the correct tab after successful upload if it's different
-        if (fileType !== activeTab) {
-          setActiveTab(fileType);
-        }
+        uploadedBytes += file.size;
+        setBatchUploadedBytes(uploadedBytes);
       }
-
       setIsUploading(false);
       setAbortController(null);
       if (onUploadComplete) onUploadComplete();
       if (onStepAutosave) onStepAutosave();
-      // Re-fetch files from backend to ensure UI is up to date
       try {
         const latestFiles = await getFilesByType(projectId);
         setFilesByType(latestFiles);
@@ -220,19 +211,19 @@ export function UniversalFileUpload({
     } catch (error) {
       console.error('Upload error:', error);
       const appError = handleError(error);
-      setUploadStatuses(prev => prev.map(status => 
+      setUploadStatuses(prev => prev.map(status =>
         status.status === 'uploading'
-          ? { 
-              ...status, 
-              status: 'error', 
-              error: appError.message 
-            } 
+          ? {
+              ...status,
+              status: 'error',
+              error: appError.message
+            }
           : status
       ));
       onValidationError?.(appError.message);
       setIsUploading(false);
     }
-  }, [projectId, userId, activeTab, onUploadComplete, onValidationError, onStepAutosave]);
+  }, [projectId, userId, activeTab, onUploadComplete, onValidationError, onStepAutosave, batchStartTime]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -611,6 +602,29 @@ export function UniversalFileUpload({
       {isUploading && (
         <div className="mt-4 bg-gray-800/70 rounded-lg p-4 border border-blue-700">
           <h4 className="text-blue-300 text-sm mb-2">Uploading Files...</h4>
+          {/* Batch progress bar */}
+          <div className="mb-4">
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-xs text-gray-200">Batch Progress</span>
+              <span className="text-xs text-gray-400">
+                {batchTotalBytes > 0 ? `${((batchUploadedBytes / batchTotalBytes) * 100).toFixed(0)}%` : '0%'}
+              </span>
+            </div>
+            <div className="w-full bg-gray-700 rounded h-2">
+              <div
+                className="h-2 rounded bg-blue-500"
+                style={{ width: `${batchTotalBytes > 0 ? (batchUploadedBytes / batchTotalBytes) * 100 : 0}%` }}
+              />
+            </div>
+            <div className="flex justify-between items-center mt-1 text-xs text-gray-400">
+              <span>
+                Speed: {batchSpeed > 0 ? `${(batchSpeed / 1024 / 1024).toFixed(2)} MB/s` : '--'}
+              </span>
+              <span>
+                ETA: {batchETA !== null && batchETA > 0 ? `${Math.floor(batchETA / 60)}m ${Math.round(batchETA % 60)}s` : '--'}
+              </span>
+            </div>
+          </div>
           {uploadStatuses.map((status) => (
             <div key={status.file.name} className="mb-2">
               <div className="flex items-center justify-between">
