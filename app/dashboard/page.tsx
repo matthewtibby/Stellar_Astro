@@ -1,5 +1,3 @@
-"use client";
-
 import { useEffect, useState, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useUserStore } from '@/src/store/user';
@@ -59,6 +57,8 @@ import { DashboardTourProvider, useDashboardTour } from '@/src/components/Onboar
 import ActivityFeed from '../components/ActivityFeed';
 import NotificationCenter from '../components/NotificationCenter';
 import DashboardStats from '../components/DashboardStats';
+import { createClient } from '@/utils/supabase/server';
+import type { User as SupabaseUser } from '@supabase/supabase-js';
 
 // Add these interfaces before the mockProjects array
 interface WorkflowStep {
@@ -284,10 +284,12 @@ function TakeTourButton() {
   );
 }
 
-const DashboardPage = () => {
+export default async function DashboardPage() {
   const router = useRouter();
-  const { user, isAuthenticated, isLoading, subscription, fullName, setUser, logout, subscriptionLoading, setSubscriptionLoading } = useUserStore();
-  const { projects, isLoading: isLoadingProjects, error: projectsError, fetchProjects } = useProjects(user?.id, isAuthenticated);
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  const typedUser: SupabaseUser | null = user ?? null;
+  const { projects, isLoading: isLoadingProjects, error: projectsError, fetchProjects } = useProjects(typedUser?.id, !!typedUser);
   const [activeView, setActiveView] = useState('grid');
   const [activeProject, setActiveProject] = useState<Project | null>(null);
   const [showNewProject, setShowNewProject] = useState(false);
@@ -344,8 +346,8 @@ const DashboardPage = () => {
 
   // Debug logging
   console.log('Zustand user:', user);
-  console.log('Zustand isAuthenticated:', isAuthenticated);
-  console.log('Zustand isLoading:', isLoading);
+  console.log('Zustand isAuthenticated:', !!user);
+  console.log('Zustand isLoading:', !!user);
   console.log('activeProject', activeProject, 'showNewProject', showNewProject);
 
   // Redirect unconfirmed users to verify email page
@@ -375,10 +377,10 @@ const DashboardPage = () => {
 
   // Update fetchProjects when controls change (add filterFavorites and filterTag)
   useEffect(() => {
-    if (isAuthenticated && user?.id) {
+    if (user && user.id) {
       fetchProjects(searchTerm, filterStatus, sortBy, sortOrder);
     }
-  }, [searchTerm, filterStatus, sortBy, sortOrder, isAuthenticated, user?.id]);
+  }, [searchTerm, filterStatus, sortBy, sortOrder, user && user.id]);
 
   // Add filter logic for favorites and tags
   const filteredProjects = projects.filter(project => {
@@ -403,12 +405,9 @@ const DashboardPage = () => {
   }, [selectedTemplateId, showNewProject]);
 
   // Add debug log before any return
-  console.log('projects', projects, 'isLoading', isLoading, 'subscriptionLoading', subscriptionLoading, 'showNewProject', showNewProject, 'activeProject', activeProject);
+  console.log('projects', projects, 'isLoading', !!user, 'showNewProject', showNewProject, 'activeProject', activeProject);
 
-  if (isLoading || subscriptionLoading) {
-    return <div className="flex justify-center items-center min-h-screen text-white text-xl">Loading...</div>;
-  }
-  if (isAuthenticated === false) {
+  if (user && !user.email_confirmed_at) {
     return null; // Don't render anything while redirecting
   }
 
@@ -432,13 +431,13 @@ const DashboardPage = () => {
   // Add this function to check project limits
   const checkProjectLimits = () => {
     const projectCount = projects.length;
-    const userSubscription = subscription || { type: 'free', projectLimit: 5 };
+    const PROJECT_LIMIT = 5;
     
-    if (projectCount >= userSubscription.projectLimit) {
+    if (projectCount >= PROJECT_LIMIT) {
       return false;
     }
     
-    if (projectCount === userSubscription.projectLimit - 1) {
+    if (projectCount === PROJECT_LIMIT - 1) {
       setShowLimitWarning(true);
     }
     
@@ -968,10 +967,10 @@ const DashboardPage = () => {
   };
 
   // Render WelcomeDashboard if no projects
-  if (!isLoading && !subscriptionLoading && projects.length === 0 && !showNewProject) {
+  if (!typedUser && !showNewProject) {
     return (
       <WelcomeDashboard
-        userName={fullName || user?.email?.split('@')[0] || 'Astronomer'}
+        userName={"Astronomer"}
         onCreateProject={handleNewProject}
       />
     );
@@ -1079,7 +1078,7 @@ const DashboardPage = () => {
     }
   };
 
-  if (!isLoading && filteredProjects.length === 0) {
+  if (!typedUser && filteredProjects.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen text-white">
         <p>No projects found. Create your first project!</p>
@@ -1112,36 +1111,36 @@ const DashboardPage = () => {
                       <NotificationCenter />
                       <div className="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center">
                         <span className="text-white text-xl font-medium">
-                          {fullName ? fullName.charAt(0).toUpperCase() : <User size={24} />}
+                          {typedUser?.email?.split('@')[0]?.charAt(0).toUpperCase() || <User size={24} />}
                         </span>
                       </div>
                       <div>
-                        <h1 className="text-2xl font-bold text-white">Welcome, {fullName || 'User'}!</h1>
-                        <p className="text-gray-400">{user?.email}</p>
+                        <h1 className="text-2xl font-bold text-white">Welcome, {typedUser?.email?.split('@')[0] || 'User'}!</h1>
+                        <p className="text-gray-400">{typedUser?.email}</p>
                       </div>
                     </div>
                     <div className="flex items-center space-x-4">
                       <button
                         onClick={() => {
-                          if (projects.length >= (subscription || { type: 'free', projectLimit: 5 }).projectLimit) {
+                          if (projects.length >= 5) {
                             addToast('info', 'You have reached your project limit. Upgrade to Pro for more projects.');
                             return;
                           }
                           handleNewProject();
                         }}
-                        disabled={projects.length >= (subscription || { type: 'free', projectLimit: 5 }).projectLimit}
+                        disabled={projects.length >= 5}
                         className={`flex items-center space-x-2 px-4 py-2 rounded-md transition-colors relative ${
-                          projects.length >= (subscription || { type: 'free', projectLimit: 5 }).projectLimit
+                          projects.length >= 5
                             ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
                             : 'bg-blue-600 text-white hover:bg-blue-700'
                         }`}
-                        title={projects.length >= (subscription || { type: 'free', projectLimit: 5 }).projectLimit
+                        title={projects.length >= 5
                           ? 'Project limit reached. Upgrade to Pro for unlimited projects.'
                           : 'Create a new project'}
                       >
                         <Plus size={18} />
                         <span>New Project</span>
-                        {projects.length >= (subscription || { type: 'free', projectLimit: 5 }).projectLimit && (
+                        {projects.length >= 5 && (
                           <span className="absolute -bottom-7 left-1/2 -translate-x-1/2 bg-gray-900 text-yellow-300 text-xs px-3 py-1 rounded shadow-lg border border-yellow-400 whitespace-nowrap z-50">
                             Project limit reached. Upgrade to Pro for unlimited projects.
                           </span>
@@ -1385,6 +1384,4 @@ const DashboardPage = () => {
       <ActivityFeed />
     </>
   );
-};
-
-export default DashboardPage; 
+} 
