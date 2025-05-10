@@ -1380,7 +1380,7 @@ export default async function DashboardPage() {
           </div>
         </div>
       </DashboardTourProvider>
-      <DashboardStats />
+      <DashboardStats user={typedUser && typedUser.email ? { id: typedUser.id, email: typedUser.email } : null} />
       <ActivityFeed />
     </>
   );
