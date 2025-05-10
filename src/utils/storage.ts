@@ -346,6 +346,7 @@ export async function uploadRawFrame(
           .insert({
             project_id: projectId,
             user_id: user.id,
+            filename: file.name,
             file_type: actualFileType,
             file_path: filePath,
             file_size: file.size,
