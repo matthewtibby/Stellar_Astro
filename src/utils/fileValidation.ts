@@ -13,9 +13,11 @@ export interface FITSValidationResult {
   };
 }
 
-export async function validateFITSFile(file: File): Promise<FITSValidationResult> {
+export async function validateFITSFile(file: File, projectId: string, userId: string): Promise<FITSValidationResult> {
   const formData = new FormData();
   formData.append('file', file);
+  formData.append('project_id', projectId);
+  formData.append('user_id', userId);
 
   try {
     const response = await fetch('/api/validate-fits', {
@@ -25,18 +27,27 @@ export async function validateFITSFile(file: File): Promise<FITSValidationResult
 
     if (!response.ok) {
       const error = await response.json();
+      let warning = error.error || 'Failed to validate file';
+      if (typeof warning !== 'string') warning = JSON.stringify(warning);
       return {
         isValid: false,
-        warnings: [error.error || 'Failed to validate file'],
+        warnings: [warning],
         metadata: {}
       };
     }
 
-    return await response.json();
+    const data = await response.json();
+    return {
+      isValid: data.valid,
+      warnings: data.warnings || [],
+      metadata: data.metadata || {},
+      // Optionally pass through other fields if needed
+    };
   } catch (error) {
+    let msg = error instanceof Error ? error.message : JSON.stringify(error);
     return {
       isValid: false,
-      warnings: ['Error validating file: ' + (error instanceof Error ? error.message : 'Unknown error')],
+      warnings: ['Error validating file: ' + msg],
       metadata: {}
     };
   }
@@ -51,12 +62,10 @@ export function getFrameTypeFromFilename(filename: string): string {
   return 'unknown';
 }
 
-export async function validateFileBatch(files: File[]): Promise<Map<string, FITSValidationResult>> {
+export async function validateFileBatch(files: File[], projectId: string, userId: string): Promise<Map<string, FITSValidationResult>> {
   const results = new Map<string, FITSValidationResult>();
-  
   for (const file of files) {
-    results.set(file.name, await validateFITSFile(file));
+    results.set(file.name, await validateFITSFile(file, projectId, userId));
   }
-  
   return results;
 } 

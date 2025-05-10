@@ -135,7 +135,7 @@ export default function DashboardStats({ user }: { user: { id: string; email: st
 
 function StatCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: React.ReactNode }) {
   return (
-    <div className="flex items-center space-x-4 p-5 rounded-xl bg-gradient-to-br from-blue-900/70 to-blue-800/60 border border-blue-700 shadow-lg">
+    <div className="flex items-center space-x-4 p-5 rounded-xl bg-gradient-to-br from-sky-900/80 via-blue-900/70 to-indigo-900/60 border border-blue-700 shadow-lg">
       <div className="flex-shrink-0">{icon}</div>
       <div>
         <div className="text-2xl font-bold text-white">{value}</div>

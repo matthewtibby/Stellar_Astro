@@ -16,6 +16,6 @@ export function getServerClient(cookies: any) {
 }
 
 // Admin: use for service role actions (server only)
-export function getAdminClient() {
+export function getSupabaseAdminClient() {
   return createClient(supabaseUrl, supabaseServiceRoleKey);
 } 

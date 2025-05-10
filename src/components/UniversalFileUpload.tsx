@@ -141,7 +141,7 @@ export function UniversalFileUpload({
 
     try {
       // Validate all files in batch
-      const validationResults = await validateFileBatch(acceptedFiles);
+      const validationResults = await validateFileBatch(acceptedFiles, projectId, userId);
       
       // Process each file based on validation results
       for (let i = 0; i < acceptedFiles.length; i++) {
@@ -339,7 +339,7 @@ export function UniversalFileUpload({
     ));
     try {
       // Validate file
-      const validationResult = await validateFITSFile(file);
+      const validationResult = await validateFITSFile(file, projectId, userId);
       if (!validationResult.isValid) {
         throw new ValidationError(validationResult.warnings ? validationResult.warnings.join(', ') : 'File validation failed.');
       }
