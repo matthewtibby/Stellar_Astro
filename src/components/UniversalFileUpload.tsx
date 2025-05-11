@@ -152,7 +152,7 @@ export function UniversalFileUpload({
 
     try {
       // Validate all files in batch
-      const validationResults = await validateFileBatch(acceptedFiles);
+      const validationResults = await validateFileBatch(acceptedFiles, projectId, userId);
       let uploadedBytes = 0;
       
       // Process each file based on validation results
