@@ -43,7 +43,6 @@ import FitsFileUpload from '@/src/components/FitsFileUpload';
 import StepsIndicator from '@/src/components/StepsIndicator';
 import FileManagementPanel from '@/src/components/FileManagementPanel';
 import { type StorageFile } from '@/src/utils/storage';
-import { getSupabaseClient } from '@/src/lib/supabase';
 import { generateUUID } from '@/src/utils/uuid';
 import { UniversalFileUpload } from '@/src/components/UniversalFileUpload';
 import ProjectManagementPanel from '@/src/components/ProjectManagementPanel';
@@ -59,6 +58,7 @@ import { DashboardTourProvider, useDashboardTour } from '@/src/components/Onboar
 import ActivityFeed from '../components/ActivityFeed';
 import NotificationCenter from '../components/NotificationCenter';
 import DashboardStats from '../components/DashboardStats';
+import { supabase } from "@/src/lib/supabaseClient";
 
 // Add these interfaces before the mockProjects array
 interface WorkflowStep {
@@ -173,7 +173,7 @@ const defaultChecklist: ChecklistItem[] = [
   }
 ];
 
-const FileUploadSection = ({ projectId, onStepAutosave, isSavingStep, currentStep }: { projectId: string, onStepAutosave: () => void, isSavingStep: boolean, currentStep: number }) => {
+const FileUploadSection = ({ projectId, onStepAutosave, isSavingStep, currentStep, setStatsRefreshKey }: { projectId: string, onStepAutosave: () => void, isSavingStep: boolean, currentStep: number, setStatsRefreshKey: React.Dispatch<React.SetStateAction<number>> }) => {
   const { user, isAuthenticated } = useUserStore();
   const [validationError, setValidationError] = useState<string | null>(null);
   const userId = user?.id;
@@ -227,7 +227,6 @@ const FileUploadSection = ({ projectId, onStepAutosave, isSavingStep, currentSte
           await onStepAutosave();
           // Save current step to Supabase before exiting
           try {
-            const supabase = getSupabaseClient();
             await supabase
               .from('projects')
               .update({ current_step: currentStep })
@@ -236,6 +235,11 @@ const FileUploadSection = ({ projectId, onStepAutosave, isSavingStep, currentSte
             console.error('Failed to save current step on exit:', err);
           }
           window.location.href = '/dashboard';
+        }}
+        onUploadComplete={() => {
+          if (typeof window !== 'undefined') {
+            setStatsRefreshKey(k => k + 1);
+          }
         }}
       />
     </div>
@@ -341,6 +345,7 @@ const DashboardPage = () => {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
   // Add state for privacy
   const [isPublic, setIsPublic] = useState(false);
+  const [statsRefreshKey, setStatsRefreshKey] = useState(0);
 
   // Debug logging
   console.log('Zustand user:', user);
@@ -453,7 +458,6 @@ const DashboardPage = () => {
         setIsSavingProjectName(false);
         return;
       }
-      const supabase = getSupabaseClient();
       const { data: { user }, error: authError } = await supabase.auth.getUser();
       if (authError || !user) throw new Error('Authentication required');
       const { data: project, error: projectError } = await supabase
@@ -490,6 +494,7 @@ const DashboardPage = () => {
         const workflowArea = document.querySelector('.lg\\:col-span-3');
         if (workflowArea) workflowArea.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 200);
+      setStatsRefreshKey(k => k + 1);
     } catch (error) {
       console.error('Error creating project:', error);
       // Optionally show error to user
@@ -511,7 +516,6 @@ const DashboardPage = () => {
     }
     setIsSavingProjectName(true);
     try {
-      const supabase = getSupabaseClient();
       const { data: updated, error } = await supabase
         .from('projects')
         .update({ title: projectNameEdit.trim(), updated_at: new Date().toISOString() })
@@ -521,6 +525,7 @@ const DashboardPage = () => {
       if (error) throw error;
       setActiveProject({ ...activeProject, name: updated.title });
       await fetchProjects();
+      setStatsRefreshKey(k => k + 1);
     } catch (error) {
       console.error('Error saving project name:', error);
       // Optionally show error to user
@@ -797,7 +802,6 @@ const DashboardPage = () => {
             })),
           { id: 'upload-organize', name: 'Upload & Organize', status: 'completed' as const }
         ];
-        const supabase = getSupabaseClient();
         await supabase
           .from('projects')
           .update({ steps: updatedSteps })
@@ -855,7 +859,13 @@ const DashboardPage = () => {
               </p>
               {/* Only render FileUploadSection if project is named and saved */}
               {canUpload ? (
-                <FileUploadSection projectId={projectId} onStepAutosave={handleStepAutosave} isSavingStep={isSavingStep} currentStep={currentStep} />
+                <FileUploadSection 
+                  projectId={projectId}
+                  onStepAutosave={handleStepAutosave}
+                  isSavingStep={isSavingStep}
+                  currentStep={currentStep}
+                  setStatsRefreshKey={setStatsRefreshKey}
+                />
               ) : (
                 <div className="p-4 bg-yellow-900/50 text-yellow-200 rounded-md border border-yellow-800">
                   Please name and save your project before uploading files.
@@ -870,7 +880,13 @@ const DashboardPage = () => {
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-4">
-                <FileUploadSection projectId={projectId} onStepAutosave={handleStepAutosave} isSavingStep={isSavingStep} currentStep={currentStep} />
+                <FileUploadSection 
+                  projectId={projectId}
+                  onStepAutosave={handleStepAutosave}
+                  isSavingStep={isSavingStep}
+                  currentStep={currentStep}
+                  setStatsRefreshKey={setStatsRefreshKey}
+                />
                 <FileComparisonPanel projectId={projectId} />
               </div>
               <div className="space-y-4">
@@ -968,7 +984,6 @@ const DashboardPage = () => {
   const confirmDeleteProject = async () => {
     if (!showDeleteConfirm.projectId) return;
     try {
-      const supabase = getSupabaseClient();
       const { error } = await supabase
         .from('projects')
         .delete()
@@ -979,6 +994,7 @@ const DashboardPage = () => {
         setActiveProject(null);
       }
       addToast('success', 'Project deleted successfully');
+      setStatsRefreshKey(k => k + 1);
     } catch (error) {
       console.error('Error deleting project:', error);
       addToast('error', 'Failed to delete project');
@@ -997,12 +1013,12 @@ const DashboardPage = () => {
   // Add handleToggleFavorite function
   const handleToggleFavorite = async (project: Project) => {
     try {
-      const supabase = getSupabaseClient();
       await supabase
         .from('projects')
         .update({ is_favorite: !project.isFavorite })
         .eq('id', project.id);
       await fetchProjects(searchTerm, filterStatus, sortBy, sortOrder);
+      setStatsRefreshKey(k => k + 1);
     } catch (error) {
       addToast('error', 'Failed to update favorite status');
     }
@@ -1011,12 +1027,12 @@ const DashboardPage = () => {
   // Add handleTagEdit function (inline tag editing for each project)
   const handleTagEdit = async (project: Project, tags: string[]) => {
     try {
-      const supabase = getSupabaseClient();
       await supabase
         .from('projects')
         .update({ tags })
         .eq('id', project.id);
       await fetchProjects(searchTerm, filterStatus, sortBy, sortOrder);
+      setStatsRefreshKey(k => k + 1);
     } catch (error) {
       addToast('error', 'Failed to update tags');
     }
@@ -1025,7 +1041,6 @@ const DashboardPage = () => {
   // Add handleDuplicateProject and handleArchiveProject functions
   const handleDuplicateProject = async (project: Project) => {
     try {
-      const supabase = getSupabaseClient();
       // Duplicate project with a new id and name
       const { data: newProject, error } = await supabase
         .from('projects')
@@ -1042,6 +1057,7 @@ const DashboardPage = () => {
       if (error) throw error;
       await fetchProjects(searchTerm, filterStatus, sortBy, sortOrder);
       addToast('success', 'Project duplicated successfully');
+      setStatsRefreshKey(k => k + 1);
     } catch (error) {
       addToast('error', 'Failed to duplicate project');
     }
@@ -1049,13 +1065,13 @@ const DashboardPage = () => {
 
   const handleArchiveProject = async (project: Project) => {
     try {
-      const supabase = getSupabaseClient();
       await supabase
         .from('projects')
         .update({ status: 'archived' })
         .eq('id', project.id);
       await fetchProjects(searchTerm, filterStatus, sortBy, sortOrder);
       addToast('success', 'Project archived successfully');
+      setStatsRefreshKey(k => k + 1);
     } catch (error) {
       addToast('error', 'Failed to archive project');
     }
@@ -1353,7 +1369,7 @@ const DashboardPage = () => {
           </div>
         </div>
       </DashboardTourProvider>
-      <DashboardStats />
+      <DashboardStats refreshKey={statsRefreshKey} />
       <ActivityFeed />
     </>
   );

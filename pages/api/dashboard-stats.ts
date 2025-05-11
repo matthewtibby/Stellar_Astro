@@ -1,8 +1,22 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { createServerSupabaseClient } from '@supabase/auth-helpers-nextjs';
+import { createServerClient } from '@supabase/ssr';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const supabase = createServerSupabaseClient({ req, res });
+  const supabase = createServerClient(supabaseUrl, supabaseKey, {
+    cookies: {
+      get: (key) => req.cookies[key],
+      set: (key, value, options) => {
+        // Basic cookie setter; for production use a library for options
+        res.setHeader('Set-Cookie', `${key}=${value}; Path=/; HttpOnly; SameSite=Lax`);
+      },
+      remove: (key) => {
+        res.setHeader('Set-Cookie', `${key}=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT`);
+      },
+    },
+  });
   const { data: { user } } = await supabase.auth.getUser();
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (!user) {

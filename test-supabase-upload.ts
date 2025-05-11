@@ -1,13 +1,10 @@
-import { getSupabaseClient } from '@/src/lib/supabase';
+import { supabase } from '@/src/lib/supabaseClient';
 import { createProject } from './src/utils/projects';
 import { uploadRawFrame } from './src/utils/storage';
 import { FileType } from './src/types/store';
 
 async function testSupabaseUpload() {
   try {
-    // Get Supabase client
-    const supabase = getSupabaseClient();
-    
     // Check authentication
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {

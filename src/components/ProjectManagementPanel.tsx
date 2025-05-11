@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Share2, Download, Upload, Copy, CheckCircle, X, Star, Tag, Trash, Copy as Duplicate, Archive } from 'lucide-react';
 import { useProjectStore } from '@/src/store/project';
-import { getSupabaseClient } from '@/src/lib/supabase';
+import { supabase } from '@/src/lib/supabaseClient';
 import { useToast } from '../hooks/useToast';
 import { sendNotification } from '@/src/utils/sendNotification';
 
@@ -43,7 +43,7 @@ export default function ProjectManagementPanel({ projectId }: ProjectManagementP
     setIsExporting(true);
     try {
       // Get all files associated with the project
-      const { data: files, error: filesError } = await getSupabaseClient()
+      const { data: files, error: filesError } = await supabase
         .from('project_files')
         .select('*')
         .eq('project_id', projectId);
@@ -99,7 +99,7 @@ export default function ProjectManagementPanel({ projectId }: ProjectManagementP
           }
 
           // Create new project
-          const { data: newProject, error: projectError } = await getSupabaseClient()
+          const { data: newProject, error: projectError } = await supabase
             .from('projects')
             .insert([{
               ...importData.project,
@@ -115,7 +115,7 @@ export default function ProjectManagementPanel({ projectId }: ProjectManagementP
 
           // Import files
           for (const file of importData.files) {
-            const { error: fileError } = await getSupabaseClient()
+            const { error: fileError } = await supabase
               .from('project_files')
               .insert([{
                 ...file,
@@ -148,7 +148,7 @@ export default function ProjectManagementPanel({ projectId }: ProjectManagementP
 
     try {
       // Create a share token
-      const { data: shareToken, error: tokenError } = await getSupabaseClient()
+      const { data: shareToken, error: tokenError } = await supabase
         .from('project_shares')
         .insert([{
           project_id: projectId,

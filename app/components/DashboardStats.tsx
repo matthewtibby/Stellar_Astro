@@ -1,7 +1,7 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useSession, useSupabaseClient } from '@supabase/auth-helpers-react';
 import { Folder, Image as ImageIcon, Clock, Zap, Star, HardDrive, Users, Share2 } from 'lucide-react';
+import { supabase } from '@/src/lib/supabaseClient';
 
 const statIcons = {
   totalProjects: <Folder className="h-7 w-7 text-blue-400" />,
@@ -32,14 +32,11 @@ function formatStorage(bytes: number) {
   return bytes + ' B';
 }
 
-export default function DashboardStats() {
+export default function DashboardStats({ refreshKey }: { refreshKey: number }) {
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const router = useRouter();
-  const session = useSession();
-  const supabase = useSupabaseClient();
 
   const fetchStats = async () => {
     setLoading(true);
@@ -61,20 +58,8 @@ export default function DashboardStats() {
   };
 
   useEffect(() => {
-    if (!session) {
-      setError('You must be logged in to view dashboard stats.');
-      setLoading(false);
-      return;
-    }
     fetchStats();
-    intervalRef.current = setInterval(fetchStats, 30000); // 30 seconds
-    const handleFocus = () => fetchStats();
-    window.addEventListener('focus', handleFocus);
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-      window.removeEventListener('focus', handleFocus);
-    };
-  }, [session]);
+  }, [refreshKey]);
 
   if (loading) return <div className="text-white py-8">Loading stats...</div>;
   if (error) return <div className="text-red-400 py-8">{error}</div>;
@@ -85,7 +70,7 @@ export default function DashboardStats() {
       <div className="flex items-center mb-2">
         <span className="text-blue-300 text-xs font-semibold mr-2">LIVE</span>
         <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse mr-2" />
-        <span className="text-xs text-blue-200">Stats auto-refresh every 30s</span>
+        <span className="text-xs text-blue-200">Stats update when you make changes</span>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard icon={statIcons.totalProjects} label={statLabels.totalProjects} value={stats.totalProjects} />

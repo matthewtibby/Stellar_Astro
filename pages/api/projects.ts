@@ -1,6 +1,9 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getSupabaseClient } from '@/src/lib/supabase';
+import { createServerClient } from '@supabase/ssr';
 import { sendNotification } from '@/src/utils/sendNotification';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -13,7 +16,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ message: 'Project name is required' });
     }
 
-    const supabase = getSupabaseClient();
+    const supabase = createServerClient(supabaseUrl, supabaseKey, {
+      cookies: {
+        get: (key) => req.cookies[key],
+        set: (key, value, options) => {
+          res.setHeader('Set-Cookie', `${key}=${value}; Path=/; HttpOnly; SameSite=Lax`);
+        },
+        remove: (key) => {
+          res.setHeader('Set-Cookie', `${key}=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT`);
+        },
+      },
+    });
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
       return res.status(401).json({ message: 'Authentication required' });

@@ -310,16 +310,64 @@ export function UniversalFileUpload({
   function renderMetadataTable(file: StorageFileWithMetadata) {
     const meta = file.metadata || {};
     return (
-      <table className="text-xs text-gray-200 w-full">
-        <tbody>
-          {Object.entries(meta).map(([key, value]) => (
-            <tr key={key}>
-              <td className="font-semibold pr-2">{key}</td>
-              <td>{String(value)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="p-2 bg-gray-800/50 rounded-md text-sm">
+        <div className="grid grid-cols-2 gap-2">
+          {meta.exposure_time && (
+            <div>
+              <span className="text-gray-400">Exposure:</span>
+              <span className="ml-2 text-white">{meta.exposure_time}s</span>
+            </div>
+          )}
+          {meta.filter && (
+            <div>
+              <span className="text-gray-400">Filter:</span>
+              <span className="ml-2 text-white">{meta.filter}</span>
+            </div>
+          )}
+          {meta.object && (
+            <div>
+              <span className="text-gray-400">Object:</span>
+              <span className="ml-2 text-white">{meta.object}</span>
+            </div>
+          )}
+          {meta.date_obs && (
+            <div>
+              <span className="text-gray-400">Date:</span>
+              <span className="ml-2 text-white">{meta.date_obs}</span>
+            </div>
+          )}
+          {meta.instrument && (
+            <div>
+              <span className="text-gray-400">Instrument:</span>
+              <span className="ml-2 text-white">{meta.instrument}</span>
+            </div>
+          )}
+          {meta.telescope && (
+            <div>
+              <span className="text-gray-400">Telescope:</span>
+              <span className="ml-2 text-white">{meta.telescope}</span>
+            </div>
+          )}
+          {meta.gain && (
+            <div>
+              <span className="text-gray-400">Gain:</span>
+              <span className="ml-2 text-white">{meta.gain}</span>
+            </div>
+          )}
+          {meta.temperature && (
+            <div>
+              <span className="text-gray-400">Temp:</span>
+              <span className="ml-2 text-white">{meta.temperature}°C</span>
+            </div>
+          )}
+          {meta.binning && (
+            <div>
+              <span className="text-gray-400">Binning:</span>
+              <span className="ml-2 text-white">{meta.binning}</span>
+            </div>
+          )}
+        </div>
+      </div>
     );
   }
 

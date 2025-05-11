@@ -1,9 +1,12 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getSupabaseClient } from '@/src/lib/supabase';
+import { createServerClient } from '@supabase/ssr';
 import { createProject } from '@/src/utils/projects';
 import { uploadRawFrame } from '@/src/utils/storage';
 import { readFile } from 'fs/promises';
 import { FileType } from '@/src/types/store';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -12,7 +15,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     // Get Supabase client
-    const supabase = getSupabaseClient();
+    const supabase = createServerClient(supabaseUrl, supabaseKey);
     
     // Check authentication
     const { data: { user }, error: authError } = await supabase.auth.getUser();

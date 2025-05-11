@@ -1,4 +1,4 @@
-import { getSupabaseClient as getSupabaseClientLib } from '../lib/supabase';
+import { supabase } from '@/src/lib/supabaseClient';
 import { FileType } from '@/src/types/store';
 import { extractTagsFromFitsHeader } from './fileTagging';
 
@@ -29,21 +29,11 @@ export const FILE_TYPE_FOLDERS: Record<FileType, string> = {
   'post-processed': 'post-processed',
 } as const;
 
-// Helper function to get Supabase client
-const checkSupabase = () => {
-  try {
-    return getSupabaseClientLib();
-  } catch (e) {
-    throw new Error('Storage service is currently unavailable. Please try again later.');
-  }
-};
-
 // Profile picture functions
 export const uploadProfilePicture = async (userId: string, file: File): Promise<string> => {
-  const client = checkSupabase();
   const filePath = `${userId}/profile.${file.name.split('.').pop()}`;
   
-  const { data, error } = await client.storage
+  const { data, error } = await supabase.storage
     .from(STORAGE_BUCKETS.PROFILE_PICTURES)
     .upload(filePath, file, {
       upsert: true,
@@ -54,7 +44,7 @@ export const uploadProfilePicture = async (userId: string, file: File): Promise<
   
   if (error) throw error;
   
-  const { data: { publicUrl } } = client.storage
+  const { data: { publicUrl } } = supabase.storage
     .from(STORAGE_BUCKETS.PROFILE_PICTURES)
     .getPublicUrl(filePath);
   
@@ -66,14 +56,13 @@ export type UploadProgressCallback = (progress: number) => void;
 
 export async function listRawFrames(projectId: string): Promise<string[]> {
   try {
-    const client = checkSupabase();
-    const { data: { user }, error: authError } = await client.auth.getUser();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
     
     if (authError || !user) {
       throw new Error('User must be authenticated to list files');
     }
 
-    const { data, error } = await client.storage
+    const { data, error } = await supabase.storage
       .from(STORAGE_BUCKETS.RAW_FRAMES)
       .list(`${user.id}/${projectId}`);
 
@@ -91,8 +80,7 @@ export async function listRawFrames(projectId: string): Promise<string[]> {
 
 export async function checkBucketContents(): Promise<void> {
   try {
-    const client = checkSupabase();
-    const { data: { user }, error: authError } = await client.auth.getUser();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
     
     if (authError || !user) {
       console.error('Auth error:', authError);
@@ -100,7 +88,7 @@ export async function checkBucketContents(): Promise<void> {
     }
 
     // List all files in the raw-frames bucket
-    const { data, error } = await client.storage
+    const { data, error } = await supabase.storage
       .from(STORAGE_BUCKETS.RAW_FRAMES)
       .list();
 
@@ -185,8 +173,6 @@ export async function validateFitsFile(
 
 // Add a function to ensure project exists
 export async function ensureProjectExists(projectId: string): Promise<void> {
-  const client = getSupabaseClientLib();
-  
   // Check if projectId is a valid UUID
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (!uuidRegex.test(projectId)) {
@@ -194,7 +180,7 @@ export async function ensureProjectExists(projectId: string): Promise<void> {
   }
 
   try {
-    const { data: project, error } = await client
+    const { data: project, error } = await supabase
       .from('projects')
       .select('*')
       .eq('id', projectId)
@@ -228,12 +214,8 @@ export async function uploadRawFrame(
   console.log('Starting upload for file:', file.name);
   
   try {
-    if (!getSupabaseClientLib()) {
-      throw new Error('Supabase client not initialized');
-    }
-
     // Get authenticated user first
-    const { data: { user }, error: userError } = await getSupabaseClientLib().auth.getUser();
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user) {
       throw new Error('User not authenticated');
     }
@@ -260,7 +242,7 @@ export async function uploadRawFrame(
     }
 
     // Check if file already exists in this project
-    const { data: existingFiles, error: listError } = await getSupabaseClientLib()
+    const { data: existingFiles, error: listError } = await supabase
       .storage
       .from('raw-frames')
       .list(`${user.id}/${projectId}/${actualFileType}`);
@@ -276,7 +258,7 @@ export async function uploadRawFrame(
     }
 
     // Get signed upload URL
-    const { data: signedUrlData, error: signedUrlError } = await getSupabaseClientLib()
+    const { data: signedUrlData, error: signedUrlError } = await supabase
       .storage
       .from('raw-frames')
       .createSignedUploadUrl(filePath);
@@ -328,7 +310,7 @@ export async function uploadRawFrame(
         });
 
         // Verify the file was uploaded successfully
-        const { data: verifyData, error: verifyError } = await getSupabaseClientLib()
+        const { data: verifyData, error: verifyError } = await supabase
           .storage
           .from(STORAGE_BUCKETS.RAW_FRAMES)
           .list(filePath.split('/').slice(0, -1).join('/'));
@@ -341,7 +323,7 @@ export async function uploadRawFrame(
         console.log('File uploaded and verified successfully to:', filePath);
 
         // Insert file record into project_files with tags
-        const { error: insertError } = await getSupabaseClientLib()
+        const { error: insertError } = await supabase
           .from('project_files')
           .insert({
             project_id: projectId,
@@ -378,14 +360,13 @@ export const uploadMasterFrame = async (
   masterType: 'master-dark' | 'master-bias' | 'master-flat', 
   file: File
 ): Promise<string> => {
-  const client = checkSupabase();
   const filePath = `${projectId}/${masterType}/${file.name}`;
   
-  const { data, error } = await client.storage
+  const { data, error } = await supabase.storage
     .from(STORAGE_BUCKETS.MASTER_FRAMES)
     .upload(filePath, file, {
       metadata: {
-        owner: (await client.auth.getUser()).data.user?.id
+        owner: (await supabase.auth.getUser()).data.user?.id
       }
     });
   
@@ -399,14 +380,13 @@ export const uploadCalibratedFrame = async (
   projectId: string, 
   file: File
 ): Promise<string> => {
-  const client = checkSupabase();
   const filePath = `${projectId}/calibrated/${file.name}`;
   
-  const { data, error } = await client.storage
+  const { data, error } = await supabase.storage
     .from(STORAGE_BUCKETS.CALIBRATED_FRAMES)
     .upload(filePath, file, {
       metadata: {
-        owner: (await client.auth.getUser()).data.user?.id
+        owner: (await supabase.auth.getUser()).data.user?.id
       }
     });
   
@@ -420,14 +400,13 @@ export const uploadStackedFrame = async (
   projectId: string, 
   file: File
 ): Promise<string> => {
-  const client = checkSupabase();
   const filePath = `${projectId}/stacked/${file.name}`;
   
-  const { data, error } = await client.storage
+  const { data, error } = await supabase.storage
     .from(STORAGE_BUCKETS.STACKED_FRAMES)
     .upload(filePath, file, {
       metadata: {
-        owner: (await client.auth.getUser()).data.user?.id
+        owner: (await supabase.auth.getUser()).data.user?.id
       }
     });
   
@@ -441,14 +420,13 @@ export const uploadPreProcessedImage = async (
   projectId: string,
   file: File
 ): Promise<string> => {
-  const client = checkSupabase();
   const filePath = `${projectId}/pre-processed/${file.name}`;
   
-  const { data, error } = await client.storage
+  const { data, error } = await supabase.storage
     .from(STORAGE_BUCKETS.PRE_PROCESSED)
     .upload(filePath, file, {
       metadata: {
-        owner: (await client.auth.getUser()).data.user?.id
+        owner: (await supabase.auth.getUser()).data.user?.id
       }
     });
   
@@ -462,14 +440,13 @@ export const uploadPostProcessedImage = async (
   projectId: string,
   file: File
 ): Promise<string> => {
-  const client = checkSupabase();
   const filePath = `${projectId}/post-processed/${file.name}`;
   
-  const { data, error } = await client.storage
+  const { data, error } = await supabase.storage
     .from(STORAGE_BUCKETS.POST_PROCESSED)
     .upload(filePath, file, {
       metadata: {
-        owner: (await client.auth.getUser()).data.user?.id
+        owner: (await supabase.auth.getUser()).data.user?.id
       }
     });
   
@@ -480,8 +457,7 @@ export const uploadPostProcessedImage = async (
 
 // Generic download function
 export const downloadFile = async (bucket: string, filePath: string): Promise<Blob> => {
-  const client = checkSupabase();
-  const { data, error } = await client.storage
+  const { data, error } = await supabase.storage
     .from(bucket)
     .download(filePath);
   
@@ -492,8 +468,7 @@ export const downloadFile = async (bucket: string, filePath: string): Promise<Bl
 
 // Generic delete function
 export async function deleteFitsFile(filePath: string): Promise<void> {
-  const client = checkSupabase();
-  const { error } = await client.storage
+  const { error } = await supabase.storage
     .from(STORAGE_BUCKETS.RAW_FRAMES)
     .remove([filePath]);
 
@@ -505,8 +480,7 @@ export async function deleteFitsFile(filePath: string): Promise<void> {
 
 // List files in a project folder
 export async function listProjectFiles(projectId: string): Promise<string[]> {
-  const client = checkSupabase();
-  const { data, error } = await client.storage
+  const { data, error } = await supabase.storage
     .from('fits-files')
     .list(projectId);
 
@@ -519,9 +493,8 @@ export async function listProjectFiles(projectId: string): Promise<string[]> {
 
 // Add a function to check if a file exists in the bucket
 export async function fileExists(bucket: string, filePath: string): Promise<boolean> {
-  const client = checkSupabase();
   try {
-    const { data, error } = await client.storage
+    const { data, error } = await supabase.storage
       .from(bucket)
       .list(filePath.split('/').slice(0, -1).join('/'));
     
@@ -541,10 +514,9 @@ export async function fileExists(bucket: string, filePath: string): Promise<bool
 export async function getFitsFileUrl(filePath: string): Promise<string> {
   try {
     console.log('[getFitsFileUrl] Getting URL for file:', filePath);
-    const client = checkSupabase();
 
     // Check if the file exists first
-    const { data: fileExists, error: checkError } = await client.storage
+    const { data: fileExists, error: checkError } = await supabase.storage
       .from(STORAGE_BUCKETS.RAW_FRAMES)
       .list(filePath.split('/').slice(0, -1).join('/'));
 
@@ -562,7 +534,7 @@ export async function getFitsFileUrl(filePath: string): Promise<string> {
     }
 
     // Get the signed URL
-    const { data, error } = await client.storage
+    const { data, error } = await supabase.storage
       .from(STORAGE_BUCKETS.RAW_FRAMES)
       .createSignedUrl(filePath, 3600); // URL expires in 1 hour
 
@@ -596,8 +568,7 @@ export interface StorageFile {
 export async function getFilesByType(projectId: string): Promise<Record<FileType, StorageFile[]>> {
   try {
     console.log('[getFilesByType] Starting for project:', projectId);
-    const client = checkSupabase();
-    const { data: { user }, error: authError } = await client.auth.getUser();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
       throw new Error('User must be authenticated to fetch files');
     }
@@ -624,7 +595,7 @@ export async function getFilesByType(projectId: string): Promise<Record<FileType
     // For each type, list files in the corresponding subfolder
     for (const type of Object.keys(result) as FileType[]) {
       const folderPath = `${userId}/${projectId}/${type}`;
-      const { data: files, error } = await client.storage
+      const { data: files, error } = await supabase.storage
         .from(STORAGE_BUCKETS.RAW_FRAMES)
         .list(folderPath);
       if (error) {

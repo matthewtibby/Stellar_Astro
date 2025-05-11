@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { UserStore, UserState } from '@/types/store';
 import { User } from '@supabase/supabase-js';
-import { getSupabaseClient } from '@/src/lib/supabase';
+import { supabase } from '@/src/lib/supabaseClient';
 
 const initialState: UserState = {
   id: '',
@@ -49,7 +49,6 @@ export const useUserStore = create<UserStoreWithSubscription>()(
       },
       fetchAndSetSubscriptionAndRole: async (userId: string) => {
         set({ subscriptionLoading: true });
-        const supabase = getSupabaseClient();
         // Fetch both in parallel
         const [subRes, roleRes] = await Promise.all([
           supabase
