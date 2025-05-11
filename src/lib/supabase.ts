@@ -1,25 +1,10 @@
-import { createClient } from '@supabase/supabase-js'
+import { createBrowserClient, createServerClient } from '@supabase/ssr';
 
-export function getSupabaseClient() {
-  if (typeof window === 'undefined') {
-    throw new Error('Supabase client should only be initialized on the client side');
-  }
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !anonKey) {
-    throw new Error('Missing Supabase environment variables');
-  }
-  return createClient(url, anonKey, {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: true
-    },
-    db: {
-      schema: 'public'
-    }
-  });
-}
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+// Export browser and server client creators for use throughout the app
+export { createBrowserClient, createServerClient, supabaseUrl, supabaseAnonKey };
 
 // For server-side admin usage only
 export function getSupabaseAdminClient() {
