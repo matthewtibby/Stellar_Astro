@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { getBrowserClient } from '@/src/lib/supabase';
+import { createBrowserClient, supabaseUrl, supabaseAnonKey } from '@/src/lib/supabase';
 import { Eye, EyeOff } from 'lucide-react';
 
 export default function SignUp() {
@@ -29,6 +29,8 @@ export default function SignUp() {
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
 
   const validateForm = () => {
     const newErrors: {
@@ -94,7 +96,6 @@ export default function SignUp() {
 
     setIsLoading(true);
     try {
-      const supabase = getBrowserClient();
       const { data, error } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,

@@ -1,9 +1,11 @@
-import { getSupabaseAdminClient } from '@/src/lib/supabase';
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
 
 export async function checkProjectNameExists(userId: string, projectName: string): Promise<boolean> {
-  const client = getSupabaseAdminClient();
-  
-  const { data, error } = await client
+  const { data, error } = await supabase
     .from('projects')
     .select('id')
     .eq('user_id', userId)
@@ -19,15 +21,7 @@ export async function checkProjectNameExists(userId: string, projectName: string
 }
 
 export async function createProject(userId: string, projectName: string, description?: string) {
-  const client = getSupabaseAdminClient();
-
-  // First check if a project with this name already exists
-  const nameExists = await checkProjectNameExists(userId, projectName);
-  if (nameExists) {
-    throw new Error('A project with this name already exists');
-  }
-
-  const { data, error } = await client
+  const { data, error } = await supabase
     .from('projects')
     .insert([
       {

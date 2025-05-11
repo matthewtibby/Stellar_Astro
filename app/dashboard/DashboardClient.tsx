@@ -14,7 +14,7 @@ import FitsFileUpload from '@/src/components/FitsFileUpload';
 import StepsIndicator from '@/src/components/StepsIndicator';
 import FileManagementPanel from '@/src/components/FileManagementPanel';
 import { type StorageFile } from '@/src/utils/storage';
-import { getBrowserClient } from '@/src/lib/supabase';
+import { createBrowserClient, supabaseUrl, supabaseAnonKey } from '@/src/lib/supabase';
 import { generateUUID } from '@/src/utils/uuid';
 import { UniversalFileUpload } from '@/src/components/UniversalFileUpload';
 import ProjectManagementPanel from '@/src/components/ProjectManagementPanel';
@@ -31,6 +31,8 @@ import ActivityFeed from '../components/ActivityFeed';
 import NotificationCenter from '../components/NotificationCenter';
 import DashboardStats from '../components/DashboardStats';
 import NewProjectModal from '@/src/components/NewProjectModal';
+
+const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
 
 export default function DashboardClient({ user }: { user: { id: string; email: string } | null }) {
   // State and logic from previous DashboardPage
@@ -86,7 +88,7 @@ export default function DashboardClient({ user }: { user: { id: string; email: s
 
   useEffect(() => {
     if (user) {
-      getBrowserClient()
+      supabase
         .from('profiles')
         .select('subscription')
         .eq('id', user.id)
@@ -149,7 +151,7 @@ export default function DashboardClient({ user }: { user: { id: string; email: s
                             onChange={async (e) => {
                               const newType = e.target.value;
                               setSubscription(newType);
-                              await getBrowserClient()
+                              await supabase
                                 .from('profiles')
                                 .update({ subscription: newType })
                                 .eq('id', user.id);

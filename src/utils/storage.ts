@@ -1,4 +1,4 @@
-import { getBrowserClient } from '../lib/supabase';
+import { createBrowserClient, supabaseUrl, supabaseAnonKey } from '@/src/lib/supabase';
 import { FileType } from '@/src/types/store';
 import { extractTagsFromFitsHeader } from './fileTagging';
 
@@ -32,11 +32,13 @@ export const FILE_TYPE_FOLDERS: Record<FileType, string> = {
 // Helper function to get Supabase client
 const checkSupabase = () => {
   try {
-    return getBrowserClient();
+    return createBrowserClient(supabaseUrl, supabaseAnonKey);
   } catch (e) {
     throw new Error('Storage service is currently unavailable. Please try again later.');
   }
 };
+
+const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
 
 // Profile picture functions
 export const uploadProfilePicture = async (userId: string, file: File): Promise<string> => {
@@ -185,7 +187,7 @@ export async function validateFitsFile(
 
 // Add a function to ensure project exists
 export async function ensureProjectExists(projectId: string): Promise<void> {
-  const client = getBrowserClient();
+  const client = createBrowserClient(supabaseUrl, supabaseAnonKey);
   
   // Check if projectId is a valid UUID
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -228,12 +230,12 @@ export async function uploadRawFrame(
   console.log('Starting upload for file:', file.name);
   
   try {
-    if (!getBrowserClient()) {
+    if (!createBrowserClient(supabaseUrl, supabaseAnonKey)) {
       throw new Error('Supabase client not initialized');
     }
 
     // Get authenticated user first
-    const { data: { user }, error: userError } = await getBrowserClient().auth.getUser();
+    const { data: { user }, error: userError } = await createBrowserClient(supabaseUrl, supabaseAnonKey).auth.getUser();
     if (userError || !user) {
       throw new Error('User not authenticated');
     }
@@ -260,7 +262,7 @@ export async function uploadRawFrame(
     }
 
     // Check if file already exists in this project
-    const { data: existingFiles, error: listError } = await getBrowserClient()
+    const { data: existingFiles, error: listError } = await createBrowserClient(supabaseUrl, supabaseAnonKey)
       .storage
       .from('raw-frames')
       .list(`${user.id}/${projectId}/${actualFileType}`);
@@ -276,7 +278,7 @@ export async function uploadRawFrame(
     }
 
     // Get signed upload URL
-    const { data: signedUrlData, error: signedUrlError } = await getBrowserClient()
+    const { data: signedUrlData, error: signedUrlError } = await createBrowserClient(supabaseUrl, supabaseAnonKey)
       .storage
       .from('raw-frames')
       .createSignedUploadUrl(filePath);
@@ -328,7 +330,7 @@ export async function uploadRawFrame(
         });
 
         // Verify the file was uploaded successfully
-        const { data: verifyData, error: verifyError } = await getBrowserClient()
+        const { data: verifyData, error: verifyError } = await createBrowserClient(supabaseUrl, supabaseAnonKey)
           .storage
           .from(STORAGE_BUCKETS.RAW_FRAMES)
           .list(filePath.split('/').slice(0, -1).join('/'));
@@ -341,7 +343,7 @@ export async function uploadRawFrame(
         console.log('File uploaded and verified successfully to:', filePath);
 
         // Insert file record into project_files with tags
-        const { error: insertError } = await getBrowserClient()
+        const { error: insertError } = await createBrowserClient(supabaseUrl, supabaseAnonKey)
           .from('project_files')
           .insert({
             project_id: projectId,

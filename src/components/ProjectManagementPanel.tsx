@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { Share2, Download, Upload, Copy, CheckCircle, X, Star, Tag, Trash, Copy as Duplicate, Archive } from 'lucide-react';
 import { useProjectStore } from '@/src/store/project';
-import { getBrowserClient } from '@/src/lib/supabase';
+import { createBrowserClient, supabaseUrl, supabaseAnonKey } from '@/src/lib/supabase';
 import { useToast } from '../hooks/useToast';
 import { sendNotification } from '@/src/utils/sendNotification';
 
@@ -35,7 +35,7 @@ export default function ProjectManagementPanel({ projectId }: ProjectManagementP
   const [isImporting, setIsImporting] = useState(false);
   const { currentProject, updateProject } = useProjectStore();
   const { addToast } = useToast();
-  const supabase = getBrowserClient();
+  const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
 
   const handleExport = async () => {
     if (!currentProject) return;

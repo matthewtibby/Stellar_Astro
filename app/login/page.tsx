@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useUserStore } from '@/src/store/user';
-import { getBrowserClient } from '@/src/lib/supabase';
+import { createBrowserClient, supabaseUrl, supabaseAnonKey } from '@/src/lib/supabase';
 import { Eye, EyeOff } from 'lucide-react';
 
 export default function LoginPage() {
@@ -15,13 +15,14 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   
+  const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError(null);
 
     try {
-      const supabase = getBrowserClient();
       console.log('[LOGIN] Attempting login with:', { email, password: '[HIDDEN]' });
       const { data, error } = await supabase.auth.signInWithPassword({
         email,

@@ -1,9 +1,12 @@
-import { getSupabaseAdminClient } from '@/lib/supabase'
+import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server'
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
 
 export async function GET() {
   try {
-    const supabase = getSupabaseAdminClient();
     const { data, error } = await supabase.from('_prisma_migrations').select('*').limit(1)
     
     if (error) {
