@@ -19,7 +19,7 @@ export interface OrganizedFiles {
   };
 }
 
-export async function organizeFiles(files: File[]): Promise<OrganizedFiles> {
+export async function organizeFiles(files: File[], projectId: string, userId: string): Promise<OrganizedFiles> {
   const organized: OrganizedFiles = {
     light: [],
     dark: [],
@@ -31,7 +31,7 @@ export async function organizeFiles(files: File[]): Promise<OrganizedFiles> {
 
   // Validate all files first
   const validationResults = await Promise.all(
-    files.map(file => validateFITSFile(file))
+    files.map(file => validateFITSFile(file, projectId, userId))
   );
 
   // Organize files based on validation results
