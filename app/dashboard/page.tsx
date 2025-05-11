@@ -49,6 +49,7 @@ import { useProjects } from '@/src/hooks/useProjects';
 import { Project, ChecklistItem } from '@/src/types/project';
 import WelcomeDashboard from '@/src/components/WelcomeDashboard';
 import AuthSync from '@/components/AuthSync';
+import ProjectCard from '../../components/ui/ProjectCard';
 
 // Add these interfaces before the mockProjects array
 interface WorkflowStep {
@@ -72,124 +73,124 @@ interface User {
 }
 
 // Mock project data
-const mockProjects: Project[] = [
-  {
-    id: generateUUID(),
-    name: "Orion Nebula",
-    target: {
-      id: "NGC 7000",
-      name: "Orion Nebula",
-      catalogIds: ["M42"],
-      constellation: "Orion",
-      category: "nebula",
-      type: "messier",
-      commonNames: ["Great Nebula in Orion"],
-      coordinates: {
-        ra: "05h 35m 17.3s",
-        dec: "-05° 23' 28\""
-      }
-    },
-    createdAt: new Date("2023-06-15"),
-    updatedAt: new Date("2023-06-15"),
-    status: "completed",
-    steps: [
-      { id: "step-1-project-details", name: "Project Details", status: "completed" },
-      { id: "step-1-file-upload", name: "File Upload", status: "completed" },
-      { id: "step-1-calibration", name: "Calibration", status: "completed" },
-      { id: "step-1-registration", name: "Registration", status: "completed" },
-      { id: "step-1-stacking", name: "Stacking", status: "completed" },
-      { id: "step-1-post-processing", name: "Post-Processing", status: "completed" },
-      { id: "step-1-export", name: "Export & Share", status: "completed" }
-    ]
-  },
-  {
-    id: generateUUID(),
-    name: "Andromeda Galaxy",
-    target: {
-      id: "M31",
-      name: "Andromeda Galaxy",
-      catalogIds: ["M31", "NGC 224"],
-      constellation: "Andromeda",
-      category: "galaxy",
-      type: "messier",
-      commonNames: ["Great Andromeda Nebula"],
-      coordinates: {
-        ra: "00h 42m 44.3s",
-        dec: "+41° 16' 09\""
-      }
-    },
-    createdAt: new Date("2023-06-10"),
-    updatedAt: new Date("2023-06-10"),
-    status: "in_progress",
-    steps: [
-      { id: "step-2-project-details", name: "Project Details", status: "in_progress" },
-      { id: "step-2-file-upload", name: "File Upload", status: "pending" },
-      { id: "step-2-calibration", name: "Calibration", status: "pending" },
-      { id: "step-2-registration", name: "Registration", status: "pending" },
-      { id: "step-2-stacking", name: "Stacking", status: "pending" },
-      { id: "step-2-post-processing", name: "Post-Processing", status: "pending" },
-      { id: "step-2-export", name: "Export & Share", status: "pending" }
-    ]
-  },
-  {
-    id: "project-3",
-    name: "Horsehead Nebula",
-    target: {
-      id: "NGC 2024",
-      name: "Horsehead Nebula",
-      catalogIds: ["NGC 2024"],
-      constellation: "Orion",
-      category: "nebula",
-      type: "ic",
-      commonNames: ["Barnard 33"],
-      coordinates: {
-        ra: "05h 40m 59.0s",
-        dec: "-02° 27' 30.0\""
-      }
-    },
-    createdAt: new Date("2023-06-05"),
-    updatedAt: new Date("2023-06-05"),
-    status: "draft",
-    steps: [
-      { id: "step-3-project-details", name: "Project Details", status: "pending" },
-      { id: "step-3-file-upload", name: "File Upload", status: "pending" },
-      { id: "step-3-calibration", name: "Calibration", status: "pending" },
-      { id: "step-3-registration", name: "Registration", status: "pending" },
-      { id: "step-3-stacking", name: "Stacking", status: "pending" },
-      { id: "step-3-post-processing", name: "Post-Processing", status: "pending" },
-      { id: "step-3-export", name: "Export & Share", status: "pending" }
-    ]
-  },
-  {
-    id: "project-4",
-    name: "Eagle Nebula",
-    target: {
-      id: "M16",
-      name: "Eagle Nebula",
-      catalogIds: ["M16"],
-      constellation: "Orion",
-      category: "nebula",
-      type: "messier",
-      commonNames: ["Star Queen Nebula"],
-      coordinates: {
-        ra: "18h 18m 48.0s",
-        dec: "-13° 49' 00.0\""
-      }
-    },
-    createdAt: new Date("2023-06-01"),
-    updatedAt: new Date("2023-06-01"),
-    status: "draft",
-    steps: [
-      { id: "step-4-project-details", name: "Project Details", status: "pending" },
-      { id: "step-4-file-upload", name: "File Upload", status: "pending" },
-      { id: "step-4-calibration", name: "Calibration", status: "pending" },
-      { id: "step-4-registration", name: "Registration", status: "pending" },
-      { id: "step-4-stacking", name: "Stacking", status: "pending" },
-      { id: "step-4-post-processing", name: "Post-Processing", status: "pending" },
-      { id: "step-4-export", name: "Export & Share", status: "pending" }
-    ]
-  }
-];
+// const mockProjects: Project[] = [
+//   {
+//     id: generateUUID(),
+//     name: "Orion Nebula",
+//     target: {
+//       id: "NGC 7000",
+//       name: "Orion Nebula",
+//       catalogIds: ["M42"],
+//       constellation: "Orion",
+//       category: "nebula",
+//       type: "messier",
+//       commonNames: ["Great Nebula in Orion"],
+//       coordinates: {
+//         ra: "05h 35m 17.3s",
+//         dec: "-05° 23' 28\""
+//       }
+//     },
+//     createdAt: new Date("2023-06-15"),
+//     updatedAt: new Date("2023-06-15"),
+//     status: "completed",
+//     steps: [
+//       { id: "step-1-project-details", name: "Project Details", status: "completed" },
+//       { id: "step-1-file-upload", name: "File Upload", status: "completed" },
+//       { id: "step-1-calibration", name: "Calibration", status: "completed" },
+//       { id: "step-1-registration", name: "Registration", status: "completed" },
+//       { id: "step-1-stacking", name: "Stacking", status: "completed" },
+//       { id: "step-1-post-processing", name: "Post-Processing", status: "completed" },
+//       { id: "step-1-export", name: "Export & Share", status: "completed" }
+//     ]
+//   },
+//   {
+//     id: generateUUID(),
+//     name: "Andromeda Galaxy",
+//     target: {
+//       id: "M31",
+//       name: "Andromeda Galaxy",
+//       catalogIds: ["M31", "NGC 224"],
+//       constellation: "Andromeda",
+//       category: "galaxy",
+//       type: "messier",
+//       commonNames: ["Great Andromeda Nebula"],
+//       coordinates: {
+//         ra: "00h 42m 44.3s",
+//         dec: "+41° 16' 09\""
+//       }
+//     },
+//     createdAt: new Date("2023-06-10"),
+//     updatedAt: new Date("2023-06-10"),
+//     status: "in_progress",
+//     steps: [
+//       { id: "step-2-project-details", name: "Project Details", status: "in_progress" },
+//       { id: "step-2-file-upload", name: "File Upload", status: "pending" },
+//       { id: "step-2-calibration", name: "Calibration", status: "pending" },
+//       { id: "step-2-registration", name: "Registration", status: "pending" },
+//       { id: "step-2-stacking", name: "Stacking", status: "pending" },
+//       { id: "step-2-post-processing", name: "Post-Processing", status: "pending" },
+//       { id: "step-2-export", name: "Export & Share", status: "pending" }
+//     ]
+//   },
+//   {
+//     id: "project-3",
+//     name: "Horsehead Nebula",
+//     target: {
+//       id: "NGC 2024",
+//       name: "Horsehead Nebula",
+//       catalogIds: ["NGC 2024"],
+//       constellation: "Orion",
+//       category: "nebula",
+//       type: "ic",
+//       commonNames: ["Barnard 33"],
+//       coordinates: {
+//         ra: "05h 40m 59.0s",
+//         dec: "-02° 27' 30.0\""
+//       }
+//     },
+//     createdAt: new Date("2023-06-05"),
+//     updatedAt: new Date("2023-06-05"),
+//     status: "draft",
+//     steps: [
+//       { id: "step-3-project-details", name: "Project Details", status: "pending" },
+//       { id: "step-3-file-upload", name: "File Upload", status: "pending" },
+//       { id: "step-3-calibration", name: "Calibration", status: "pending" },
+//       { id: "step-3-registration", name: "Registration", status: "pending" },
+//       { id: "step-3-stacking", name: "Stacking", status: "pending" },
+//       { id: "step-3-post-processing", name: "Post-Processing", status: "pending" },
+//       { id: "step-3-export", name: "Export & Share", status: "pending" }
+//     ]
+//   },
+//   {
+//     id: "project-4",
+//     name: "Eagle Nebula",
+//     target: {
+//       id: "M16",
+//       name: "Eagle Nebula",
+//       catalogIds: ["M16"],
+//       constellation: "Orion",
+//       category: "nebula",
+//       type: "messier",
+//       commonNames: ["Star Queen Nebula"],
+//       coordinates: {
+//         ra: "18h 18m 48.0s",
+//         dec: "-13° 49' 00.0\""
+//       }
+//     },
+//     createdAt: new Date("2023-06-01"),
+//     updatedAt: new Date("2023-06-01"),
+//     status: "draft",
+//     steps: [
+//       { id: "step-4-project-details", name: "Project Details", status: "pending" },
+//       { id: "step-4-file-upload", name: "File Upload", status: "pending" },
+//       { id: "step-4-calibration", name: "Calibration", status: "pending" },
+//       { id: "step-4-registration", name: "Registration", status: "pending" },
+//       { id: "step-4-stacking", name: "Stacking", status: "pending" },
+//       { id: "step-4-post-processing", name: "Post-Processing", status: "pending" },
+//       { id: "step-4-export", name: "Export & Share", status: "pending" }
+//     ]
+//   }
+// ];
 
 // Update the workflow steps to be more focused
 const workflowSteps: WorkflowStep[] = [
@@ -510,8 +511,18 @@ const DashboardPage = () => {
   };
 
   const handleProjectClick = (project: Project) => {
+    // Find the last completed or in-progress step
+    let lastStepIndex = 0;
+    if (project.steps && project.steps.length > 0) {
+      for (let i = 0; i < project.steps.length; i++) {
+        if (project.steps[i].status === 'completed' || project.steps[i].status === 'in_progress') {
+          lastStepIndex = i;
+        }
+      }
+    }
     setActiveProject(project);
     setShowNewProject(false);
+    setCurrentStep(lastStepIndex);
   };
 
   const handleStepClick = (stepId: string) => {
@@ -523,49 +534,51 @@ const DashboardPage = () => {
 
   const renderProjectGrid = () => {
     return (
-      <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 ${showNewProject ? 'opacity-50' : ''}`}>
-        {projects.map((project) => (
-          <div 
-            key={project.id} 
-            className="bg-gray-800/50 rounded-lg overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300 cursor-pointer border border-gray-700 hover:border-blue-500 relative"
-            onClick={() => handleProjectClick(project)}
-          >
-            <div className="absolute top-2 right-2 z-10">
-              <button
-                onClick={e => { e.stopPropagation(); handleDeleteProject(project.id); }}
-                className="p-1 rounded-full bg-red-700 hover:bg-red-800 text-white shadow"
-                title="Delete Project"
-              >
-                <Trash2 size={16} />
-              </button>
-            </div>
-            <div className="relative h-40 bg-gray-900">
-              <div className="absolute inset-0 flex items-center justify-center">
-                <Image size={48} className="text-gray-600" />
-              </div>
-              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
-                <h3 className="text-lg font-semibold text-white">{project.name}</h3>
-                <p className="text-sm text-gray-400">Last updated: {project.updatedAt instanceof Date ? project.updatedAt.toLocaleDateString() : String(project.updatedAt)}</p>
-              </div>
-              {project.status === "completed" && (
-                <div className="absolute top-2 right-8">
-                  <CheckCircle size={20} className="text-green-500" />
-                </div>
-              )}
-            </div>
-            <div className="p-4">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-400 capitalize">{project.status}</span>
-                <div className="w-24 h-2 bg-gray-700 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-blue-500 rounded-full" 
-                    style={{ width: `${project.steps.filter(s => s.status === "completed").length / project.steps.length * 100}%` }}
-                  ></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        ))}
+      <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 ${showNewProject ? 'opacity-50' : ''}`}>
+        {projects.map((project) => {
+          // Smart thumbnail logic
+          const isCompleted = project.status === 'completed';
+          // No userImageUrl in Project type, so fallback to undefined
+          const userImageUrl = undefined;
+          const thumbnailUrl = !isCompleted && project.target && project.target.imageUrl
+            ? project.target.imageUrl
+            : 'https://placehold.co/400x200?text=No+Image';
+          // Equipment tags
+          const equipment = [];
+          if (project.telescope) equipment.push({ type: 'telescope' as const, name: project.telescope.name || project.telescope });
+          if (project.camera) equipment.push({ type: 'camera' as const, name: project.camera.name || project.camera });
+          if (project.filters && Array.isArray(project.filters)) {
+            project.filters.forEach(f => equipment.push({ type: 'filter' as const, name: f.name || f }));
+          }
+          // File/frame info (stubbed, replace with real data if available)
+          const frameCount = 0;
+          const fileSize = 'N/A';
+          // Status mapping
+          let status: 'new' | 'in_progress' | 'completed' = 'new';
+          if (project.status === 'completed') status = 'completed';
+          else if (project.status === 'in_progress') status = 'in_progress';
+          // Creation date
+          const creationDate = project.createdAt instanceof Date ? project.createdAt.toLocaleDateString() : String(project.createdAt);
+          return (
+            <ProjectCard
+              key={project.id}
+              id={project.id}
+              targetName={project.target?.name || project.name}
+              status={status}
+              thumbnailUrl={thumbnailUrl}
+              userImageUrl={userImageUrl}
+              creationDate={creationDate}
+              frameCount={frameCount}
+              fileSize={fileSize}
+              equipment={equipment}
+              onDelete={handleDeleteProject}
+              onExport={(id) => console.log('Export', id)}
+              onShare={(id) => console.log('Share', id)}
+              className="max-w-xl"
+              onClick={() => handleProjectClick(project)}
+            />
+          );
+        })}
       </div>
     );
   };
@@ -987,7 +1000,7 @@ const DashboardPage = () => {
 
   // Add this function to handle project deletion
   const handleDeleteProject = async (projectId: string) => {
-    if (!window.confirm('Are you sure you want to delete this project? This action cannot be undone.')) return;
+    // Removed browser confirm, rely on UI dialog only
     try {
       const supabase = getSupabaseClient();
       const { error } = await supabase
