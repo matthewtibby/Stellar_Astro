@@ -6,7 +6,7 @@ import { UserState } from '@/src/types/store';
 import { Camera, Check, X } from 'lucide-react';
 import Image from 'next/image';
 import { User } from '@supabase/supabase-js';
-import { getBrowserClient } from '@/src/lib/supabase';
+import { createBrowserClient, supabaseUrl, supabaseAnonKey } from '@/src/lib/supabase';
 import { uploadProfilePicture } from '@/src/utils/storage';
 import { sendNotification } from '@/src/utils/sendNotification';
 
@@ -66,7 +66,7 @@ export default function AccountTab({ user }: AccountTabProps) {
         }
       }
 
-      const supabase = getBrowserClient();
+      const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
       let avatarUrl = supabaseUser?.user_metadata?.avatar_url || '';
       // If avatar was changed, upload it
       if (avatarFile && supabaseUser?.id) {

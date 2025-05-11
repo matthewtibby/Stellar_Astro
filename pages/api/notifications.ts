@@ -1,8 +1,11 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getSupabaseAdminClient } from '@/src/lib/supabase';
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const supabase = getSupabaseAdminClient();
   const token = req.headers.authorization?.split('Bearer ')[1];
   let userId = null;
   if (token) {

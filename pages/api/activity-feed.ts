@@ -1,5 +1,9 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getSupabaseAdminClient } from '@/src/lib/supabase';
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
 
 function groupByDate(events: any[]) {
   const groups: Record<string, any[]> = {};
@@ -20,7 +24,6 @@ function groupByDate(events: any[]) {
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const supabase = getSupabaseAdminClient();
   // Get user from JWT in Authorization header (if present)
   const token = req.headers.authorization?.split('Bearer ')[1];
   let userId = null;

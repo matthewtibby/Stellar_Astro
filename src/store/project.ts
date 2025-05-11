@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Project, ProjectMetadata } from '@/types/store';
-import { getBrowserClient } from '@/src/lib/supabase';
+import { createBrowserClient, supabaseUrl, supabaseAnonKey } from '@/src/lib/supabase';
 import { PostgrestError } from '@supabase/supabase-js';
 
 interface ProjectStore {
@@ -36,7 +36,7 @@ export const useProjectStore = create<ProjectStore>()(
       createProject: async (projectData) => {
         set({ isLoading: true, error: null });
         try {
-          const { data: { user } } = await getBrowserClient().auth.getUser();
+          const { data: { user } } = await createBrowserClient(supabaseUrl, supabaseAnonKey).auth.getUser();
           
           if (!user) throw new Error('User not authenticated');
 
@@ -52,11 +52,7 @@ export const useProjectStore = create<ProjectStore>()(
           console.log('Supabase user object:', user);
           console.log('Inserting project:', newProject);
 
-          const supabase = getBrowserClient();
-          const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-          const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-          console.log('Supabase URL:', supabaseUrl);
-          console.log('Supabase Anon/Public Key:', supabaseKey);
+          const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
 
           const { data: project, error } = await supabase
             .from('projects')
@@ -93,7 +89,9 @@ export const useProjectStore = create<ProjectStore>()(
             updatedAt: new Date().toISOString(),
           };
 
-          const { data: project, error } = await getBrowserClient()
+          const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
+
+          const { data: project, error } = await supabase
             .from('projects')
             .update(updatedProject)
             .eq('id', projectId)
@@ -120,7 +118,9 @@ export const useProjectStore = create<ProjectStore>()(
       deleteProject: async (projectId) => {
         set({ isLoading: true, error: null });
         try {
-          const { error } = await getBrowserClient()
+          const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
+
+          const { error } = await supabase
             .from('projects')
             .delete()
             .eq('id', projectId);
@@ -142,7 +142,9 @@ export const useProjectStore = create<ProjectStore>()(
       loadProject: async (projectId) => {
         set({ isLoading: true, error: null });
         try {
-          const { data: project, error } = await getBrowserClient()
+          const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
+
+          const { data: project, error } = await supabase
             .from('projects')
             .select('*')
             .eq('id', projectId)

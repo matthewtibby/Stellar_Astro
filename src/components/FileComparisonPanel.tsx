@@ -1,8 +1,8 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { File, X, CheckCircle, AlertCircle, ChevronDown, ChevronRight } from 'lucide-react';
-import { getBrowserClient } from '@/src/lib/supabase';
 import { useToast } from '../hooks/useToast';
+import { createBrowserClient, supabaseUrl, supabaseAnonKey } from '@/src/lib/supabase';
 
 interface FileComparisonPanelProps {
   projectId: string;
@@ -37,6 +37,7 @@ export default function FileComparisonPanel({ projectId }: FileComparisonPanelPr
   const [isLoading, setIsLoading] = useState(false);
   const [expandedResults, setExpandedResults] = useState<Record<string, boolean>>({});
   const { addToast } = useToast();
+  const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
 
   useEffect(() => {
     loadFiles();
@@ -44,14 +45,13 @@ export default function FileComparisonPanel({ projectId }: FileComparisonPanelPr
 
   const loadFiles = async () => {
     try {
-      const supabase = getBrowserClient();
       const { data, error } = await supabase.from('project_files')
         .select('*')
         .eq('project_id', projectId);
 
       if (error) throw error;
 
-      const filesWithMetadata = data.map(file => ({
+      const filesWithMetadata = data.map((file: any) => ({
         ...file,
         metadata: file.metadata || {}
       }));
@@ -80,7 +80,6 @@ export default function FileComparisonPanel({ projectId }: FileComparisonPanelPr
 
     setIsLoading(true);
     try {
-      const supabase = getBrowserClient();
       const file1 = files.find(f => f.filename === selectedFiles[0]);
       const file2 = files.find(f => f.filename === selectedFiles[1]);
 

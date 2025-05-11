@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import SubscriptionSelection from '@/components/SubscriptionSelection';
-import { getBrowserClient } from '@/src/lib/supabase';
+import { createBrowserClient, supabaseUrl, supabaseAnonKey } from '@/src/lib/supabase';
 
 export default function PlanSelectionPage() {
   const router = useRouter();
@@ -18,7 +18,7 @@ export default function PlanSelectionPage() {
     } else {
       // Check if the user is confirmed
       (async () => {
-        const supabase = getBrowserClient();
+        const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
         const { data: { user } } = await supabase.auth.getUser();
         if (user && !user.email_confirmed_at) {
           router.push('/signup/verify-email');
