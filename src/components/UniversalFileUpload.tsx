@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { validateFITSFile, validateFileBatch } from '@/src/utils/fileValidation';
-import { uploadRawFrame, type StorageFile, getFitsFileUrl, getFilesByType } from '@/src/utils/storage';
+import { uploadRawFrame, type StorageFile, getFitsFileUrl, getFilesByType, deleteFitsFile } from '@/src/utils/storage';
 import { File, AlertCircle, Info, Upload, X, Trash2, Eye, ChevronDown, ChevronUp } from 'lucide-react';
 import { type FileType } from '@/src/types/store';
 import { spaceFacts } from '@/src/utils/spaceFacts';
@@ -61,6 +61,7 @@ export function UniversalFileUpload({
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [expandedFiles, setExpandedFiles] = useState<Record<string, boolean>>({});
+  const [deleteBanner, setDeleteBanner] = useState<{ type: 'success' | 'error', message: string } | null>(null);
 
   // Function to save files to localStorage
   const saveFilesToLocalStorage = useCallback((files: Record<FileType, StorageFileWithMetadata[]>) => {
@@ -86,47 +87,41 @@ export function UniversalFileUpload({
     return null;
   }, [projectId]);
 
-  // Load files on component mount
-  useEffect(() => {
-    const loadFiles = async () => {
-      try {
-        // First try to load from localStorage
-        const savedFiles = loadFilesFromLocalStorage();
-        // Then fetch from server to ensure we have the latest state
-        if (!userId) return;
-        const serverFiles = await getFilesByType(projectId, userId);
+  const loadFiles = useCallback(async () => {
+    try {
+      // First try to load from localStorage
+      const savedFiles = loadFilesFromLocalStorage();
+      // Then fetch from server to ensure we have the latest state
+      if (!userId) return;
+      const serverFiles = await getFilesByType(projectId, userId);
 
-        // Robust merge: ensure all FileType keys are present and use server if available, else local, else []
-        const allTypes: FileType[] = [
-          'light', 'dark', 'bias', 'flat',
-          'master-dark', 'master-bias', 'master-flat',
-          'calibrated', 'stacked', 'aligned', 'pre-processed', 'post-processed'
-        ];
-        const mergedFiles: Record<FileType, StorageFileWithMetadata[]> = {} as any;
-        for (const type of allTypes) {
-          if (serverFiles && serverFiles[type]?.length) {
-            mergedFiles[type] = serverFiles[type];
-          } else if (savedFiles && savedFiles[type]?.length) {
-            mergedFiles[type] = savedFiles[type];
-          } else {
-            mergedFiles[type] = [];
-          }
+      // Robust merge: ensure all FileType keys are present and use server if available, else local, else []
+      const allTypes: FileType[] = [
+        'light', 'dark', 'bias', 'flat',
+        'master-dark', 'master-bias', 'master-flat',
+        'calibrated', 'stacked', 'aligned', 'pre-processed', 'post-processed'
+      ];
+      const mergedFiles: Record<FileType, StorageFileWithMetadata[]> = {} as any;
+      for (const type of allTypes) {
+        if (serverFiles && serverFiles[type]?.length) {
+          mergedFiles[type] = serverFiles[type];
+        } else if (savedFiles && savedFiles[type]?.length) {
+          mergedFiles[type] = savedFiles[type];
+        } else {
+          mergedFiles[type] = [];
         }
-        setFilesByType(mergedFiles);
-        saveFilesToLocalStorage(mergedFiles);
-      } catch (error) {
-        console.error('Error loading files:', error);
-        onValidationError?.(error instanceof Error ? error.message : 'Failed to load files');
       }
-    };
-
-    loadFiles();
+      setFilesByType(mergedFiles);
+      saveFilesToLocalStorage(mergedFiles);
+    } catch (error) {
+      console.error('Error loading files:', error);
+      onValidationError?.(error instanceof Error ? error.message : 'Failed to load files');
+    }
   }, [projectId, userId, onValidationError, loadFilesFromLocalStorage, saveFilesToLocalStorage]);
 
-  // Save files whenever they change
   useEffect(() => {
-    saveFilesToLocalStorage(filesByType);
-  }, [filesByType, saveFilesToLocalStorage]);
+    loadFiles();
+  }, [loadFiles]);
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     console.log('onDrop called, acceptedFiles:', acceptedFiles, 'userId:', userId, 'projectId:', projectId);
@@ -210,6 +205,25 @@ export function UniversalFileUpload({
         if (fileType !== activeTab) {
           setActiveTab(fileType);
         }
+
+        // --- NEW LOGIC: Only for new projects with valid metadata ---
+        try {
+          const supabase = getSupabaseClient();
+          const { data: projectData, error: projectError } = await supabase
+            .from('projects')
+            .select('status')
+            .eq('id', projectId)
+            .single();
+          if (!projectError && projectData && (projectData.status === 'new' || projectData.status === 'draft')) {
+            // Check for valid target/object in metadata
+            if ((validationResult.metadata as any)?.object) {
+              if (onUploadComplete) onUploadComplete();
+            }
+          }
+        } catch (e) {
+          // Silent fail
+        }
+        // --- END NEW LOGIC ---
       }
 
       setIsUploading(false);
@@ -304,8 +318,15 @@ export function UniversalFileUpload({
     }
   }
 
-  function handleDelete(file: StorageFile) {
-    // TODO: Implement actual delete logic
+  async function handleDelete(file: StorageFile) {
+    try {
+      await deleteFitsFile(file.path);
+      setDeleteBanner({ type: 'success', message: `Deleted ${file.name} successfully!` });
+      // Refresh file list
+      await loadFiles();
+    } catch (error) {
+      setDeleteBanner({ type: 'error', message: `Failed to delete ${file.name}: ${error instanceof Error ? error.message : 'Unknown error'}` });
+    }
   }
 
   function toggleFileExpansion(fileName: string) {
@@ -352,6 +373,13 @@ export function UniversalFileUpload({
       // Silent fail
     }
   }
+
+  useEffect(() => {
+    if (deleteBanner) {
+      const timer = setTimeout(() => setDeleteBanner(null), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [deleteBanner]);
 
   return (
     <div className="space-y-4">
@@ -554,6 +582,23 @@ export function UniversalFileUpload({
                 Close
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {deleteBanner && (
+        <div className={`fixed top-6 right-6 z-50 p-4 rounded-md shadow-lg transition-all ${deleteBanner.type === 'success' ? 'bg-green-900/90 text-green-200' : 'bg-red-900/90 text-red-200'}`}
+          style={{ minWidth: 280, maxWidth: 400 }}
+          role="alert"
+        >
+          <div className="flex items-center justify-between">
+            <span>{deleteBanner.message}</span>
+            <button
+              className="ml-4 px-2 py-1 bg-gray-700 text-white rounded hover:bg-gray-600"
+              onClick={() => setDeleteBanner(null)}
+            >
+              Dismiss
+            </button>
           </div>
         </div>
       )}

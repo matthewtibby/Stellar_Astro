@@ -58,6 +58,8 @@ echo "Starting Python worker server..."
 cd python-worker
 source venv/bin/activate
 export PYTHONPATH=$PYTHONPATH:$(pwd)
+export SUPABASE_URL="https://wxannuklwbocdheqhmbx.supabase.co"
+export SUPABASE_SERVICE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind4YW5udWtsd2JvY2RoZXFobWJ4Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NTAxMTY5NiwiZXhwIjoyMDYwNTg3Njk2fQ.EKkWWKvibhQnLxtKLeCqyYj42htf-zItO0nYMlXmxzA"
 
 # Start uvicorn and wait for it to be ready
 uvicorn app.main:app --reload --port 8000 --host 0.0.0.0 &

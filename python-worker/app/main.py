@@ -22,6 +22,7 @@ import random
 import string
 from .fits_analysis import analyze_fits_headers
 import logging
+from .enrich_targets_with_aliases import enrich_targets
 
 logger = logging.getLogger(__name__)
 
@@ -317,6 +318,14 @@ async def get_fits_metadata(file_path):
 
 # Example usage after validation:
 # await save_fits_metadata(file_path, project_id, user_id, metadata)
+
+@app.post("/enrich-targets")
+def enrich_targets_endpoint():
+    try:
+        enrich_targets()
+        return {"status": "success"}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
 
 if __name__ == "__main__":
     # Force port 8000 and prevent port changes

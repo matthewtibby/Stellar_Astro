@@ -51,6 +51,7 @@ import WelcomeDashboard from '@/src/components/WelcomeDashboard';
 import AuthSync from '@/components/AuthSync';
 import ProjectCard from '../../components/ui/ProjectCard';
 import { getFilesByType, getProjectTargetNameFromFiles } from '@/src/utils/storage';
+import { getEsaSkyImageUrl } from '@/src/utils/nasa';
 
 // Add these interfaces before the mockProjects array
 interface WorkflowStep {
@@ -379,6 +380,7 @@ const DashboardPage = () => {
   const [frameCounts, setFrameCounts] = useState<Record<string, number>>({});
   const [frameSizes, setFrameSizes] = useState<Record<string, number>>({});
   const [frameTargetNames, setFrameTargetNames] = useState<Record<string, string>>({});
+  const [projectThumbnails, setProjectThumbnails] = useState<Record<string, string>>({});
 
   // Debug logging
   console.log('Zustand user:', user);
@@ -451,6 +453,22 @@ const DashboardPage = () => {
     if (projects.length > 0 && user && user.id) fetchAllFrameCountsAndSizes();
   }, [projects, user && user.id]);
 
+  useEffect(() => {
+    async function fetchThumbnails() {
+      const newThumbnails: Record<string, string> = {};
+      await Promise.all(projects.map(async (project) => {
+        if (project.status === 'completed') return;
+        const target = project.target || {};
+        console.log('Fetching NASA image for target:', target); // DEBUG
+        const url = await getEsaSkyImageUrl(target);
+        console.log('NASA image URL for', target, ':', url); // DEBUG
+        newThumbnails[project.id] = url;
+      }));
+      setProjectThumbnails((prev) => ({ ...prev, ...newThumbnails }));
+    }
+    if (projects.length > 0) fetchThumbnails();
+  }, [projects]);
+
   if (!isAuthenticated) {
     return null; // Don't render anything while redirecting
   }
@@ -503,7 +521,17 @@ const DashboardPage = () => {
           user_id: user.id,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-          is_public: false
+          is_public: false,
+          target: selectedTarget || {
+            id: '',
+            name: '',
+            catalogIds: [],
+            constellation: '',
+            category: 'other',
+            type: 'other',
+            commonNames: [],
+            coordinates: { ra: '', dec: '' }
+          }
         }])
         .select()
         .single();
@@ -588,15 +616,17 @@ const DashboardPage = () => {
 
   const renderProjectGrid = () => {
     return (
-      <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 ${showNewProject ? 'opacity-50' : ''}`}>
+      <div className={`grid grid-cols-1 sm:grid-cols-2 gap-8 ${showNewProject ? 'opacity-50' : ''}`}>
         {projects.map((project) => {
-          // Smart thumbnail logic
           const isCompleted = project.status === 'completed';
-          // No userImageUrl in Project type, so fallback to undefined
+          // TODO: Replace with real completed image URL if available
           const userImageUrl = undefined;
-          const thumbnailUrl = !isCompleted && project.target && project.target.imageUrl
-            ? project.target.imageUrl
-            : 'https://placehold.co/400x200?text=No+Image';
+          let thumbnailUrl = 'https://placehold.co/400x200?text=Loading...';
+          if (isCompleted && userImageUrl) {
+            thumbnailUrl = userImageUrl;
+          } else if (projectThumbnails[project.id]) {
+            thumbnailUrl = projectThumbnails[project.id];
+          }
           // Equipment tags
           const equipment = [];
           if (project.telescope) equipment.push({ type: 'telescope' as const, name: project.telescope.name || project.telescope });
@@ -632,6 +662,21 @@ const DashboardPage = () => {
               onShare={(id) => console.log('Share', id)}
               className="max-w-xl"
               onClick={() => handleProjectClick(project)}
+              onProjectNameUpdate={async (id, newName) => {
+                try {
+                  const supabase = getSupabaseClient();
+                  const { error } = await supabase
+                    .from('projects')
+                    .update({ title: newName, updated_at: new Date().toISOString() })
+                    .eq('id', id);
+                  if (error) throw error;
+                  await fetchProjects();
+                } catch (err) {
+                  // Optionally show error to user
+                  console.error('Failed to update project name:', err);
+                }
+              }}
+              target={project.target}
             />
           );
         })}
@@ -755,7 +800,17 @@ const DashboardPage = () => {
             user_id: user.id,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
-            is_public: false
+            is_public: false,
+            target: selectedTarget || {
+              id: '',
+              name: '',
+              catalogIds: [],
+              constellation: '',
+              category: 'other',
+              type: 'other',
+              commonNames: [],
+              coordinates: { ra: '', dec: '' }
+            }
           }])
           .select()
           .single();
@@ -766,6 +821,8 @@ const DashboardPage = () => {
         if (!project) {
           throw new Error('No project data returned after creation');
         }
+        // Trigger enrichment after project creation
+        fetch('http://localhost:8000/enrich-targets', { method: 'POST' });
         // Re-fetch projects after creation
         await fetchProjects();
         setActiveProject({
