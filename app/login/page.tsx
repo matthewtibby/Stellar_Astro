@@ -24,11 +24,13 @@ export default function LoginPage() {
         email,
         password,
       });
+      console.log('Login result:', { data, error });
 
       if (error) throw error;
 
       if (data?.user) {
         useUserStore.getState().setUser(data.user);
+        console.log('User in Zustand after login:', useUserStore.getState());
         router.push('/dashboard');
       }
     } catch (err) {

@@ -1,3 +1,4 @@
+'use client';
 import React, { useState, useEffect } from 'react';
 import { getSupabaseClient } from '@/src/lib/supabase';
 import { SessionTemplate } from '@/types/session';
@@ -5,19 +6,33 @@ import { setProjectName, setProjectDescription, setSelectedTarget, setSelectedTe
 import { useProjects } from '@/src/hooks/useProjects';
 import { Tooltip } from 'react-tooltip';
 import { AlertCircle, Plus, ChevronRight, File, Folder, Trash2 } from 'lucide-react';
-import { useUserStore } from '../store/userStore';
+import { useUserStore } from '@/src/store/user';
 import Link from 'next/link';
 import { handleError, ValidationError } from '@/src/utils/errorHandling';
 import { useToast } from '../hooks/useToast';
+import Skeleton from './ui/Skeleton';
 
-const DashboardPage = () => {
-  const { user, isAuthenticated } = useUserStore();
-  const { projects, fetchProjects } = useProjects();
+// Accept projects and user as props
+interface DashboardPageProps {
+  projects: any[];
+  user: any;
+}
+
+const DashboardPage: React.FC<DashboardPageProps> = ({ projects: ssrProjects, user: ssrUser }) => {
+  // Hydrate Zustand or local state with SSR data
+  const { setUser } = useUserStore();
+  const { setProjects, projects, fetchProjects, isLoading } = useProjects();
   const [sessionTemplates, setSessionTemplates] = useState<SessionTemplate[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [sortBy, setSortBy] = useState('created_at');
   const [sortOrder, setSortOrder] = useState('desc');
+
+  useEffect(() => {
+    if (ssrUser) setUser(ssrUser);
+    if (ssrProjects) setProjects(ssrProjects);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ssrUser, ssrProjects]);
 
   useEffect(() => {
     const fetchSessionTemplates = async () => {
@@ -35,6 +50,11 @@ const DashboardPage = () => {
     };
 
     fetchSessionTemplates();
+  }, []);
+
+  useEffect(() => {
+    console.log('Dashboard mount: Zustand user:', useUserStore.getState());
+    console.log('Dashboard mount: ssrUser prop:', ssrUser);
   }, []);
 
   const applySessionTemplate = (template: SessionTemplate) => {
@@ -183,6 +203,22 @@ const DashboardPage = () => {
     </div>
   );
 
+  // Skeleton loader for project cards
+  const renderProjectSkeletons = () => (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div key={i} className="max-w-xl w-full">
+          <Skeleton height={300} borderRadius={24} className="w-full mb-4" />
+          <div className="flex flex-col space-y-2 px-2">
+            <Skeleton height={24} width={180} borderRadius={8} />
+            <Skeleton height={16} width={120} borderRadius={8} />
+            <Skeleton height={16} width={80} borderRadius={8} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-black to-gray-900 py-24">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -228,7 +264,10 @@ const DashboardPage = () => {
           </select>
         </div>
 
+        {/* Skeleton loader or real project grid/list */}
         <div className="space-y-6">
+          {isLoading ? renderProjectSkeletons() : null}
+          {/* TODO: Insert real project grid/list here when not loading */}
           {renderSessionTemplates()}
           {renderNewProjectForm()}
           {renderFileUpload()}

@@ -123,5 +123,5 @@ export function useProjects(userId?: string, isAuthenticated?: boolean) {
     }
   }, [isAuthenticated, userId, fetchProjects]);
 
-  return { projects, isLoading, error, fetchProjects };
+  return { projects, isLoading, error, fetchProjects, setProjects };
 } 

@@ -8,6 +8,7 @@ import { useUserStore } from "@/src/store/user";
 export default function Header() {
   const router = useRouter();
   const { user, isAuthenticated, isLoading, fullName, logout } = useUserStore();
+  console.log('Header Zustand user:', useUserStore.getState());
 
   const handleLogout = () => {
     logout();
