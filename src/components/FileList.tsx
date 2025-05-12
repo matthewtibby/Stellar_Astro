@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { getFilesByType, type StorageFile } from '@/src/utils/storage';
 import { File, Trash2, Download, Eye } from 'lucide-react';
 import { type FileType } from '@/src/types/store';
+import { createBrowserClient } from '@supabase/ssr';
 
 interface FileListProps {
   projectId: string;
@@ -15,12 +16,30 @@ export function FileList({ projectId, fileType, onFileSelect }: FileListProps) {
   const [files, setFiles] = useState<StorageFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+
+  useEffect(() => {
+    const getUser = async () => {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      if (error || !user) {
+        setError('User not authenticated');
+        return;
+      }
+      setUserId(user.id);
+    };
+    getUser();
+  }, [supabase]);
 
   useEffect(() => {
     const loadFiles = async () => {
+      if (!userId) return;
       try {
         setLoading(true);
-        const filesByType = await getFilesByType(projectId);
+        const filesByType = await getFilesByType(projectId, userId);
         setFiles(filesByType[fileType] || []);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load files');
@@ -28,9 +47,8 @@ export function FileList({ projectId, fileType, onFileSelect }: FileListProps) {
         setLoading(false);
       }
     };
-
     loadFiles();
-  }, [projectId, fileType]);
+  }, [projectId, fileType, userId]);
 
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 Bytes';
@@ -101,7 +119,12 @@ export function FileList({ projectId, fileType, onFileSelect }: FileListProps) {
                   <Eye className="h-5 w-5" />
                 </button>
                 <button
-                  onClick={() => {/* TODO: Implement delete */}}
+                  data-testid="delete-btn-filelist"
+                  onClick={() => {
+                    console.log('Delete button clicked for', file);
+                    alert('Delete clicked for ' + file.name);
+                    // TODO: Connect to actual delete logic
+                  }}
                   className="p-2 text-gray-400 hover:text-red-500 transition-colors"
                   title="Delete file"
                 >

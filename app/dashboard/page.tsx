@@ -50,6 +50,7 @@ import { Project, ChecklistItem } from '@/src/types/project';
 import WelcomeDashboard from '@/src/components/WelcomeDashboard';
 import AuthSync from '@/components/AuthSync';
 import ProjectCard from '../../components/ui/ProjectCard';
+import { getFilesByType, getProjectTargetNameFromFiles } from '@/src/utils/storage';
 
 // Add these interfaces before the mockProjects array
 interface WorkflowStep {
@@ -285,7 +286,7 @@ const mockUserSubscription: UserSubscription = {
   projectLimit: 5
 };
 
-const FileUploadSection = ({ projectId }: { projectId: string }) => {
+const FileUploadSection = ({ projectId, onUploadComplete }: { projectId: string, onUploadComplete: () => void }) => {
   const { user, isAuthenticated } = useUserStore();
   const [validationError, setValidationError] = useState<string | null>(null);
   const userId = user?.id;
@@ -333,6 +334,7 @@ const FileUploadSection = ({ projectId }: { projectId: string }) => {
         projectId={projectId}
         userId={userId}
         onValidationError={handleValidationError}
+        onUploadComplete={onUploadComplete}
       />
     </div>
   );
@@ -374,6 +376,9 @@ const DashboardPage = () => {
   const fileListRef = useRef<{ refresh: () => void }>(null);
   const [projectNameEdit, setProjectNameEdit] = useState('');
   const [isSavingProjectName, setIsSavingProjectName] = useState(false);
+  const [frameCounts, setFrameCounts] = useState<Record<string, number>>({});
+  const [frameSizes, setFrameSizes] = useState<Record<string, number>>({});
+  const [frameTargetNames, setFrameTargetNames] = useState<Record<string, string>>({});
 
   // Debug logging
   console.log('Zustand user:', user);
@@ -404,6 +409,47 @@ const DashboardPage = () => {
       router.push('/login');
     }
   }, [isAuthenticated, router]);
+
+  useEffect(() => {
+    async function fetchAllFrameCountsAndSizes() {
+      const counts: Record<string, number> = {};
+      const sizes: Record<string, number> = {};
+      const targetNames: Record<string, string> = {};
+      for (const project of projects) {
+        try {
+          if (!user || !user.id) {
+            console.warn('[DEBUG] Skipping project', project.id, 'because user or user.id is missing');
+            continue;
+          }
+          const filesByType = await getFilesByType(project.id, user.id);
+          console.log('[DEBUG] filesByType for project', project.id, filesByType);
+          counts[project.id] = Object.values(filesByType).reduce((sum, arr) => sum + arr.length, 0);
+          sizes[project.id] = Object.values(filesByType).flat().reduce((sum, file) => sum + (file.size || 0), 0);
+          // Find first file with metadata.object (prefer light frames)
+          let targetName = '';
+          const lightFiles = filesByType['light'] || [];
+          const allFiles = Object.values(filesByType).flat();
+          const fileWithObject = [...lightFiles, ...allFiles].find(f => f.metadata && f.metadata.object);
+          if (fileWithObject && fileWithObject.metadata.object) {
+            targetName = String(fileWithObject.metadata.object);
+          }
+          targetNames[project.id] = targetName;
+        } catch (err) {
+          console.error('[DEBUG] Error in fetchAllFrameCountsAndSizes for project', project.id, err);
+          counts[project.id] = 0;
+          sizes[project.id] = 0;
+          targetNames[project.id] = '';
+        }
+      }
+      console.log('[DEBUG] Final frameCounts:', counts);
+      console.log('[DEBUG] Final frameSizes:', sizes);
+      console.log('[DEBUG] Final frameTargetNames:', targetNames);
+      setFrameCounts(counts);
+      setFrameSizes(sizes);
+      setFrameTargetNames(targetNames);
+    }
+    if (projects.length > 0 && user && user.id) fetchAllFrameCountsAndSizes();
+  }, [projects, user && user.id]);
 
   if (!isAuthenticated) {
     return null; // Don't render anything while redirecting
@@ -532,6 +578,14 @@ const DashboardPage = () => {
     }
   };
 
+  function formatFileSize(bytes: number): string {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  }
+
   const renderProjectGrid = () => {
     return (
       <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 ${showNewProject ? 'opacity-50' : ''}`}>
@@ -551,8 +605,10 @@ const DashboardPage = () => {
             project.filters.forEach(f => equipment.push({ type: 'filter' as const, name: f.name || f }));
           }
           // File/frame info (stubbed, replace with real data if available)
-          const frameCount = 0;
-          const fileSize = 'N/A';
+          const frameCount = frameCounts[project.id] ?? 0;
+          const fileSize = formatFileSize(frameSizes[project.id] ?? 0);
+          // Use FITS metadata object as target name if available
+          const targetName = frameTargetNames[project.id] || project.target?.name || project.name || project.title || 'Untitled Project';
           // Status mapping
           let status: 'new' | 'in_progress' | 'completed' = 'new';
           if (project.status === 'completed') status = 'completed';
@@ -563,7 +619,7 @@ const DashboardPage = () => {
             <ProjectCard
               key={project.id}
               id={project.id}
-              targetName={project.target?.name || project.name}
+              targetName={targetName}
               status={status}
               thumbnailUrl={thumbnailUrl}
               userImageUrl={userImageUrl}
@@ -894,7 +950,7 @@ const DashboardPage = () => {
                 Supported formats: .fits, .fit, .FIT, .FITS, .RAW
               </p>
               {/* Only render FileUploadSection here, not UniversalFileUpload directly */}
-              <FileUploadSection projectId={projectId} />
+              <FileUploadSection projectId={projectId} onUploadComplete={fetchProjects} />
             </div>
             {renderStepNavigation()}
           </div>
@@ -904,7 +960,7 @@ const DashboardPage = () => {
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-4">
-                <FileUploadSection projectId={projectId} />
+                <FileUploadSection projectId={projectId} onUploadComplete={fetchProjects} />
                 <FileComparisonPanel projectId={projectId} />
               </div>
               <div className="space-y-4">

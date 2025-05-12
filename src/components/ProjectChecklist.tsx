@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { CheckCircle, Circle, AlertCircle, ChevronDown, ChevronRight } from 'lucide-react';
 import { useProjectStore } from '@/src/store/project';
 import { useToast } from '../hooks/useToast';
+import { getSupabaseClient } from '@/src/lib/supabase';
 
 interface ProjectChecklistProps {
   projectId: string;
@@ -155,6 +156,11 @@ export default function ProjectChecklist({ projectId }: ProjectChecklistProps) {
 
       await updateProject(projectId, { steps });
       addToast('success', 'Checklist updated');
+
+      // If all steps are completed, mark project as completed
+      if (steps.length > 0 && steps.every(s => s.status === 'completed')) {
+        await markProjectCompleted(projectId);
+      }
     } catch (error) {
       console.error('Error updating checklist:', error);
       addToast('error', 'Failed to update checklist');
@@ -240,4 +246,17 @@ export default function ProjectChecklist({ projectId }: ProjectChecklistProps) {
       </div>
     </div>
   );
+}
+
+// Helper to mark project as completed
+async function markProjectCompleted(projectId: string) {
+  try {
+    const supabase = getSupabaseClient();
+    await supabase
+      .from('projects')
+      .update({ status: 'completed' })
+      .eq('id', projectId);
+  } catch (e) {
+    // Silent fail
+  }
 } 

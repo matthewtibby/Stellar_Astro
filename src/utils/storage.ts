@@ -471,13 +471,35 @@ export const downloadFile = async (bucket: string, filePath: string): Promise<Bl
 // Generic delete function
 export async function deleteFitsFile(filePath: string): Promise<void> {
   const client = checkSupabase();
-  const { error } = await client.storage
+  let storageError = null;
+  let metadataError = null;
+
+  // Delete from Storage first
+  const { error: storageDelError } = await client.storage
     .from(STORAGE_BUCKETS.RAW_FRAMES)
     .remove([filePath]);
+  if (storageDelError) {
+    console.error('Error deleting file from storage:', storageDelError);
+    storageError = storageDelError;
+  }
 
-  if (error) {
-    console.error('Error deleting file:', error);
-    throw new Error(`Failed to delete file: ${error.message}`);
+  // Delete from project_files table
+  const { error: metadataDelError } = await client
+    .from('project_files')
+    .delete()
+    .eq('file_path', filePath);
+  if (metadataDelError) {
+    console.error('Error deleting file metadata:', metadataDelError);
+    metadataError = metadataDelError;
+  }
+
+  // Handle errors
+  if (storageError && metadataError) {
+    throw new Error(`Failed to delete file from both storage and metadata: ${storageError.message}; ${metadataError.message}`);
+  } else if (storageError) {
+    throw new Error(`File deleted from metadata, but failed to delete from storage: ${storageError.message}`);
+  } else if (metadataError) {
+    throw new Error(`File deleted from storage, but failed to delete from metadata: ${metadataError.message}`);
   }
 }
 
@@ -571,69 +593,73 @@ export interface StorageFile {
   metadata?: any;
 }
 
-export async function getFilesByType(projectId: string): Promise<Record<FileType, StorageFile[]>> {
+export async function getFilesByType(projectId: string, userId: string): Promise<Record<FileType, StorageFile[]>> {
+  console.log('[DEBUG] getFilesByType called with', { projectId, userId });
   try {
-    console.log('[getFilesByType] Starting for project:', projectId);
     const client = checkSupabase();
     const { data: { user }, error: authError } = await client.auth.getUser();
     if (authError || !user) {
       throw new Error('User must be authenticated to fetch files');
     }
-
     const userId = user.id;
-    console.log('[getFilesByType] User authenticated:', userId);
 
-    // List all files in the raw-frames bucket
-    const { data: files, error } = await client.storage
-      .from(STORAGE_BUCKETS.RAW_FRAMES)
-      .list(`${userId}/${projectId}`);
-
+    // Fetch files from project_files table, including metadata
+    const { data: files, error } = await client
+      .from('project_files')
+      .select('id, filename, file_path, file_size, created_at, file_type, metadata')
+      .eq('project_id', projectId)
+      .eq('user_id', userId);
+    console.log('[DEBUG] Supabase query error:', error, 'files:', files);
     if (error) {
-      console.error('[getFilesByType] Error listing files:', error);
-      throw error;
+      throw new Error('Failed to fetch files from project_files: ' + error.message);
     }
-
-    console.log('[getFilesByType] Raw files from storage:', files);
-
-    // Initialize the result object with empty arrays for each type
-    const result: Record<FileType, StorageFile[]> = {
-      'light': [],
-      'dark': [],
-      'bias': [],
-      'flat': [],
-      'master-dark': [],
-      'master-bias': [],
-      'master-flat': [],
-      'calibrated': [],
-      'stacked': [],
-      'aligned': [],
-      'pre-processed': [],
-      'post-processed': []
-    };
-
-    // Process each file and sort by type
-    for (const file of files) {
-      const pathParts = file.name.split('/');
-      if (pathParts.length >= 3) {
-        const type = pathParts[2] as FileType;
-        if (type in result) {
-          const fullPath = `${userId}/${projectId}/${file.name}`;
-          result[type].push({
-            name: pathParts[3],
-            path: fullPath,
-            size: file.metadata?.size || 0,
-            created_at: file.created_at,
-            type: type,
-            metadata: file.metadata
-          });
-        }
+// Debug: query all files in project_files
+const { data: allFiles, error: allFilesError } = await client
+  .from('project_files')
+  .select('*');
+console.log('[DEBUG] Supabase query all files error:', allFilesError, 'files:', allFiles);
+    // Group files by type
+    const allTypes: FileType[] = [
+      'light', 'dark', 'bias', 'flat',
+      'master-dark', 'master-bias', 'master-flat',
+      'calibrated', 'stacked', 'aligned', 'pre-processed', 'post-processed'
+    ];
+    const result: Record<FileType, StorageFile[]> = {} as any;
+    for (const type of allTypes) {
+      result[type] = [];
+    }
+    for (const file of files || []) {
+      const fileType = file.file_type as FileType;
+      console.log('[DEBUG] file:', file, 'fileType:', fileType, 'allTypes.includes:', allTypes.includes(fileType));
+      if (allTypes.includes(fileType)) {
+        result[fileType].push({
+          name: file.filename,
+          path: file.file_path,
+          size: file.file_size,
+          created_at: file.created_at,
+          type: fileType,
+          metadata: file.metadata
+        });
       }
     }
-
-    console.log('[getFilesByType] Final sorted files:', result);
     return result;
   } catch (error) {
     console.error('[getFilesByType] Error:', error);
     throw error;
   }
+}
+
+export async function getProjectTargetNameFromFiles(projectId: string, userId: string): Promise<string | null> {
+  const client = checkSupabase();
+  const { data: files, error } = await client
+    .from('project_files')
+    .select('metadata, type')
+    .eq('project_id', projectId)
+    .eq('user_id', userId);
+  if (error) return null;
+  // Prefer light frames, then any frame
+  const light = (files || []).find(f => f.type === 'light' && f.metadata?.object);
+  if (light) return light.metadata.object;
+  const any = (files || []).find(f => f.metadata?.object);
+  return any ? any.metadata.object : null;
 }

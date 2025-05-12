@@ -109,157 +109,157 @@ function ProjectCard({
   };
 
   return (
-    <Card className={`w-full max-w-md transition-all duration-300 hover:shadow-lg ${className || ''}`} onClick={onClick} style={{ cursor: onClick ? 'pointer' : undefined }}>
-      <CardHeader className="space-y-1 relative">
-        <div className="absolute top-4 right-4 flex gap-2">
-          <Dialog>
-            <DialogTrigger asChild onClick={e => e.stopPropagation()}>
-              <Button size="icon" variant="outline" className="h-8 w-8" onClick={e => e.stopPropagation()}>
-                <Info className="h-4 w-4" />
-              </Button>
-            </DialogTrigger>
-            <DialogContent onClick={e => e.stopPropagation()}>
-              <DialogHeader>
-                <DialogTitle>Project Details</DialogTitle>
-                <DialogDescription>
-                  Information about your astrophotography project.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="flex items-center gap-2">
-                    <Calendar className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm">Created: {creationDate}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <FileText className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm">Size: {fileSize}</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium">Frames: {frameCount}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium">Status: {getStatusLabel()}</span>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
-          
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild onClick={e => e.stopPropagation()}>
-                <Button 
-                  size="icon" 
-                  variant="outline" 
-                  className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                  onClick={e => { e.stopPropagation(); setShowDeleteConfirm(true); }}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Delete project</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </div>
-        
-        <Badge
-          variant="secondary"
-          className={getStatusBadgeVariant()}
-        >
-          {getStatusLabel()}
-        </Badge>
-        <h3 className="text-2xl font-semibold">{targetName}</h3>
-      </CardHeader>
-
-      <CardContent>
-        <div className="space-y-4">
-          <div className="relative aspect-video rounded-md overflow-hidden bg-muted">
+    <div className={`transition-all duration-300 ${className || ''}`} style={{ cursor: onClick ? 'pointer' : undefined }} onClick={onClick}>
+      <motion.div whileHover={{ scale: 1.03, boxShadow: '0 8px 32px 0 rgba(0,0,0,0.45)' }}>
+        <Card className="w-full max-w-md bg-gray-900/80 border border-gray-800 rounded-2xl overflow-hidden shadow-lg">
+          <div className="relative aspect-video group">
+            {/* Image with dark gradient overlay */}
             <img
               src={displayImage}
               alt={targetName}
               className="object-cover w-full h-full"
             />
-          </div>
-          
-          <div className="flex flex-wrap gap-2">
-            {equipment.map((item, index) => (
-              <TooltipProvider key={index}>
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
+
+            {/* Floating quick actions (top-right) */}
+            <div className="absolute top-3 right-3 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-20">
+              <Dialog>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild onClick={e => e.stopPropagation()}>
+                      <DialogTrigger asChild onClick={e => e.stopPropagation()}>
+                        <Button size="icon" variant="secondary" className="bg-gray-800/80 hover:bg-blue-700 text-white shadow-lg" onClick={e => e.stopPropagation()} aria-label="Project Info">
+                          <Info className="h-4 w-4" />
+                        </Button>
+                      </DialogTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent>Project Info</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                <DialogContent onClick={e => e.stopPropagation()}>
+                  <DialogHeader>
+                    <DialogTitle>Project Details</DialogTitle>
+                    <DialogDescription>
+                      Information about your astrophotography project.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-4 py-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm">Created: {creationDate}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm">Size: {fileSize}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">Frames: {frameCount}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">Status: {getStatusLabel()}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-500">Project ID:</span>
+                      <span className="text-xs font-mono text-gray-400 break-all">{id}</span>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
+              <TooltipProvider>
                 <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Badge variant="outline" className="cursor-pointer hover:bg-accent">
-                      {getEquipmentIcon(item.type)}
-                      {item.name}
-                    </Badge>
+                  <TooltipTrigger asChild onClick={e => e.stopPropagation()}>
+                    <Button size="icon" variant="secondary" className="bg-gray-800/80 hover:bg-red-700 text-red-400 shadow-lg" onClick={e => { e.stopPropagation(); setShowDeleteConfirm(true); }} aria-label="Delete Project">
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </TooltipTrigger>
-                  <TooltipContent>
-                    <p>{item.type.charAt(0).toUpperCase() + item.type.slice(1)}</p>
-                  </TooltipContent>
+                  <TooltipContent>Delete</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
-            ))}
-          </div>
-        </div>
-      </CardContent>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild onClick={e => e.stopPropagation()}>
+                    <Button size="icon" variant="secondary" className="bg-gray-800/80 hover:bg-green-700 text-green-400 shadow-lg" onClick={e => { e.stopPropagation(); onExport && onExport(id); }} aria-label="Export Project">
+                      <Download className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Export</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild onClick={e => e.stopPropagation()}>
+                    <Button size="icon" variant="secondary" className="bg-gray-800/80 hover:bg-blue-700 text-blue-400 shadow-lg" onClick={e => { e.stopPropagation(); onShare && onShare(id); }} aria-label="Share Project">
+                      <Share2 className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Share</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
 
-      <CardFooter className="flex justify-between">
-        <div className="flex gap-2">
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button size="sm" variant="outline" onClick={e => { e.stopPropagation(); onExport && onExport(id); }}>
-                  <Download className="h-4 w-4 mr-1" />
-                  Export
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Export project data</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button size="sm" variant="outline" onClick={e => { e.stopPropagation(); onShare && onShare(id); }}>
-                  <Share2 className="h-4 w-4 mr-1" />
-                  Share
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Share with others</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </div>
-      </CardFooter>
+            {/* Frame count and file size badges (top-left) */}
+            <div className="absolute top-3 left-3 flex flex-col gap-2 z-20">
+              <span className="bg-gray-800/80 text-xs text-white px-3 py-1 rounded-full shadow border border-blue-700 mb-1">{frameCount} Frames</span>
+              <span className="bg-gray-800/80 text-xs text-white px-3 py-1 rounded-full shadow border border-green-700">{fileSize}</span>
+            </div>
 
-      {/* Delete confirmation dialog */}
-      <AnimatePresence>
-        {showDeleteConfirm && (
-          <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
-            <DialogContent className="sm:max-w-[425px]" onClick={e => e.stopPropagation()}>
-              <DialogHeader>
-                <DialogTitle>Delete Project</DialogTitle>
-                <DialogDescription>
-                  Are you sure you want to delete this project? This action cannot be undone.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="flex justify-end gap-2 mt-4">
-                <Button variant="outline" onClick={() => setShowDeleteConfirm(false)}>
-                  Cancel
-                </Button>
-                <Button variant="destructive" onClick={handleDelete}>
-                  Delete
-                </Button>
+            {/* Project name and status badge overlay (bottom) */}
+            <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-black/80 via-black/40 to-transparent px-4 py-3 flex flex-col gap-2 z-10">
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg font-bold text-white truncate" title={targetName}>{targetName}</h3>
+                <Badge variant="secondary" className={getStatusBadgeVariant() + ' text-xs px-2 py-1 ml-2'}>
+                  {getStatusLabel()}
+                </Badge>
               </div>
-            </DialogContent>
-          </Dialog>
-        )}
-      </AnimatePresence>
-    </Card>
+            </div>
+          </div>
+
+          {/* Equipment tags as glowing badges below image */}
+          <CardContent className="pt-4 pb-2 px-4">
+            <div className="flex flex-wrap gap-2">
+              {equipment.map((item, index) => (
+                <TooltipProvider key={index}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Badge variant="outline" className="cursor-pointer bg-gradient-to-r from-blue-800/60 to-indigo-700/60 border-blue-500 text-white shadow-md hover:bg-blue-700/80 hover:text-white transition-all duration-200">
+                        {getEquipmentIcon(item.type)}
+                        {item.name}
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>{item.type.charAt(0).toUpperCase() + item.type.slice(1)}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+        {/* Delete confirmation dialog */}
+        <AnimatePresence>
+          {showDeleteConfirm && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                <div className="bg-gray-900 rounded-lg p-8 max-w-sm w-full shadow-xl border border-gray-700">
+                  <h2 className="text-lg font-bold text-white mb-4">Delete Project?</h2>
+                  <p className="text-gray-300 mb-6">Are you sure you want to delete this project? This action cannot be undone.</p>
+                  <div className="flex justify-end gap-3">
+                    <Button variant="outline" onClick={() => setShowDeleteConfirm(false)}>
+                      Cancel
+                    </Button>
+                    <Button variant="destructive" onClick={handleDelete}>
+                      Delete
+                    </Button>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+      </motion.div>
+    </div>
   );
 }
 

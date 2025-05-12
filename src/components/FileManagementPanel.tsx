@@ -186,6 +186,7 @@ export default function FileManagementPanel({ projectId, onRefresh, onValidation
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -241,10 +242,10 @@ export default function FileManagementPanel({ projectId, onRefresh, onValidation
   }, [supabase]);
 
   const loadFiles = async () => {
-    if (!projectId) return;
+    if (!projectId || !userId) return;
     try {
       setLoading(true);
-      const files = await getFilesByType(projectId);
+      const files = await getFilesByType(projectId, userId);
       setFilesByType(files);
       setError(null);
       setHasLoadedFiles(true);
@@ -289,13 +290,17 @@ export default function FileManagementPanel({ projectId, onRefresh, onValidation
   };
 
   const handleDeleteFile = async (file: StorageFile) => {
+    console.log('handleDeleteFile called with:', file);
     try {
+      console.log('Attempting to delete file:', file.path);
       await deleteFitsFile(file.path);
-      // Refresh the file list
+      console.log('File deleted, refreshing list');
       await loadFiles();
       if (onRefresh) onRefresh();
     } catch (error) {
-      setError(error instanceof Error ? error.message : 'Failed to delete file');
+      const message = error instanceof Error ? error.message : 'Failed to delete file';
+      console.error('Delete error:', message);
+      setDeleteError(message);
     }
   };
 
@@ -440,7 +445,11 @@ export default function FileManagementPanel({ projectId, onRefresh, onValidation
                 <Download className="h-4 w-4" />
               </button>
               <button
-                onClick={() => handleDeleteFile(file)}
+                data-testid="delete-btn-filemanagementpanel"
+                onClick={() => {
+                  console.log('Delete button clicked for', file);
+                  handleDeleteFile(file);
+                }}
                 className="p-1 text-gray-400 hover:text-red-500 transition-colors"
                 title="Delete"
               >
@@ -724,6 +733,26 @@ export default function FileManagementPanel({ projectId, onRefresh, onValidation
             <div className="flex justify-end">
               <button
                 onClick={() => setPreviewError(null)}
+                className="px-4 py-2 bg-gray-800 text-white rounded-md hover:bg-gray-700"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteError && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-gray-900 p-6 rounded-lg max-w-md w-full mx-4">
+            <div className="flex items-center space-x-3 text-red-500 mb-4">
+              <AlertCircle className="h-6 w-6" />
+              <h3 className="text-lg font-semibold">Delete Error</h3>
+            </div>
+            <p className="text-gray-300 mb-6">{deleteError}</p>
+            <div className="flex justify-end">
+              <button
+                onClick={() => setDeleteError(null)}
                 className="px-4 py-2 bg-gray-800 text-white rounded-md hover:bg-gray-700"
               >
                 Close

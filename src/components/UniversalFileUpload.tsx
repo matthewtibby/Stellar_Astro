@@ -6,6 +6,7 @@ import { File, AlertCircle, Info, Upload, X, Trash2, Eye, ChevronDown, ChevronUp
 import { type FileType } from '@/src/types/store';
 import { spaceFacts } from '@/src/utils/spaceFacts';
 import { handleError, ValidationError } from '@/src/utils/errorHandling';
+import { getSupabaseClient } from '@/src/lib/supabase';
 
 type StorageFileWithMetadata = StorageFile & { metadata?: any };
 
@@ -91,12 +92,26 @@ export function UniversalFileUpload({
       try {
         // First try to load from localStorage
         const savedFiles = loadFilesFromLocalStorage();
-        
         // Then fetch from server to ensure we have the latest state
-        const serverFiles = await getFilesByType(projectId);
-        
-        // Merge the files, prioritizing server files (they might be more up-to-date)
-        const mergedFiles = { ...savedFiles, ...serverFiles };
+        if (!userId) return;
+        const serverFiles = await getFilesByType(projectId, userId);
+
+        // Robust merge: ensure all FileType keys are present and use server if available, else local, else []
+        const allTypes: FileType[] = [
+          'light', 'dark', 'bias', 'flat',
+          'master-dark', 'master-bias', 'master-flat',
+          'calibrated', 'stacked', 'aligned', 'pre-processed', 'post-processed'
+        ];
+        const mergedFiles: Record<FileType, StorageFileWithMetadata[]> = {} as any;
+        for (const type of allTypes) {
+          if (serverFiles && serverFiles[type]?.length) {
+            mergedFiles[type] = serverFiles[type];
+          } else if (savedFiles && savedFiles[type]?.length) {
+            mergedFiles[type] = savedFiles[type];
+          } else {
+            mergedFiles[type] = [];
+          }
+        }
         setFilesByType(mergedFiles);
         saveFilesToLocalStorage(mergedFiles);
       } catch (error) {
@@ -106,7 +121,7 @@ export function UniversalFileUpload({
     };
 
     loadFiles();
-  }, [projectId, onValidationError, loadFilesFromLocalStorage, saveFilesToLocalStorage]);
+  }, [projectId, userId, onValidationError, loadFilesFromLocalStorage, saveFilesToLocalStorage]);
 
   // Save files whenever they change
   useEffect(() => {
@@ -135,13 +150,17 @@ export function UniversalFileUpload({
       // Process each file based on validation results
       for (let i = 0; i < acceptedFiles.length; i++) {
         const file = acceptedFiles[i];
-        const validationResult = validationResults[i];
+        const validationResult = validationResults.get(file.name);
 
-        if (!validationResult.isValid) {
-          throw new ValidationError(validationResult.errors.join(', '));
+        if (!validationResult) {
+          throw new ValidationError('Validation failed for file: ' + file.name);
         }
 
-        const fileType = validationResult.metadata.type as FileType || activeTab;
+        if (!validationResult.isValid) {
+          throw new ValidationError(validationResult.warnings.join(', '));
+        }
+
+        const fileType = validationResult.metadata.frameType as FileType || activeTab;
 
         // Update status with warnings
         setUploadStatuses(prev => prev.map(status => 
@@ -195,6 +214,7 @@ export function UniversalFileUpload({
 
       setIsUploading(false);
       setAbortController(null);
+      await markProjectInProgress(projectId);
       if (onUploadComplete) onUploadComplete();
     } catch (error) {
       console.error('Upload error:', error);
@@ -285,7 +305,7 @@ export function UniversalFileUpload({
   }
 
   function handleDelete(file: StorageFile) {
-    // Implement delete logic here
+    // TODO: Implement actual delete logic
   }
 
   function toggleFileExpansion(fileName: string) {
@@ -309,6 +329,28 @@ export function UniversalFileUpload({
         </tbody>
       </table>
     );
+  }
+
+  // Helper to mark project as in progress
+  async function markProjectInProgress(projectId: string) {
+    try {
+      const supabase = getSupabaseClient();
+      // Fetch current status
+      const { data, error } = await supabase
+        .from('projects')
+        .select('status')
+        .eq('id', projectId)
+        .single();
+      if (error) return;
+      if (data && (data.status === 'new' || data.status === 'draft')) {
+        await supabase
+          .from('projects')
+          .update({ status: 'in_progress' })
+          .eq('id', projectId);
+      }
+    } catch (e) {
+      // Silent fail
+    }
   }
 
   return (
@@ -396,6 +438,7 @@ export function UniversalFileUpload({
                 </button>
                 {/* Delete Icon (Trash) */}
                 <button
+                  data-testid="delete-btn-universalfileupload"
                   className="text-gray-400 hover:text-red-500"
                   onClick={() => handleDelete(file)}
                   title="Delete file"
