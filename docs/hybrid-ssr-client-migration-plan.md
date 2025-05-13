@@ -35,10 +35,33 @@
 
 ### A. Audit & Preparation
 
-1. **Inventory All Pages & Data Fetching**
-   - List all pages/components that fetch user/project data.
-   - Identify which should be SSR (Dashboard, Login, Profile, etc.).
-   - Identify all hooks, Zustand stores, and API routes that touch project/user data.
+1. **Inventory All Pages & Data Fetching** ✅
+   - List all pages/components that fetch user/project data:
+     - **Pages:**
+       - `app/dashboard/page.tsx` (Dashboard SSR target)
+       - `app/login/page.tsx` (Login SSR target)
+       - `app/profile/page.tsx` (Profile SSR target)
+     - **Components:**
+       - `app/dashboard/DashboardClient.tsx`
+       - `src/components/DashboardPage.tsx`
+       - `src/components/NewProjectModal.tsx`
+       - `src/components/ProjectManagementPanel.tsx`
+       - `src/components/ProjectChecklist.tsx`
+       - `src/components/FileManagementPanel.tsx`
+       - `src/components/UniversalFileUpload.tsx`
+       - `src/components/AutoSaveIndicator.tsx`
+     - **Hooks:**
+       - `src/hooks/useProjects.ts`
+       - `src/hooks/useAutoSave.ts`
+     - **Zustand Stores:**
+       - `src/store/project.ts`
+       - `src/store/user.ts`
+     - **API Routes:**
+       - `/api/projects` (referenced in components)
+       - `/api/activity-feed` (referenced in ActivityFeed)
+       - `/api/notifications` (referenced in NotificationCenter)
+   - Identify which should be SSR: Dashboard, Login, Profile (see above).
+   - Identify all hooks, Zustand stores, and API routes that touch project/user data (see above).
 
 2. **Backup & Version Control**
    - Ensure all code is committed and pushed.
