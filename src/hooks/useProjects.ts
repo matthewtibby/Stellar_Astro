@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
-import { createBrowserClient, supabaseUrl, supabaseAnonKey } from '@/src/lib/supabase';
+import { supabase } from '@/src/lib/supabaseClient';
 import { Project } from '@/src/types/project';
 
 // Define allowed sort fields
@@ -37,7 +37,6 @@ export function useProjects(userId?: string, isAuthenticated?: boolean) {
       });
 
       // Verify authentication state
-      const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
       console.log('[USEPROJECTS] Fetching user with supabase.auth.getUser()');
       const { data: { user }, error: authError } = await supabase.auth.getUser();
       console.log('[USEPROJECTS] getUser response:', { user, authError });

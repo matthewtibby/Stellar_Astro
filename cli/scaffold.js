@@ -29,7 +29,7 @@ program
       
       // Install additional dependencies
       spinner.text = 'Installing dependencies...';
-      execSync('npm install zustand @supabase/supabase-js next-auth @stripe/stripe-js stripe', { stdio: 'inherit' });
+      execSync('npm install zustand @supabase/supabase-js @stripe/stripe-js stripe', { stdio: 'inherit' });
 
       // Create Python worker directory and setup
       if (!fs.existsSync('python-worker')) {
@@ -83,10 +83,6 @@ if __name__ == "__main__":
 # Supabase
 NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
-
-# NextAuth
-NEXTAUTH_URL=http://localhost:3000
-NEXTAUTH_SECRET=your-nextauth-secret
 
 # Stripe
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=your-stripe-publishable-key
@@ -279,7 +275,7 @@ program
 
       // Install additional dependencies
       spinner.text = 'Installing dependencies...';
-      execSync('npm install zustand @supabase/supabase-js next-auth @stripe/stripe-js stripe', { stdio: 'inherit' });
+      execSync('npm install zustand @supabase/supabase-js @stripe/stripe-js stripe', { stdio: 'inherit' });
 
       // Create Python worker directory and setup
       if (!fs.existsSync('python-worker')) {
@@ -333,10 +329,6 @@ if __name__ == "__main__":
 # Supabase
 NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
-
-# NextAuth
-NEXTAUTH_URL=http://localhost:3000
-NEXTAUTH_SECRET=your-nextauth-secret
 
 # Stripe
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=your-stripe-publishable-key
@@ -833,8 +825,6 @@ program
       const requiredVars = [
         'NEXT_PUBLIC_SUPABASE_URL',
         'NEXT_PUBLIC_SUPABASE_ANON_KEY',
-        'NEXTAUTH_URL',
-        'NEXTAUTH_SECRET',
         'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY',
         'STRIPE_SECRET_KEY',
         'STRIPE_WEBHOOK_SECRET',

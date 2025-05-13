@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { createBrowserClient, supabaseUrl, supabaseAnonKey } from '@/src/lib/supabase';
 import { useUserStore } from '@/src/store/user';
+import { supabase } from '@/src/lib/supabaseClient';
 
 interface PermissionError {
   id: string;
@@ -27,8 +27,6 @@ export default function PermissionsDashboard() {
   const [loading, setLoading] = useState(true);
   const { user } = useUserStore();
   const [isAdmin, setIsAdmin] = useState(false);
-
-  const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
 
   useEffect(() => {
     checkAdminStatus();
