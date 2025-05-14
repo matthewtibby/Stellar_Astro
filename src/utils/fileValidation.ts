@@ -44,7 +44,7 @@ export async function validateFITSFile(file: File, projectId: string, userId: st
       // Optionally pass through other fields if needed
     };
   } catch (error) {
-    let msg = error instanceof Error ? error.message : JSON.stringify(error);
+    const msg = error instanceof Error ? error.message : JSON.stringify(error);
     return {
       isValid: false,
       warnings: ['Error validating file: ' + msg],
