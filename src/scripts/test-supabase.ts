@@ -1,17 +1,19 @@
-import { createBrowserClient, supabaseUrl, supabaseAnonKey } from '@/src/lib/supabase'
 import * as dotenv from 'dotenv'
-
 // Load environment variables from .env.local
 dotenv.config({ path: '.env.local' })
+import { createClient, supabaseUrl, supabaseAnonKey } from '../lib/supabase'
 
 async function testConnection() {
   try {
     console.log('Testing Supabase connection...')
     console.log('URL:', process.env.NEXT_PUBLIC_SUPABASE_URL)
     console.log('Anon Key:', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? 'Present' : 'Missing')
+    // Debug log for env variables
+    console.log('DEBUG: process.env.NEXT_PUBLIC_SUPABASE_URL =', process.env.NEXT_PUBLIC_SUPABASE_URL);
+    console.log('DEBUG: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY =', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
     
-    const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
-    const { data, error } = await supabase.from('_prisma_migrations').select('*').limit(1)
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
+    const { data, error } = await supabase.from('projects').select('*').limit(5)
     
     if (error) {
       console.error('Error:', error.message)
