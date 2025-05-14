@@ -32,6 +32,8 @@ import DashboardStats from '../components/DashboardStats';
 import NewProjectModal from '@/src/components/NewProjectModal';
 import ProjectCard, { ProjectCardSkeleton } from '@/src/components/ui/ProjectCard';
 import type { HydratedProject } from '@/src/lib/server/getDashboardProjects';
+import { getDashboardProjects } from '@/src/lib/server/getDashboardProjects';
+import { useProjectStore } from '@/src/store/project';
 
 const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
 
@@ -81,6 +83,7 @@ export default function DashboardClient({ user, projects }: { user: { id: string
   const [isPublic, setIsPublic] = useState(false);
   const [subscription, setSubscription] = useState('free');
   const [loading, setLoading] = useState(false);
+  const [projectList, setProjectList] = useState<HydratedProject[]>(projects);
 
   const workflowSteps = [
     { id: 0, name: "Upload Files", icon: Settings },
@@ -109,6 +112,37 @@ export default function DashboardClient({ user, projects }: { user: { id: string
       </div>
     );
   }
+
+  // Add this function to refresh projects after deletion
+  const handleProjectDeleted = async () => {
+    if (user?.id) {
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/projects?userId=${user.id}`);
+        if (!res.ok) throw new Error('Failed to fetch projects');
+        const refreshed = await res.json();
+        setProjectList(refreshed);
+      } catch (err) {
+        // Optionally show a toast or error
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  // E2E delete handler
+  const handleDeleteProject = async (projectId: string) => {
+    try {
+      // Optimistically remove the project from the list
+      setProjectList(prev => prev.filter(p => p.id !== projectId));
+      await useProjectStore.getState().deleteProject(projectId);
+      addToast('success', 'Project deleted successfully');
+      // Optionally refetch to ensure sync with backend
+      await handleProjectDeleted();
+    } catch (err: any) {
+      addToast('error', err?.message || 'Failed to delete project');
+    }
+  };
 
   // Main dashboard UI
   return (
@@ -477,11 +511,11 @@ export default function DashboardClient({ user, projects }: { user: { id: string
                       ) : (
                         <>
                           {activeView === 'grid' ? (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                              {loading || !projects ? (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                              {loading || !projectList ? (
                                 Array.from({ length: 4 }).map((_, i) => <ProjectCardSkeleton key={i} />)
                               ) : (
-                                (Array.isArray(projects) ? projects : []).map((project: HydratedProject) => (
+                                projectList.map((project: HydratedProject) => (
                                   <ProjectCard
                                     key={project.id}
                                     id={project.id}
@@ -499,7 +533,8 @@ export default function DashboardClient({ user, projects }: { user: { id: string
                                     target={project.target}
                                     title={project.title}
                                     updatedAt={project.updatedAt}
-                                    onDelete={() => { /* TODO: handleDeleteProject(project.id) */ }}
+                                    onDelete={() => handleDeleteProject(project.id)}
+                                    onProjectDeleted={handleProjectDeleted}
                                     onClick={() => setActiveProject(project)}
                                   />
                                 ))
@@ -507,10 +542,10 @@ export default function DashboardClient({ user, projects }: { user: { id: string
                             </div>
                           ) : (
                             <div className="space-y-4">
-                              {loading || !projects ? (
+                              {loading || !projectList ? (
                                 Array.from({ length: 4 }).map((_, i) => <ProjectCardSkeleton key={i} />)
                               ) : (
-                                (Array.isArray(projects) ? projects : []).map((project: HydratedProject) => (
+                                projectList.map((project: HydratedProject) => (
                                   <ProjectCard
                                     key={project.id}
                                     id={project.id}
@@ -528,7 +563,8 @@ export default function DashboardClient({ user, projects }: { user: { id: string
                                     target={project.target}
                                     title={project.title}
                                     updatedAt={project.updatedAt}
-                                    onDelete={() => { /* TODO: handleDeleteProject(project.id) */ }}
+                                    onDelete={() => handleDeleteProject(project.id)}
+                                    onProjectDeleted={handleProjectDeleted}
                                     onClick={() => setActiveProject(project)}
                                   />
                                 ))

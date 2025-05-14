@@ -228,145 +228,105 @@ export async function uploadRawFrame(
 ): Promise<void> {
   console.log('uploadRawFrame called with:', { file, projectId, fileType });
   console.log('Starting upload for file:', file.name);
-  
   try {
     if (!createBrowserClient(supabaseUrl, supabaseAnonKey)) {
       throw new Error('Supabase client not initialized');
     }
-
     // Get authenticated user first
     const { data: { user }, error: userError } = await createBrowserClient(supabaseUrl, supabaseAnonKey).auth.getUser();
     if (userError || !user) {
       throw new Error('User not authenticated');
     }
-
     console.log('User authenticated:', user.id);
-
     // Validate the FITS file with the user ID
     const validationResult = await validateFitsFile(file, projectId, user.id, fileType);
     if (!validationResult.valid) {
       throw new Error(validationResult.message || 'Invalid FITS file');
     }
-
     // Extract tags from FITS header metadata
     const tags = extractTagsFromFitsHeader(validationResult.metadata || {});
-
     // Get the actual file type and path from validation
     const actualFileType = validationResult.actual_type || fileType;
     const filePath = `${user.id}/${projectId}/${actualFileType}/${file.name}`;
     console.log('File type determined:', actualFileType);
     console.log('File path:', filePath);
-
     if (!filePath) {
       throw new Error('No file path returned from validation');
     }
-
     // Check if file already exists in this project
     const { data: existingFiles, error: listError } = await createBrowserClient(supabaseUrl, supabaseAnonKey)
       .storage
       .from('raw-frames')
       .list(`${user.id}/${projectId}/${actualFileType}`);
-
     if (listError) {
       console.error('Error checking for existing files:', listError);
       throw new Error('Failed to check for existing files');
     }
-
     const fileExists = existingFiles?.some(existingFile => existingFile.name === file.name);
     if (fileExists) {
       throw new Error(`A file with the name "${file.name}" already exists in this project. Please rename the file or choose a different project.`);
     }
-
-    // Get signed upload URL
-    const { data: signedUrlData, error: signedUrlError } = await createBrowserClient(supabaseUrl, supabaseAnonKey)
+    // Upload the file with metadata using the .upload() method
+    console.log('Uploading with metadata:', validationResult.metadata);
+    const { data: uploadData, error: uploadError } = await createBrowserClient(supabaseUrl, supabaseAnonKey)
       .storage
       .from('raw-frames')
-      .createSignedUploadUrl(filePath);
-
-    if (signedUrlError || !signedUrlData?.signedUrl) {
-      console.error('Error getting signed upload URL:', signedUrlError);
-      throw new Error('Failed to get signed upload URL');
+      .upload(filePath, file, {
+        metadata: validationResult.metadata || {},
+        upsert: false
+      });
+    if (uploadError) {
+      console.error('Error uploading file:', uploadError);
+      throw new Error('Failed to upload file');
     }
-
-    console.log('Got signed upload URL for path:', filePath);
-
-    // Add retry logic
-    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-      try {
-        // Upload the file
-        await new Promise((resolve, reject) => {
-          const xhr = new XMLHttpRequest();
-          
-          xhr.upload.onprogress = (event) => {
-            if (event.lengthComputable) {
-              const progress = event.loaded / event.total;
-              console.log('Upload progress:', progress);
-              onProgress?.(progress);
-            }
+    console.log('File uploaded successfully to:', filePath);
+    // Insert file record into project_files with tags
+    const { error: insertError } = await createBrowserClient(supabaseUrl, supabaseAnonKey)
+      .from('project_files')
+      .insert({
+        project_id: projectId,
+        user_id: user.id,
+        filename: file.name,
+        file_type: actualFileType,
+        file_path: filePath,
+        file_size: file.size,
+        metadata: validationResult.metadata,
+        tags: tags,
+        created_at: new Date().toISOString(),
+      });
+    if (insertError) {
+      throw new Error('Failed to insert file record: ' + insertError.message);
+    }
+    // --- NEW: Update project target if missing ---
+    // After upload, check fits_metadata for this project and set target from the most relevant FITS metadata
+    const { data: project, error: fetchError } = await createBrowserClient(supabaseUrl, supabaseAnonKey)
+      .from('projects')
+      .select('id, target')
+      .eq('id', projectId)
+      .single();
+    if (!fetchError && project && (!project.target || Object.keys(project.target).length === 0)) {
+      // Query fits_metadata for this project
+      const { data: fitsMetaRows, error: fitsMetaError } = await createBrowserClient(supabaseUrl, supabaseAnonKey)
+        .from('fits_metadata')
+        .select('metadata')
+        .eq('project_id', projectId);
+      if (!fitsMetaError && fitsMetaRows && fitsMetaRows.length > 0) {
+        // Find the first non-empty object name
+        const metaWithObject = fitsMetaRows.find(row => row.metadata && row.metadata.object);
+        if (metaWithObject) {
+          const newTarget: any = {
+            name: metaWithObject.metadata.object,
+            coordinates: {
+              ra: metaWithObject.metadata.ra || '',
+              dec: metaWithObject.metadata.dec || '',
+            },
+            category: metaWithObject.metadata.category || undefined,
           };
-
-          xhr.onload = () => {
-            if (xhr.status === 200) {
-              console.log('Upload completed successfully for path:', filePath);
-              resolve(true);
-            } else {
-              console.error('Upload failed:', xhr.statusText, 'Status:', xhr.status);
-              reject(new Error(`Upload failed: ${xhr.statusText}`));
-            }
-          };
-
-          xhr.onerror = () => {
-            console.error('Upload error:', xhr.statusText);
-            reject(new Error(`Upload error: ${xhr.statusText}`));
-          };
-
-          try {
-            xhr.open('PUT', signedUrlData.signedUrl);
-            xhr.send(file);
-          } catch (error) {
-            console.error('Error sending file:', error);
-            reject(error);
-          }
-        });
-
-        // Verify the file was uploaded successfully
-        const { data: verifyData, error: verifyError } = await createBrowserClient(supabaseUrl, supabaseAnonKey)
-          .storage
-          .from(STORAGE_BUCKETS.RAW_FRAMES)
-          .list(filePath.split('/').slice(0, -1).join('/'));
-
-        if (verifyError || !verifyData?.some(file => file.name === file.name)) {
-          console.error('File upload verification failed - file not found:', filePath);
-          throw new Error('File upload verification failed');
+          await createBrowserClient(supabaseUrl, supabaseAnonKey)
+            .from('projects')
+            .update({ target: newTarget })
+            .eq('id', projectId);
         }
-
-        console.log('File uploaded and verified successfully to:', filePath);
-
-        // Insert file record into project_files with tags
-        const { error: insertError } = await createBrowserClient(supabaseUrl, supabaseAnonKey)
-          .from('project_files')
-          .insert({
-            project_id: projectId,
-            user_id: user.id,
-            filename: file.name,
-            file_type: actualFileType,
-            file_path: filePath,
-            file_size: file.size,
-            metadata: validationResult.metadata,
-            tags: tags,
-            created_at: new Date().toISOString(),
-          });
-        if (insertError) {
-          throw new Error('Failed to insert file record: ' + insertError.message);
-        }
-
-        break; // Exit the retry loop on success
-      } catch (error) {
-        console.error(`Attempt ${attempt} failed:`, error);
-        if (attempt === MAX_RETRIES) {
-          throw new Error(`Failed to upload file after ${MAX_RETRIES} attempts`);
-        }
-        console.log(`Retrying upload (attempt ${attempt + 1} of ${MAX_RETRIES})...`);
       }
     }
   } catch (error) {

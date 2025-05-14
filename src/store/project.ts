@@ -114,19 +114,23 @@ export const useProjectStore = create<ProjectStore>()(
       deleteProject: async (projectId) => {
         set({ isLoading: true, error: null });
         try {
+          console.log('[deleteProject] Attempting to delete project:', projectId);
           const { error } = await supabase
             .from('projects')
             .delete()
             .eq('id', projectId);
-
-          if (error) throw error;
-
+          if (error) {
+            console.error('[deleteProject] Supabase error:', error);
+            throw error;
+          }
+          console.log('[deleteProject] Successfully deleted project:', projectId);
           set((state) => ({
             projects: state.projects.filter((p) => p.id !== projectId),
             currentProject: state.currentProject?.id === projectId ? null : state.currentProject,
           }));
         } catch (error: unknown) {
           const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+          console.error('[deleteProject] Caught error:', errorMessage);
           set({ error: errorMessage });
         } finally {
           set({ isLoading: false });
