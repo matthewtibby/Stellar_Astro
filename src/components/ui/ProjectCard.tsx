@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import ReactDOM from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Calendar,
@@ -41,6 +42,7 @@ import {
   TooltipTrigger as TooltipTriggerComponent,
 } from "@/components/ui/tooltip";
 import { getSkyViewThumbnailUrl } from '@/src/lib/client/skyview';
+import { useToast } from '@/src/hooks/useToast';
 
 interface Equipment {
   type: "telescope" | "camera" | "filter";
@@ -67,6 +69,16 @@ interface ProjectCardProps {
   updatedAt?: string;
   onProjectNameUpdate?: (id: string, newName: string) => Promise<void>;
   target?: any;
+  onProjectDeleted?: () => void;
+}
+
+// Helper for timeout
+function useTimeout(callback: () => void, delay: number | null) {
+  useEffect(() => {
+    if (delay === null) return;
+    const id = setTimeout(callback, delay);
+    return () => clearTimeout(id);
+  }, [callback, delay]);
 }
 
 function ProjectCard({
@@ -89,17 +101,52 @@ function ProjectCard({
   updatedAt,
   onProjectNameUpdate,
   target,
+  onProjectDeleted,
 }: ProjectCardProps) {
+  console.log('ProjectCard props:', { id, frameCount, targetName, status, thumbnailUrl, userImageUrl, creationDate, fileSize, equipment, title, name, updatedAt, target });
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
   const [editedName, setEditedName] = useState(title || name || 'Untitled Project');
   const [isSavingName, setIsSavingName] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showUndo, setShowUndo] = useState(false);
+  const [deletedProject, setDeletedProject] = useState<any>(null);
+  const [undoTimeout, setUndoTimeout] = useState<NodeJS.Timeout | null>(null);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const { addToast } = useToast();
+  const [editingEquipment, setEditingEquipment] = useState<{ type: string; index: number } | null>(null);
+  const [editedEquipmentName, setEditedEquipmentName] = useState('');
+  const [thumbnailLoading, setThumbnailLoading] = useState(false);
+  const [isEditingObject, setIsEditingObject] = useState(false);
+  const [editedObject, setEditedObject] = useState(targetName || title || name || '—');
   
-  const handleDelete = () => {
-    if (onDelete) onDelete(id);
+  const handleDelete = async () => {
+    console.log('[ProjectCard] handleDelete called for project:', id);
+    if (onDelete) await onDelete(id);
     setShowDeleteConfirm(false);
+    if (onProjectDeleted) onProjectDeleted();
+    // Show undo UI
+    setShowUndo(true);
+    setDeletedProject({
+      id,
+      targetName,
+      status,
+      thumbnailUrl,
+      userImageUrl,
+      creationDate,
+      frameCount,
+      fileSize,
+      equipment,
+      title,
+      name,
+      updatedAt,
+      target,
+    });
+    // Hide undo after 5 seconds
+    if (undoTimeout) clearTimeout(undoTimeout);
+    const timeout = setTimeout(() => setShowUndo(false), 5000);
+    setUndoTimeout(timeout);
   };
 
   const getStatusBadgeVariant = () => {
@@ -193,6 +240,55 @@ function ProjectCard({
     !safeDisplayImage || safeDisplayImage === '/images/placeholder.jpg',
   ].some(Boolean);
 
+  // Log when the delete confirmation dialog renders and relevant state/props
+  useEffect(() => {
+    if (showDeleteConfirm) {
+      console.log('[ProjectCard] Delete confirmation popup shown for project:', id);
+      console.log('[ProjectCard] Props:', { id, onDelete, onProjectDeleted });
+    }
+  }, [showDeleteConfirm, id, onDelete, onProjectDeleted]);
+
+  // Placeholder async update function (to be implemented)
+  async function handleInlineEditSave(field: string, value: string) {
+    setIsSavingName(true);
+    setError(null);
+    try {
+      if (field === 'object') setThumbnailLoading(true);
+      const res = await fetch('/api/project-file-metadata', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: id, field, value }),
+      });
+      if (!res.ok) throw new Error('Failed to update metadata');
+      setIsEditingName(false);
+      setEditedName(value);
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 2000);
+      if (onProjectDeleted) onProjectDeleted();
+      if (onProjectNameUpdate) {
+        await onProjectNameUpdate(id, value.trim());
+      }
+      addToast('success', `${field === 'object' ? 'Object name' : 'Equipment'} updated!`);
+    } catch (err: any) {
+      setError(err.message || 'Failed to update name');
+      addToast('error', err.message || 'Failed to update');
+    } finally {
+      setIsSavingName(false);
+      if (field === 'object') setTimeout(() => setThumbnailLoading(false), 1200);
+    }
+  }
+
+  // Equipment inline edit handler
+  const handleEquipmentEdit = (type: string, index: number, name: string) => {
+    setEditingEquipment({ type, index });
+    setEditedEquipmentName(name);
+  };
+  const handleEquipmentSave = async (type: string, index: number) => {
+    await handleInlineEditSave(type, editedEquipmentName);
+    setEditingEquipment(null);
+    setEditedEquipmentName('');
+  };
+
   return (
     <div
       className={`transition-all duration-300 ${className || ''} focus:outline-none focus:ring-2 focus:ring-blue-500 hover:shadow-xl active:scale-[0.98]`}
@@ -204,33 +300,40 @@ function ProjectCard({
       tabIndex={0}
       aria-label={`Project card for ${safeTargetName}`}
       role="button"
-      onKeyDown={e => { if (onClick && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onClick(); } }}
+      onKeyDown={e => {
+        // Only trigger if the event target is the card itself (not an input, textarea, or button)
+        if (
+          onClick &&
+          (e.key === 'Enter' || e.key === ' ') &&
+          e.target === e.currentTarget
+        ) {
+          e.preventDefault();
+          onClick();
+        }
+      }}
     >
       <Card className="w-full max-w-[400px] min-h-[340px] max-h-[400px] bg-gray-900/80 border border-gray-800 rounded-3xl overflow-hidden shadow-lg flex flex-col">
         {/* Top Section: Image with overlays */}
         <div className="relative flex-1 min-h-[180px] max-h-[180px] aspect-square bg-gray-900">
-          {/* Fallback icon with tooltip (only if fallback fields exist) */}
-          {dataFallbacks.length > 0 && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="absolute top-2 left-2 z-20 cursor-help" tabIndex={0} aria-label={`Fallback fields: ${dataFallbacks.join(', ')}`}> 
-                    <AlertCircle className="h-5 w-5 text-yellow-400 hover:text-yellow-500 transition" />
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent side="right">
-                  <div className="text-xs font-mono text-yellow-900">
-                    Fallback fields:<br />{dataFallbacks.join(', ')}
-                  </div>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+          {thumbnailLoading && (
+            <div className="absolute inset-0 bg-black/40 flex items-center justify-center z-30">
+              <svg className="animate-spin h-8 w-8 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+              </svg>
+            </div>
           )}
           <img
             src={safeDisplayImage}
             alt={safeTargetName}
             className="object-cover w-full h-full min-h-[180px] max-h-[180px] aspect-square bg-black"
-            onError={e => { (e.target as HTMLImageElement).src = '/images/placeholder.jpg'; }}
+            onError={e => {
+              const img = e.target as HTMLImageElement;
+              if (!img.src.endsWith('/images/placeholder.jpg')) {
+                img.src = '/images/placeholder.jpg';
+              }
+            }}
+            onLoad={() => setThumbnailLoading(false)}
           />
           {/* Project Name (centered top) */}
           <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 w-full flex flex-col items-center pointer-events-auto group">
@@ -241,28 +344,7 @@ function ProjectCard({
                 onSubmit={async e => {
                   e.preventDefault();
                   if (!editedName.trim()) return;
-                  setIsSavingName(true);
-                  setError(null);
-                  try {
-                    if (onProjectNameUpdate) {
-                      await onProjectNameUpdate(id, editedName.trim());
-                    } else {
-                      // fallback: update via Supabase directly
-                      const supabase = await getSupabaseClient();
-                      if (supabase) {
-                        const { error } = await supabase
-                          .from('projects')
-                          .update({ title: editedName.trim() })
-                          .eq('id', id);
-                        if (error) throw error;
-                      }
-                    }
-                    setIsEditingName(false);
-                  } catch (err: any) {
-                    setError(err.message || 'Failed to update name');
-                  } finally {
-                    setIsSavingName(false);
-                  }
+                  await handleInlineEditSave('object', editedName.trim());
                 }}
               >
                 <input
@@ -281,7 +363,7 @@ function ProjectCard({
                   title="Save"
                   onClick={e => e.stopPropagation()}
                 >
-                  Save
+                  {isSavingName ? <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg> : 'Save'}
                 </button>
                 <button
                   type="button"
@@ -315,14 +397,73 @@ function ProjectCard({
               </div>
             )}
             {error && <div className="text-red-400 text-xs mt-1">{error}</div>}
+            {showSuccess && <div className="text-green-400 text-xs mt-1 flex items-center gap-1"><span>✓</span> Updated!</div>}
           </div>
         </div>
         {/* Bottom Section: Blue background with project name, tags and actions */}
         <div className="bg-primary text-primary-foreground p-1 flex flex-col gap-1 rounded-b-3xl text-xs">
           {/* Object/Target Name and Status Badge Row */}
           <div className="flex items-center justify-between mb-0.5">
-            <div className="font-semibold text-xs">Object: <span className="font-mono">{safeTargetName}</span></div>
-            <Badge variant="default" className={getStatusBadgeVariant() + ' text-[10px] px-2 py-0.5 shadow'}>
+            <div className="font-semibold text-xs flex items-center gap-1">
+              Object:
+              {isEditingObject ? (
+                <form
+                  className="flex items-center gap-1"
+                  onSubmit={async e => {
+                    e.preventDefault();
+                    if (!editedObject.trim()) return;
+                    await handleInlineEditSave('object', editedObject.trim());
+                    setIsEditingObject(false);
+                  }}
+                >
+                  <input
+                    className="font-mono text-xs bg-gray-800/80 rounded px-1 py-0.5 text-white border border-gray-600 focus:ring-2 focus:ring-blue-500"
+                    value={editedObject}
+                    onChange={e => setEditedObject(e.target.value)}
+                    disabled={isSavingName}
+                    autoFocus
+                    maxLength={64}
+                    style={{ width: '7em' }}
+                  />
+                  <button
+                    type="submit"
+                    className="ml-1 text-blue-400 hover:text-blue-600 disabled:opacity-50"
+                    disabled={isSavingName || !editedObject.trim()}
+                    title="Save"
+                  >
+                    {isSavingName ? <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg> : '✓'}
+                  </button>
+                  <button
+                    type="button"
+                    className="ml-1 text-gray-400 hover:text-gray-600 disabled:opacity-50"
+                    onClick={() => { setIsEditingObject(false); setEditedObject(safeTargetName); }}
+                    disabled={isSavingName}
+                    title="Cancel"
+                  >
+                    ×
+                  </button>
+                </form>
+              ) : (
+                <>
+                  <span className="font-mono">{safeTargetName}</span>
+                  <button
+                    className="ml-1 text-white/60 hover:text-blue-400 p-0.5 rounded-full"
+                    onClick={e => { e.stopPropagation(); setIsEditingObject(true); setEditedObject(safeTargetName); }}
+                    disabled={isSavingName}
+                    title="Edit object name"
+                  >
+                    <Edit3 className="h-4 w-4" />
+                  </button>
+                </>
+              )}
+            </div>
+            <Badge
+              variant="default"
+              className={
+                getStatusBadgeVariant() +
+                ' text-xs px-3 py-1 shadow rounded-full whitespace-nowrap min-w-[90px] text-center'
+              }
+            >
               {getStatusLabel()}
             </Badge>
           </div>
@@ -338,16 +479,57 @@ function ProjectCard({
           </div>
           {/* Divider */}
           <div className="border-t border-primary-foreground/20 my-0.5" />
-          {/* Tags */}
-          <div className="flex flex-wrap gap-1 mb-1 justify-center">
+          {/* Equipment Block - now with inline editing */}
+          <div className="flex flex-wrap gap-x-3 gap-y-1 mb-1 justify-start items-center text-white text-xs font-medium">
             {safeEquipment.length === 0 ? (
-              <span className="text-gray-500 text-xs italic">No equipment info</span>
+              <span className="text-gray-400 italic">No equipment info</span>
             ) : (
               safeEquipment.map((item, index) => (
-                <Badge key={index} variant="outline" className="bg-white/90 text-primary border border-primary px-2 py-0.5 rounded-full text-xs font-medium flex items-center gap-1">
+                <span key={index} className="flex items-center gap-1">
                   {getEquipmentIcon(item.type)}
-                  {item.name}
-                </Badge>
+                  {editingEquipment && editingEquipment.type === item.type && editingEquipment.index === index ? (
+                    <>
+                      <input
+                        className="bg-gray-800/80 rounded px-1 py-0.5 text-xs text-white border border-gray-600 focus:ring-2 focus:ring-blue-500"
+                        value={editedEquipmentName}
+                        onChange={e => setEditedEquipmentName(e.target.value)}
+                        disabled={isSavingName}
+                        autoFocus
+                        maxLength={32}
+                        style={{ width: '6em' }}
+                      />
+                      <button
+                        className="ml-1 text-blue-400 hover:text-blue-600 disabled:opacity-50"
+                        onClick={e => { e.stopPropagation(); handleEquipmentSave(item.type, index); }}
+                        disabled={isSavingName || !editedEquipmentName.trim()}
+                        title="Save"
+                      >
+                        {isSavingName ? <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg> : '✓'}
+                      </button>
+                      <button
+                        className="ml-1 text-gray-400 hover:text-gray-600 disabled:opacity-50"
+                        onClick={e => { e.stopPropagation(); handleEquipmentEdit(item.type, index, item.name); }}
+                        disabled={isSavingName}
+                        title="Cancel"
+                      >
+                        ×
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <span>{item.name}</span>
+                      <button
+                        className="ml-1 text-white/60 hover:text-blue-400 p-0.5 rounded-full"
+                        onClick={e => { e.stopPropagation(); handleEquipmentEdit(item.type, index, item.name); }}
+                        disabled={isSavingName}
+                        title={`Edit ${item.type}`}
+                      >
+                        <Edit3 className="h-4 w-4" />
+                      </button>
+                    </>
+                  )}
+                  {index < safeEquipment.length - 1 && <span className="mx-1 text-white/40">&bull;</span>}
+                </span>
               ))
             )}
           </div>
@@ -363,7 +545,7 @@ function ProjectCard({
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <DialogTrigger asChild>
-                        <Button size="icon" variant="secondary" className="bg-gray-800/80 hover:bg-primary text-white shadow-lg" aria-label="Project Info">
+                        <Button size="icon" variant="secondary" className="bg-gray-800/80 hover:bg-primary text-white shadow-lg" aria-label="Project Info" onClick={e => { e.stopPropagation(); }}>
                           <Info className="h-4 w-4" />
                         </Button>
                       </DialogTrigger>
@@ -371,51 +553,95 @@ function ProjectCard({
                     <TooltipContent>Project Info</TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
-                <DialogContent>
+                <DialogContent className="bg-gray-900 border border-gray-800 shadow-2xl">
                   <DialogHeader>
-                    <DialogTitle>Project Metadata</DialogTitle>
-                    <DialogDescription>
-                      Information about your astrophotography project.
-                    </DialogDescription>
+                    <DialogTitle>Project Information</DialogTitle>
                   </DialogHeader>
-                  <div className="grid gap-4 py-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm">Created: {safeCreationDate}</span>
+                  <div className="max-h-[60vh] overflow-y-auto px-1 py-2 space-y-6 text-sm text-primary-foreground">
+                    {/* Project Info Section */}
+                    <div>
+                      <h3 className="font-bold text-base mb-2 text-blue-300">Project Info</h3>
+                      <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                        <div><span className="text-gray-400">Created:</span> {safeCreationDate}</div>
+                        <div><span className="text-gray-400">Updated:</span> {safeUpdatedAt}</div>
+                        <div><span className="text-gray-400">Frames:</span> {safeFrameCount}</div>
+                        <div><span className="text-gray-400">Size:</span> {safeFileSize}</div>
+                        <div><span className="text-gray-400">Status:</span> {getStatusLabel()}</div>
+                        <div><span className="text-gray-400">Project ID:</span> <span className="font-mono text-xs break-all">{id}</span></div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <FileText className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm">Size: {safeFileSize}</span>
+                    </div>
+                    {/* Target Details Section */}
+                    {target && (
+                      <div>
+                        <h3 className="font-bold text-base mb-2 text-blue-300">Target Details</h3>
+                        <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                          {target.name && <div><span className="text-gray-400">Name:</span> {target.name}</div>}
+                          {target.catalogIds && target.catalogIds.length > 0 && <div><span className="text-gray-400">Catalog IDs:</span> {target.catalogIds.join(', ')}</div>}
+                          {target.constellation && <div><span className="text-gray-400">Constellation:</span> {target.constellation}</div>}
+                          {target.type && <div><span className="text-gray-400">Type:</span> {target.type}</div>}
+                          {target.category && <div><span className="text-gray-400">Category:</span> {target.category}</div>}
+                          {target.commonNames && target.commonNames.length > 0 && <div><span className="text-gray-400">Common Names:</span> {target.commonNames.join(', ')}</div>}
+                          {target.coordinates && (target.coordinates.ra || target.coordinates.dec) && (
+                            <div className="col-span-2"><span className="text-gray-400">Coordinates:</span> RA: {target.coordinates.ra}, Dec: {target.coordinates.dec}</div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">Frames: {safeFrameCount}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">Status: {getStatusLabel()}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-gray-500">Project ID:</span>
-                      <span className="text-xs font-mono text-gray-400 break-all">{id}</span>
-                    </div>
+                    )}
+                    {/* Equipment Section */}
+                    {safeEquipment.length > 0 && (
+                      <div>
+                        <h3 className="font-bold text-base mb-2 text-blue-300">Equipment</h3>
+                        <div className="flex flex-wrap gap-4">
+                          {safeEquipment.map((item, idx) => (
+                            <div key={idx} className="flex items-center gap-2 bg-gray-800/60 rounded px-2 py-1">
+                              {getEquipmentIcon(item.type)}
+                              <span className="capitalize text-white/90">{item.type}:</span>
+                              <span className="font-mono text-xs text-blue-200">{item.name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {/* FITS Metadata Section (if available) */}
+                    {target && target.fitsMetadata && (
+                      <div>
+                        <h3 className="font-bold text-base mb-2 text-blue-300">FITS Metadata</h3>
+                        <div className="bg-gray-900/80 rounded p-3 text-xs text-blue-100 grid grid-cols-2 gap-x-6 gap-y-1">
+                          {/* Standard important fields */}
+                          {[
+                            ['exposure_time', 'Exposure Time (s)'],
+                            ['gain', 'Gain'],
+                            ['egain', 'eGain'],
+                            ['temperature', 'Temperature (°C)'],
+                            ['binning', 'Binning'],
+                            ['focal_length', 'Focal Length (mm)'],
+                            ['offset', 'Offset'],
+                            ['pixel_size', 'Pixel Size (μm)'],
+                            ['image_type', 'Image Type'],
+                            ['object', 'Object'],
+                            ['filter', 'Filter'],
+                            ['date_obs', 'Date Obs'],
+                            ['telescope', 'Telescope'],
+                            ['instrument', 'Instrument'],
+                            ['creator', 'Creator'],
+                            ['observation_type', 'Observation Type'],
+                            ['ra', 'RA'],
+                            ['dec', 'Dec'],
+                          ].map(([key, label]) => (
+                            <div key={key}><span className="text-gray-400">{label}:</span> <span className="font-mono">{target.fitsMetadata && target.fitsMetadata[key] != null && target.fitsMetadata[key] !== '' ? String(target.fitsMetadata[key]) : '—'}</span></div>
+                          ))}
+                          {/* Show any other metadata fields not in the above list */}
+                          {Object.entries(target.fitsMetadata)
+                            .filter(([key]) => ![
+                              'exposure_time','gain','egain','temperature','binning','focal_length','offset','pixel_size','image_type','object','filter','date_obs','telescope','instrument','creator','observation_type','ra','dec'
+                            ].includes(key))
+                            .map(([key, value]) => (
+                              <div key={key}><span className="text-gray-400">{key}:</span> <span className="font-mono">{value != null && value !== '' ? String(value) : '—'}</span></div>
+                            ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  {target && (
-                    <div className="mt-4">
-                      <h4 className="font-semibold text-sm mb-2">Target Details</h4>
-                      <div className="text-xs text-gray-300 space-y-1">
-                        {target.name && <div><span className="font-medium">Name:</span> {target.name}</div>}
-                        {target.catalogIds && target.catalogIds.length > 0 && <div><span className="font-medium">Catalog IDs:</span> {target.catalogIds.join(', ')}</div>}
-                        {target.constellation && <div><span className="font-medium">Constellation:</span> {target.constellation}</div>}
-                        {target.type && <div><span className="font-medium">Type:</span> {target.type}</div>}
-                        {target.category && <div><span className="font-medium">Category:</span> {target.category}</div>}
-                        {target.commonNames && target.commonNames.length > 0 && <div><span className="font-medium">Common Names:</span> {target.commonNames.join(', ')}</div>}
-                        {target.coordinates && (target.coordinates.ra || target.coordinates.dec) && (
-                          <div><span className="font-medium">Coordinates:</span> RA: {target.coordinates.ra}, Dec: {target.coordinates.dec}</div>
-                        )}
-                      </div>
-                    </div>
-                  )}
                 </DialogContent>
               </Dialog>
               <Button size="icon" variant="ghost" className="hover:bg-primary/80 text-white border-none" onClick={e => { e.stopPropagation(); onExport && onExport(id); }} aria-label="Export Project">
@@ -424,33 +650,62 @@ function ProjectCard({
               <Button size="icon" variant="ghost" className="hover:bg-primary/80 text-white border-none" onClick={e => { e.stopPropagation(); onShare && onShare(id); }} aria-label="Share Project">
                 <Share2 className="h-4 w-4" />
               </Button>
-              <Button size="icon" variant="ghost" className="hover:bg-red-600 hover:text-white text-white border-none" onClick={e => { e.stopPropagation(); setShowDeleteConfirm(true); }} aria-label="Delete Project">
+              <Button size="icon" variant="ghost" className="hover:bg-red-600 hover:text-white text-white border-none" onClick={e => { e.stopPropagation(); console.log('[ProjectCard] Delete button clicked for project:', id); setShowDeleteConfirm(true); }} aria-label="Delete Project">
                 <Trash2 className="h-4 w-4" />
               </Button>
             </div>
           </div>
         </div>
-        {/* Delete confirmation dialog */}
-        <AnimatePresence>
-          {showDeleteConfirm && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+        {/* Delete confirmation dialog (now in a portal) */}
+        {showDeleteConfirm && typeof window !== 'undefined' && ReactDOM.createPortal(
+          <AnimatePresence>
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={e => e.stopPropagation()}>
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                <div className="bg-gray-900 rounded-lg p-8 max-w-sm w-full shadow-xl border border-gray-700">
+                <div className="bg-gray-900 rounded-lg p-8 max-w-sm w-full shadow-xl border border-gray-700" onClick={e => e.stopPropagation()}>
                   <h2 className="text-lg font-bold text-white mb-4">Delete Project?</h2>
                   <p className="text-gray-300 mb-6">Are you sure you want to delete this project? This action cannot be undone.</p>
                   <div className="flex justify-end gap-3">
-                    <Button variant="outline" onClick={() => setShowDeleteConfirm(false)}>
+                    <Button variant="outline" onClick={() => { console.log('[ProjectCard] Delete cancel clicked for project:', id); setShowDeleteConfirm(false); }}>
                       Cancel
                     </Button>
-                    <Button variant="destructive" onClick={handleDelete}>
+                    <Button variant="destructive" 
+                      onClick={async (e) => { 
+                        console.log('[ProjectCard] Delete confirm button rendered for project:', id, 'event:', e);
+                        try {
+                          console.log('[ProjectCard] Delete confirm clicked for project:', id);
+                          await handleDelete();
+                        } catch (err) {
+                          console.error('[ProjectCard] Error in handleDelete for project:', id, err);
+                        }
+                      }}>
                       Delete
                     </Button>
                   </div>
                 </div>
               </motion.div>
             </div>
-          )}
-        </AnimatePresence>
+          </AnimatePresence>,
+          document.body
+        )}
+        {/* Undo UI (simple inline alert for now) */}
+        {showUndo && (
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-800 text-white px-6 py-3 rounded-xl shadow-lg flex items-center gap-4 border border-gray-700">
+            <span>Project deleted.</span>
+            <button
+              className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded font-semibold"
+              onClick={() => {
+                setShowUndo(false);
+                if (undoTimeout) clearTimeout(undoTimeout);
+                // Optionally: call a prop or context to restore the project
+                // For now, just log
+                console.log('[ProjectCard] Undo clicked for project:', deletedProject);
+                // You would need to implement actual restore logic in the parent/dashboard
+              }}
+            >
+              Undo
+            </button>
+          </div>
+        )}
       </Card>
       <style jsx>{`
         @media (max-width: 640px) {
