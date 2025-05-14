@@ -30,7 +30,27 @@ export interface HydratedProject {
     coordinates: { ra: string; dec: string };
     category?: string;
     angularSizeArcmin?: number;
+    fitsMetadata?: any;
   };
+}
+
+// Helper to recursively list all files under a given path in Supabase Storage
+async function listAllFilesRecursive(basePath: string): Promise<any[]> {
+  let allFiles: any[] = [];
+  const { data: items, error } = await supabase.storage.from('raw-frames').list(basePath);
+  console.log('[listAllFilesRecursive] Listing:', basePath, 'Items:', items, 'Error:', error);
+  if (error) return [];
+  for (const item of items || []) {
+    if (item.name && item.metadata !== null) {
+      // It's a file
+      allFiles.push(item);
+    } else if (item.name && item.metadata === null) {
+      // It's a folder
+      const subFiles = await listAllFilesRecursive(basePath + (basePath.endsWith('/') ? '' : '/') + item.name + '/');
+      allFiles = allFiles.concat(subFiles);
+    }
+  }
+  return allFiles;
 }
 
 /**
@@ -53,27 +73,60 @@ export async function getDashboardProjects(userId: string): Promise<HydratedProj
   }
 
   for (const project of projects) {
+    // Fix: Prefer astronomical object name for targetName, fallback to project.title
     let target: HydratedProject['target'] = undefined;
-    let targetName = project.title;
-    if (project.target) {
+    let targetName = '';
+    if (project.target && typeof project.target === 'object' && Object.keys(project.target).length > 0) {
       target = project.target;
-      targetName = project.target.name || project.title;
+      targetName = project.target.name || project.target.object || project.target.target || '';
+    } else if (project.object) {
+      targetName = project.object;
+    }
+    // If no targetName, try to hydrate from fits_metadata
+    if (!targetName) {
+      // Query fits_metadata for this project
+      const { data: fitsMetaRows, error: fitsMetaError } = await supabase
+        .from('fits_metadata')
+        .select('metadata')
+        .eq('project_id', project.id);
+      if (!fitsMetaError && fitsMetaRows && fitsMetaRows.length > 0) {
+        // Find the first non-empty object name
+        const metaWithObject = fitsMetaRows.find(row => row.metadata && row.metadata.object);
+        if (metaWithObject) {
+          targetName = metaWithObject.metadata.object;
+          target = {
+            name: metaWithObject.metadata.object,
+            coordinates: {
+              ra: metaWithObject.metadata.ra || '',
+              dec: metaWithObject.metadata.dec || '',
+            },
+            category: metaWithObject.metadata.category || undefined,
+          };
+          // Optionally update the project record if target is missing
+          if (!project.target || Object.keys(project.target).length === 0) {
+            await supabase
+              .from('projects')
+              .update({ target })
+              .eq('id', project.id);
+          }
+        }
+      }
+    }
+    if (!targetName) {
+      targetName = project.title || project.name || '—';
     }
 
-    // Aggregate FITS files from Supabase Storage
+    // Aggregate FITS files from Supabase Storage (recursive)
     let frameCount = 0;
     let fileSize = 0;
     let userImageUrl = undefined;
     try {
-      // List files in the storage bucket under 'raw-frames/{project.id}/'
-      const { data: files, error } = await supabase.storage.from('raw-frames').list(`${project.id}/`);
-      if (error) throw error;
-      if (files && Array.isArray(files)) {
-        frameCount = files.length;
-        fileSize = files.reduce((sum, f) => sum + (f.metadata?.size || 0), 0);
-        // Optionally, pick a preview image if available
-        userImageUrl = files.length > 0 ? supabase.storage.from('raw-frames').getPublicUrl(`${project.id}/${files[0].name}`).data.publicUrl : undefined;
-      }
+      // List all files recursively under 'raw-frames/{user_id}/{project_id}/'
+      const storageBase = `${userId}/${project.id}/`;
+      const files = await listAllFilesRecursive(storageBase);
+      frameCount = files.length;
+      fileSize = files.reduce((sum, f) => sum + (f.metadata?.size || 0), 0);
+      userImageUrl = files.length > 0 ? supabase.storage.from('raw-frames').getPublicUrl(storageBase + files[0].name).data.publicUrl : undefined;
     } catch (err) {
       console.warn(`Failed to fetch storage files for project ${project.id}:`, err);
       // Fallback to fits_files table if storage fails
@@ -97,7 +150,7 @@ export async function getDashboardProjects(userId: string): Promise<HydratedProj
 
     // Steps/status from processing_steps
     let steps: any[] = [];
-    let status = 'new';
+    let status: 'new' | 'in_progress' | 'completed' = 'new';
     try {
       const { data, error } = await supabase
         .from('processing_steps')
@@ -105,18 +158,60 @@ export async function getDashboardProjects(userId: string): Promise<HydratedProj
         .eq('project_id', project.id);
       if (error) throw error;
       steps = data || [];
-      if (steps.length > 0) {
-        const lastStep = steps[steps.length - 1];
-        status = lastStep.status || 'in_progress';
+      if (frameCount > 0) {
+        const allStepsDone = steps.length > 0 && steps.every(s => s.status === 'done' || s.status === 'completed');
+        status = allStepsDone ? 'completed' : 'in_progress';
+      } else {
+        status = 'new';
       }
     } catch (err) {
       console.warn(`Failed to fetch processing_steps for project ${project.id}:`, err);
       steps = [];
-      status = 'new';
+      status = frameCount > 0 ? 'in_progress' : 'new';
     }
 
-    // Equipment (placeholder)
-    const equipment: { type: string; name: string }[] = [];
+    // Equipment: aggregate from project_files metadata (not storage)
+    let equipment: { type: string; name: string }[] = [];
+    try {
+      const { data: files, error } = await supabase
+        .from('project_files')
+        .select('metadata')
+        .eq('project_id', project.id);
+      if (error) throw error;
+      const eqSet = new Set<string>();
+      const eqArr: { type: string; name: string }[] = [];
+      for (const file of files || []) {
+        const meta = file.metadata || {};
+        if (meta.telescope) {
+          const key = `telescope:${meta.telescope}`;
+          if (!eqSet.has(key)) {
+            eqArr.push({ type: 'telescope', name: meta.telescope });
+            eqSet.add(key);
+          }
+        }
+        if (meta.camera || meta.instrument) {
+          const cameraName = meta.camera || meta.instrument;
+          const key = `camera:${cameraName}`;
+          if (!eqSet.has(key)) {
+            eqArr.push({ type: 'camera', name: cameraName });
+            eqSet.add(key);
+          }
+        }
+        if (meta.filter) {
+          const key = `filter:${meta.filter}`;
+          if (!eqSet.has(key)) {
+            eqArr.push({ type: 'filter', name: meta.filter });
+            eqSet.add(key);
+          }
+        }
+      }
+      equipment = eqArr;
+      console.log('Hydrated equipment from project_files for project', project.id, equipment);
+    } catch (err) {
+      console.warn(`Failed to fetch equipment from project_files for project ${project.id}:`, err);
+      equipment = [];
+    }
+
     // Tags (if present)
     const tags = project.tags || [];
     // isFavorite (placeholder)
@@ -127,8 +222,34 @@ export async function getDashboardProjects(userId: string): Promise<HydratedProj
     if (target && target.coordinates && target.coordinates.ra && target.coordinates.dec) {
       // Use SkyView utility (client-side), so fallback to userImageUrl or blank here
       thumbnailUrl = userImageUrl || '';
+    } else if (userImageUrl && typeof userImageUrl === 'string' && userImageUrl.startsWith('raw-frames/')) {
+      // If userImageUrl is a file path, convert to public URL
+      thumbnailUrl = supabase.storage.from('raw-frames').getPublicUrl(userImageUrl).data.publicUrl || '';
     } else {
       thumbnailUrl = userImageUrl || '';
+    }
+
+    // Attach full FITS metadata from the main file (if available)
+    let fitsMetadata = undefined;
+    try {
+      // Try to get the first file's metadata from project_files
+      const { data: filesWithMeta, error: metaError } = await supabase
+        .from('project_files')
+        .select('metadata')
+        .eq('project_id', project.id);
+      if (!metaError && filesWithMeta && filesWithMeta.length > 0) {
+        // Use the first file with metadata
+        const firstWithMeta = filesWithMeta.find(f => f.metadata && Object.keys(f.metadata).length > 0);
+        if (firstWithMeta) {
+          fitsMetadata = firstWithMeta.metadata;
+        }
+      }
+    } catch (err) {
+      console.warn(`Failed to fetch fitsMetadata for project ${project.id}:`, err);
+    }
+    // Attach fitsMetadata to target
+    if (target) {
+      target.fitsMetadata = fitsMetadata || {};
     }
 
     hydrated.push({
