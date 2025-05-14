@@ -215,7 +215,7 @@ export default function SubscriptionTab({ user }: SubscriptionTabProps) {
               </div>
               <div className="flex items-center text-sm text-gray-300 mt-2">
                 <Calendar className="h-4 w-4 text-green-500 mr-2" />
-                <span>Next billing date: {new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString()}</span>
+                <span>Next billing date: {new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US')}</span>
               </div>
             </>
           )}

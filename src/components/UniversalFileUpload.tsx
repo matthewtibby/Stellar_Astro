@@ -545,7 +545,7 @@ export function UniversalFileUpload({
                 )}
                 {/* Upload date */}
                 <span className="text-xs text-gray-500 ml-2">
-                  {new Date(file.created_at).toLocaleDateString()}
+                  {new Date(file.created_at).toLocaleDateString('en-US')}
                 </span>
                 {/* Action Icons - right aligned */}
                 <div className="flex items-center space-x-2 ml-auto">
