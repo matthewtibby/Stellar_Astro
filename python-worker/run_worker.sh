@@ -1,11 +1,11 @@
 #!/bin/bash
 
 # Activate virtual environment
-source venv/bin/activate
+source python-worker/venv/bin/activate
 
 # Set environment variables
 export PYTHONUNBUFFERED=1
-export PYTHONPATH=$PYTHONPATH:$(pwd)
+export PYTHONPATH=$PYTHONPATH:$(pwd)/python-worker
 
 # Run the worker with gunicorn for better process management
 gunicorn app.main:app \
