@@ -206,18 +206,16 @@ function ProjectCard({
       role="button"
       onKeyDown={e => { if (onClick && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onClick(); } }}
     >
-      <Card className="w-full max-w-[340px] min-h-[340px] max-h-[380px] bg-gray-900/80 border border-gray-800 rounded-3xl overflow-hidden shadow-lg flex flex-col">
+      <Card className="w-full max-w-[400px] min-h-[340px] max-h-[400px] bg-gray-900/80 border border-gray-800 rounded-3xl overflow-hidden shadow-lg flex flex-col">
         {/* Top Section: Image with overlays */}
         <div className="relative flex-1 min-h-[180px] max-h-[180px] aspect-square bg-gray-900">
-          {/* Fallback badge with tooltip */}
+          {/* Fallback icon with tooltip (only if fallback fields exist) */}
           {dataFallbacks.length > 0 && (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span className="absolute top-2 left-2 z-20 cursor-help" tabIndex={0} aria-label={`Fallback fields: ${dataFallbacks.join(', ')}`}> 
-                    <span className="bg-yellow-500 text-black text-xs px-2 py-0.5 rounded shadow flex items-center gap-1">
-                      <AlertCircle className="h-4 w-4 text-yellow-900" /> Fallback
-                    </span>
+                    <AlertCircle className="h-5 w-5 text-yellow-400 hover:text-yellow-500 transition" />
                   </span>
                 </TooltipTrigger>
                 <TooltipContent side="right">
@@ -299,10 +297,10 @@ function ProjectCard({
               <div className="flex items-center gap-2 group pointer-events-auto">
                 <h3
                   className="text-lg font-bold text-white drop-shadow text-center px-2"
-                  title={safeTargetName}
+                  title={projectName}
                   onClick={e => e.stopPropagation()}
                 >
-                  {safeTargetName}
+                  {projectName}
                 </h3>
                 {hovered && (
                   <button
@@ -318,77 +316,7 @@ function ProjectCard({
             )}
             {error && <div className="text-red-400 text-xs mt-1">{error}</div>}
           </div>
-          {/* Status Badge and Info Icon (top right) */}
-          <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
-            <Dialog>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <DialogTrigger asChild>
-                      <Button size="icon" variant="secondary" className="bg-gray-800/80 hover:bg-primary text-white shadow-lg" aria-label="Project Info">
-                        <Info className="h-5 w-5" />
-                      </Button>
-                    </DialogTrigger>
-                  </TooltipTrigger>
-                  <TooltipContent>Project Info</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Project Metadata</DialogTitle>
-                  <DialogDescription>
-                    Information about your astrophotography project.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="grid gap-4 py-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm">Created: {safeCreationDate}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm">Size: {safeFileSize}</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium">Frames: {safeFrameCount}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium">Status: {getStatusLabel()}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-500">Project ID:</span>
-                    <span className="text-xs font-mono text-gray-400 break-all">{id}</span>
-                  </div>
-                </div>
-                {target && (
-                  <div className="mt-4">
-                    <h4 className="font-semibold text-sm mb-2">Target Details</h4>
-                    <div className="text-xs text-gray-300 space-y-1">
-                      {target.name && <div><span className="font-medium">Name:</span> {target.name}</div>}
-                      {target.catalogIds && target.catalogIds.length > 0 && <div><span className="font-medium">Catalog IDs:</span> {target.catalogIds.join(', ')}</div>}
-                      {target.constellation && <div><span className="font-medium">Constellation:</span> {target.constellation}</div>}
-                      {target.type && <div><span className="font-medium">Type:</span> {target.type}</div>}
-                      {target.category && <div><span className="font-medium">Category:</span> {target.category}</div>}
-                      {target.commonNames && target.commonNames.length > 0 && <div><span className="font-medium">Common Names:</span> {target.commonNames.join(', ')}</div>}
-                      {target.coordinates && (target.coordinates.ra || target.coordinates.dec) && (
-                        <div><span className="font-medium">Coordinates:</span> RA: {target.coordinates.ra}, Dec: {target.coordinates.dec}</div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </DialogContent>
-            </Dialog>
-          </div>
         </div>
-        {/* Warning for critical missing fields */}
-        {criticalMissing && (
-          <div className="flex items-center gap-2 bg-yellow-100/90 text-yellow-900 text-xs px-2 py-1 rounded mb-1 mt-1 mx-1 shadow border border-yellow-300" role="alert" aria-live="polite">
-            <AlertCircle className="h-4 w-4" />
-            <span>Some critical project info is missing or incomplete. Please review this card.</span>
-          </div>
-        )}
         {/* Bottom Section: Blue background with project name, tags and actions */}
         <div className="bg-primary text-primary-foreground p-1 flex flex-col gap-1 rounded-b-3xl text-xs">
           {/* Object/Target Name and Status Badge Row */}
@@ -400,10 +328,12 @@ function ProjectCard({
           </div>
           {/* Metadata Block */}
           <div className="flex flex-col gap-0.5 text-[10px] text-primary-foreground/80 mb-1 bg-primary/60 rounded-md px-1 py-0.5">
-            <div className="flex items-center gap-2 flex-wrap">
-              <Calendar className="w-3 h-3" /> {safeCreationDate}
+            <div className="flex items-center gap-1 flex-nowrap whitespace-nowrap overflow-hidden">
+              <Calendar className="w-3 h-3 flex-shrink-0" />
+              <span className="truncate max-w-[90px]">{safeCreationDate}</span>
               <span className="mx-1">•</span>
-              <Edit3 className="w-3 h-3" /> {safeUpdatedAt}
+              <Edit3 className="w-3 h-3 flex-shrink-0" />
+              <span className="truncate max-w-[90px]">{safeUpdatedAt}</span>
             </div>
           </div>
           {/* Divider */}
@@ -427,7 +357,67 @@ function ProjectCard({
               <span>Frames: <span className="font-mono">{safeFrameCount}</span></span>
               <span>Size: <span className="font-mono">{safeFileSize}</span></span>
             </div>
-            <div className="flex gap-1 ml-auto">
+            <div className="flex gap-2 justify-center w-full">
+              <Dialog>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <DialogTrigger asChild>
+                        <Button size="icon" variant="secondary" className="bg-gray-800/80 hover:bg-primary text-white shadow-lg" aria-label="Project Info">
+                          <Info className="h-4 w-4" />
+                        </Button>
+                      </DialogTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent>Project Info</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Project Metadata</DialogTitle>
+                    <DialogDescription>
+                      Information about your astrophotography project.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-4 py-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm">Created: {safeCreationDate}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm">Size: {safeFileSize}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">Frames: {safeFrameCount}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">Status: {getStatusLabel()}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-500">Project ID:</span>
+                      <span className="text-xs font-mono text-gray-400 break-all">{id}</span>
+                    </div>
+                  </div>
+                  {target && (
+                    <div className="mt-4">
+                      <h4 className="font-semibold text-sm mb-2">Target Details</h4>
+                      <div className="text-xs text-gray-300 space-y-1">
+                        {target.name && <div><span className="font-medium">Name:</span> {target.name}</div>}
+                        {target.catalogIds && target.catalogIds.length > 0 && <div><span className="font-medium">Catalog IDs:</span> {target.catalogIds.join(', ')}</div>}
+                        {target.constellation && <div><span className="font-medium">Constellation:</span> {target.constellation}</div>}
+                        {target.type && <div><span className="font-medium">Type:</span> {target.type}</div>}
+                        {target.category && <div><span className="font-medium">Category:</span> {target.category}</div>}
+                        {target.commonNames && target.commonNames.length > 0 && <div><span className="font-medium">Common Names:</span> {target.commonNames.join(', ')}</div>}
+                        {target.coordinates && (target.coordinates.ra || target.coordinates.dec) && (
+                          <div><span className="font-medium">Coordinates:</span> RA: {target.coordinates.ra}, Dec: {target.coordinates.dec}</div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </DialogContent>
+              </Dialog>
               <Button size="icon" variant="ghost" className="hover:bg-primary/80 text-white border-none" onClick={e => { e.stopPropagation(); onExport && onExport(id); }} aria-label="Export Project">
                 <Download className="h-4 w-4" />
               </Button>
@@ -464,7 +454,7 @@ function ProjectCard({
       </Card>
       <style jsx>{`
         @media (max-width: 640px) {
-          .max-w-[340px] { max-width: 100% !important; }
+          .max-w-[400px] { max-width: 100% !important; }
         }
       `}</style>
     </div>
