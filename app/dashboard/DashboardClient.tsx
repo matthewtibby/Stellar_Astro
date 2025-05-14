@@ -20,7 +20,6 @@ import { UniversalFileUpload } from '@/src/components/UniversalFileUpload';
 import ProjectManagementPanel from '@/src/components/ProjectManagementPanel';
 import FileComparisonPanel from '@/src/components/FileComparisonPanel';
 import ProjectChecklist from '@/src/components/ProjectChecklist';
-import { useProjects } from '@/src/hooks/useProjects';
 import { Project as BaseProject, ChecklistItem } from '@/src/types/project';
 import WelcomeDashboard from '@/src/components/WelcomeDashboard';
 import AuthSync from '@/components/AuthSync';
@@ -31,14 +30,16 @@ import ActivityFeed from '../components/ActivityFeed';
 import NotificationCenter from '../components/NotificationCenter';
 import DashboardStats from '../components/DashboardStats';
 import NewProjectModal from '@/src/components/NewProjectModal';
+import ProjectCard, { ProjectCardSkeleton } from '@/src/components/ui/ProjectCard';
+import type { HydratedProject } from '@/src/lib/server/getDashboardProjects';
 
 const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
 
-export default function DashboardClient({ user }: { user: { id: string; email: string } | null }) {
+export default function DashboardClient({ user, projects }: { user: { id: string; email: string } | null, projects: HydratedProject[] }) {
   // State and logic from previous DashboardPage
   const router = useRouter();
   const [activeView, setActiveView] = useState('grid');
-  const [activeProject, setActiveProject] = useState<any>(null);
+  const [activeProject, setActiveProject] = useState<HydratedProject | null>(null);
   const [showNewProject, setShowNewProject] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [showSidebar, setShowSidebar] = useState(false);
@@ -79,11 +80,12 @@ export default function DashboardClient({ user }: { user: { id: string; email: s
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
   const [isPublic, setIsPublic] = useState(false);
   const [subscription, setSubscription] = useState('free');
+  const [loading, setLoading] = useState(false);
 
   const workflowSteps = [
-    { id: 0, name: "Upload Files", icon: Upload },
+    { id: 0, name: "Upload Files", icon: Settings },
     { id: 1, name: "Process", icon: Settings },
-    { id: 2, name: "Export", icon: Share2 },
+    { id: 2, name: "Export", icon: Settings },
   ];
 
   useEffect(() => {
@@ -300,7 +302,7 @@ export default function DashboardClient({ user }: { user: { id: string; email: s
                               onClick={() => setActiveProject(null)}
                               className="text-white hover:text-blue-400 transition-colors"
                             >
-                              {activeProject.name}
+                              {activeProject.title}
                             </button>
                             <ChevronRight size={16} className="text-gray-500" />
                             <span className="text-white">
@@ -476,143 +478,61 @@ export default function DashboardClient({ user }: { user: { id: string; email: s
                         <>
                           {activeView === 'grid' ? (
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                              {/* Example: Replace with your actual projects array */}
-                              {(Array.isArray([]) ? [] : []).map((project: any) => (
-                                <div 
-                                  key={project.id} 
-                                  className="bg-gray-800/50 rounded-lg overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300 cursor-pointer border border-gray-700 hover:border-blue-500 relative"
-                                  // onClick={() => handleProjectClick(project)}
-                                >
-                                  <div className="absolute top-2 left-2 z-10 flex gap-2">
-                                    <button
-                                      // onClick={e => { e.stopPropagation(); handleToggleFavorite(project); }}
-                                      className="p-1 rounded-full bg-gray-700 hover:bg-yellow-500 text-yellow-400 hover:text-black shadow"
-                                      title={project.isFavorite ? 'Unfavorite' : 'Favorite'}
-                                    >
-                                      <Star size={16} fill={project.isFavorite ? 'currentColor' : 'none'} />
-                                    </button>
-                                    <button
-                                      // onClick={e => { e.stopPropagation(); handleDuplicateProject(project); }}
-                                      className="p-1 rounded-full bg-gray-700 hover:bg-blue-500 text-blue-400 hover:text-white shadow"
-                                      title="Duplicate Project"
-                                    >
-                                      <Copy size={16} />
-                                    </button>
-                                    <button
-                                      // onClick={e => { e.stopPropagation(); handleArchiveProject(project); }}
-                                      className="p-1 rounded-full bg-gray-700 hover:bg-gray-500 text-gray-300 hover:text-white shadow"
-                                      title="Archive Project"
-                                    >
-                                      <Archive size={16} />
-                                    </button>
-                                    {(project.tags || []).map((tag: string) => (
-                                      <span key={tag} className="bg-blue-700 text-blue-100 text-xs px-2 py-0.5 rounded-full">{tag}</span>
-                                    ))}
-                                  </div>
-                                  <div className="absolute top-2 right-2 z-10">
-                                    <button
-                                      // onClick={e => { e.stopPropagation(); handleDeleteProject(project.id); }}
-                                      className="p-1 rounded-full bg-red-700 hover:bg-red-800 text-white shadow"
-                                      title="Delete Project"
-                                    >
-                                      <Trash2 size={16} />
-                                    </button>
-                                  </div>
-                                  <div className="relative h-40 bg-gray-900">
-                                    <div className="absolute inset-0 flex items-center justify-center">
-                                      <Image size={48} className="text-gray-600" />
-                                    </div>
-                                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
-                                      <h3 className="text-lg font-semibold text-white">{project.name}</h3>
-                                      <p className="text-sm text-gray-400">Last updated: {project.updatedAt instanceof Date ? project.updatedAt.toLocaleDateString() : String(project.updatedAt)}</p>
-                                    </div>
-                                    {project.status === "completed" && (
-                                      <div className="absolute top-2 right-8">
-                                        <CheckCircle size={20} className="text-green-500" />
-                                      </div>
-                                    )}
-                                  </div>
-                                  <div className="p-4">
-                                    <div className="flex justify-between items-center">
-                                      <span className="text-sm text-gray-400 capitalize">{project.status}</span>
-                                      <div className="w-24 h-2 bg-gray-700 rounded-full overflow-hidden">
-                                        <div 
-                                          className="h-full bg-blue-500 rounded-full" 
-                                          style={{ width: `${project.steps.filter((s: any) => s.status === "completed").length / project.steps.length * 100}%` }}
-                                        ></div>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
+                              {loading || !projects ? (
+                                Array.from({ length: 4 }).map((_, i) => <ProjectCardSkeleton key={i} />)
+                              ) : (
+                                (Array.isArray(projects) ? projects : []).map((project: HydratedProject) => (
+                                  <ProjectCard
+                                    key={project.id}
+                                    id={project.id}
+                                    targetName={project.targetName || project.title || '—'}
+                                    status={['new', 'in_progress', 'completed'].includes(project.status) ? (project.status as 'new' | 'in_progress' | 'completed') : 'new'}
+                                    thumbnailUrl={project.thumbnailUrl || ''}
+                                    userImageUrl={project.userImageUrl}
+                                    creationDate={project.creationDate || ''}
+                                    frameCount={typeof project.frameCount === 'number' ? project.frameCount : 0}
+                                    fileSize={typeof project.fileSize === 'number' ? `${(project.fileSize / 1024 / 1024).toFixed(2)} MB` : '—'}
+                                    equipment={Array.isArray(project.equipment) ? project.equipment.map(e => ({
+                                      type: e.type as 'telescope' | 'camera' | 'filter',
+                                      name: e.name
+                                    })) : []}
+                                    target={project.target}
+                                    title={project.title}
+                                    updatedAt={project.updatedAt}
+                                    onDelete={() => { /* TODO: handleDeleteProject(project.id) */ }}
+                                    onClick={() => setActiveProject(project)}
+                                  />
+                                ))
+                              )}
                             </div>
                           ) : (
                             <div className="space-y-4">
-                              {/* Example: Replace with your actual projects array */}
-                              {(Array.isArray([]) ? [] : []).map((project: any) => (
-                                <div 
-                                  key={project.id} 
-                                  className="bg-gray-800/50 rounded-lg p-4 shadow-lg hover:shadow-xl transition-all duration-300 cursor-pointer border border-gray-700 hover:border-blue-500 flex items-center relative"
-                                  // onClick={() => handleProjectClick(project)}
-                                >
-                                  <div className="absolute top-2 left-2 z-10 flex gap-2">
-                                    <button
-                                      // onClick={e => { e.stopPropagation(); handleToggleFavorite(project); }}
-                                      className="p-1 rounded-full bg-gray-700 hover:bg-yellow-500 text-yellow-400 hover:text-black shadow"
-                                      title={project.isFavorite ? 'Unfavorite' : 'Favorite'}
-                                    >
-                                      <Star size={16} fill={project.isFavorite ? 'currentColor' : 'none'} />
-                                    </button>
-                                    <button
-                                      // onClick={e => { e.stopPropagation(); handleDuplicateProject(project); }}
-                                      className="p-1 rounded-full bg-gray-700 hover:bg-blue-500 text-blue-400 hover:text-white shadow"
-                                      title="Duplicate Project"
-                                    >
-                                      <Copy size={16} />
-                                    </button>
-                                    <button
-                                      // onClick={e => { e.stopPropagation(); handleArchiveProject(project); }}
-                                      className="p-1 rounded-full bg-gray-700 hover:bg-gray-500 text-gray-300 hover:text-white shadow"
-                                      title="Archive Project"
-                                    >
-                                      <Archive size={16} />
-                                    </button>
-                                    {(project.tags || []).map((tag: string) => (
-                                      <span key={tag} className="bg-blue-700 text-blue-100 text-xs px-2 py-0.5 rounded-full">{tag}</span>
-                                    ))}
-                                  </div>
-                                  <div className="absolute top-2 right-2 z-10">
-                                    <button
-                                      // onClick={e => { e.stopPropagation(); handleDeleteProject(project.id); }}
-                                      className="p-1 rounded-full bg-red-700 hover:bg-red-800 text-white shadow"
-                                      title="Delete Project"
-                                    >
-                                      <Trash2 size={16} />
-                                    </button>
-                                  </div>
-                                  <div className="w-16 h-16 bg-gray-900 rounded-md flex items-center justify-center mr-4">
-                                    <Image size={24} className="text-gray-600" />
-                                  </div>
-                                  <div className="flex-1">
-                                    <h3 className="text-lg font-semibold text-white">{project.name}</h3>
-                                    <p className="text-sm text-gray-400">Last updated: {project.updatedAt instanceof Date ? project.updatedAt.toLocaleDateString() : String(project.updatedAt)}</p>
-                                  </div>
-                                  <div className="flex items-center space-x-4">
-                                    <div className="w-24 h-2 bg-gray-700 rounded-full overflow-hidden">
-                                      <div 
-                                        className="h-full bg-blue-500 rounded-full" 
-                                        style={{ width: `${project.steps.filter((s: any) => s.status === "completed").length / project.steps.length * 100}%` }}
-                                      ></div>
-                                    </div>
-                                    {project.status === "completed" ? (
-                                      <CheckCircle size={20} className="text-green-500" />
-                                    ) : (
-                                      <span className="text-sm text-gray-400 capitalize">{project.status}</span>
-                                    )}
-                                    <ChevronRight size={20} className="text-gray-500" />
-                                  </div>
-                                </div>
-                              ))}
+                              {loading || !projects ? (
+                                Array.from({ length: 4 }).map((_, i) => <ProjectCardSkeleton key={i} />)
+                              ) : (
+                                (Array.isArray(projects) ? projects : []).map((project: HydratedProject) => (
+                                  <ProjectCard
+                                    key={project.id}
+                                    id={project.id}
+                                    targetName={project.targetName || project.title || '—'}
+                                    status={['new', 'in_progress', 'completed'].includes(project.status) ? (project.status as 'new' | 'in_progress' | 'completed') : 'new'}
+                                    thumbnailUrl={project.thumbnailUrl || ''}
+                                    userImageUrl={project.userImageUrl}
+                                    creationDate={project.creationDate || ''}
+                                    frameCount={typeof project.frameCount === 'number' ? project.frameCount : 0}
+                                    fileSize={typeof project.fileSize === 'number' ? `${(project.fileSize / 1024 / 1024).toFixed(2)} MB` : '—'}
+                                    equipment={Array.isArray(project.equipment) ? project.equipment.map(e => ({
+                                      type: e.type as 'telescope' | 'camera' | 'filter',
+                                      name: e.name
+                                    })) : []}
+                                    target={project.target}
+                                    title={project.title}
+                                    updatedAt={project.updatedAt}
+                                    onDelete={() => { /* TODO: handleDeleteProject(project.id) */ }}
+                                    onClick={() => setActiveProject(project)}
+                                  />
+                                ))
+                              )}
                             </div>
                           )}
                         </>

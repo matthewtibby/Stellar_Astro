@@ -6,8 +6,8 @@ import { Project } from '@/src/types/project';
 // Define allowed sort fields
 const allowedSortFields = ['created_at', 'name'];
 
-export function useProjects(userId?: string, isAuthenticated?: boolean) {
-  const [projects, setProjects] = useState<Project[]>([]);
+export function useProjects(userId?: string, isAuthenticated?: boolean, initialProjects?: Project[]) {
+  const [projects, setProjects] = useState<Project[]>(initialProjects || []);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -121,10 +121,10 @@ export function useProjects(userId?: string, isAuthenticated?: boolean) {
   }, [userId, isAuthenticated]);
 
   useEffect(() => {
-    if (isAuthenticated && userId) {
+    if (isAuthenticated && userId && !initialProjects) {
       fetchProjects();
     }
-  }, [isAuthenticated, userId, fetchProjects]);
+  }, [isAuthenticated, userId, fetchProjects, initialProjects]);
 
   return { projects, isLoading, error, fetchProjects };
 } 

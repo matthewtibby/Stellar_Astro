@@ -1,50 +1,37 @@
-"use client";
-
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { useUserStore } from '@/src/store/user';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { User, CreditCard, Settings } from 'lucide-react';
+import { createSupabaseServerClient } from '@/src/lib/supabaseServer';
 import AccountTab from '@/components/profile/AccountTab';
 import SubscriptionTab from '@/components/profile/SubscriptionTab';
 import SettingsTab from '@/components/profile/SettingsTab';
-import { createBrowserClient, supabaseUrl, supabaseAnonKey } from '@/src/lib/supabase';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { User, CreditCard, Settings } from 'lucide-react';
+import { redirect } from 'next/navigation';
 
-export default function ProfilePage() {
-  const router = useRouter();
-  const { user, isAuthenticated, id, email, username, fullName, avatarUrl, subscription, isLoading, error, subscriptionLoading } = useUserStore();
-  const [activeTab, setActiveTab] = useState('account');
-  const [userRole, setUserRole] = useState<string | null>(null);
-
-  const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
-
-  // Fetch user role on mount
-  useEffect(() => {
-    async function fetchUserRole() {
-      const { data, error } = await supabase.rpc('get_user_role');
-      if (!error) setUserRole(data);
-    }
-    if (isAuthenticated) fetchUserRole();
-  }, [isAuthenticated]);
-
-  // Redirect to login if not authenticated
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/login');
-    }
-  }, [isAuthenticated, router]);
-
-  if (!isAuthenticated) {
-    return null; // Will redirect in useEffect
+export default async function ProfilePage() {
+  const supabase = createSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    redirect('/login');
   }
 
-  if (subscriptionLoading) {
-    return (
-      <div className="flex justify-center items-center min-h-screen text-white text-xl">
-        Loading subscription...
-      </div>
-    );
-  }
+  // Fetch profile data from 'profiles' table
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', user.id)
+    .single();
+
+  // Compose UserState for AccountTab and SubscriptionTab
+  const userState = {
+    id: user.id,
+    email: user.email || '',
+    username: profile?.username || '',
+    fullName: profile?.full_name || '',
+    avatarUrl: profile?.avatar_url || '',
+    isLoading: false,
+    isAuthenticated: true,
+    error: null,
+    subscription: profile?.subscription || { type: 'FREE', projectLimit: 1 },
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-black to-gray-900 py-24">
@@ -52,7 +39,7 @@ export default function ProfilePage() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">
             Account Settings
-            {userRole === 'super_user' && (
+            {profile?.role === 'super_user' && (
               <span className="ml-4 px-3 py-1 bg-gradient-to-r from-yellow-400 to-pink-500 text-white text-xs font-bold rounded-full shadow">ADMIN</span>
             )}
           </h1>
@@ -62,7 +49,7 @@ export default function ProfilePage() {
         </div>
 
         <div className="bg-slate-800/30 rounded-2xl p-6 shadow-xl border border-gray-700">
-          <Tabs defaultValue="account" className="w-full" onValueChange={setActiveTab}>
+          <Tabs defaultValue="account" className="w-full">
             <TabsList className="grid grid-cols-3 mb-8">
               <TabsTrigger value="account" className="flex items-center gap-2">
                 <User className="h-4 w-4" />
@@ -77,15 +64,12 @@ export default function ProfilePage() {
                 <span>Settings</span>
               </TabsTrigger>
             </TabsList>
-            
             <TabsContent value="account">
-              <AccountTab user={{ id, email, username, fullName, avatarUrl, isAuthenticated, subscription, isLoading, error }} />
+              <AccountTab user={userState} />
             </TabsContent>
-            
             <TabsContent value="subscription">
-              <SubscriptionTab user={{ id, email, username, fullName, avatarUrl, isAuthenticated, subscription, isLoading, error }} />
+              <SubscriptionTab user={userState} />
             </TabsContent>
-            
             <TabsContent value="settings">
               <SettingsTab />
             </TabsContent>
