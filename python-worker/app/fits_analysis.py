@@ -932,8 +932,13 @@ def analyze_fits_headers(header: fits.header.Header) -> FitsAnalysisResult:
         confidence_factors.append(0.2)  # Has filter info
         if result.filter_info.manufacturer:
             confidence_factors.append(0.1)  # Known manufacturer
-    
-    result.confidence = min(1.0, sum(confidence_factors))
+
+    confidence = min(1.0, sum(confidence_factors))
+    # Penalize zero or negative exposure for light frames
+    if result.type == 'light' and (header.get('EXPTIME') is not None and header.get('EXPTIME') <= 0):
+        confidence = max(0.0, confidence - 0.5)
+        result.warnings.append('Exposure time is zero or negative for light frame')
+    result.confidence = confidence
     
     # Check for missing essential metadata
     check_missing_metadata(result)

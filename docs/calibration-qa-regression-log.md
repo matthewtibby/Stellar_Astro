@@ -2883,3 +2883,16 @@
 | Date       | Tester   | Test Area         | Description/Scenario                | Automated? | Result   | Issue/Bug Ref | Notes                |
 |------------|----------|-------------------|-------------------------------------|------------|----------|---------------|----------------------|
 |            |          |                   |                                     |            |          |               |                      |
+| 2025-05-15 | matthewcarter-lang | Calibration Regression | Golden dataset regression test suite | Yes | Fail |  | See pytest output for details. |
+| 2025-05-15 | matthewcarter-lang | Calibration Regression | Golden dataset regression test suite | Yes | Fail |  | See pytest output for details. |
+| 2025-05-15 | matthewcarter-lang | Calibration Regression | test_light_frame_detection in test_fits_analysis.py | Yes | FAILED | BUG-1747297687 | See bug log. |
+| 2025-05-15 | matthewcarter-lang | Calibration Regression | test_dark_frame_detection in test_fits_analysis.py | Yes | FAILED | BUG-1747297688 | See bug log. |
+| 2025-05-15 | matthewcarter-lang | Calibration Regression | test_flat_frame_detection in test_fits_analysis.py | Yes | FAILED | BUG-1747297689 | See bug log. |
+| 2025-05-15 | matthewcarter-lang | Calibration Regression | test_bias_frame_detection in test_fits_analysis.py | Yes | FAILED | BUG-1747297690 | See bug log. |
+| 2025-05-15 | matthewcarter-lang | Calibration Regression | test_low_confidence_cases in test_fits_analysis.py | Yes | FAILED | BUG-1747297691 | See bug log. |
+| 2025-05-15 | matthewcarter-lang | Calibration Regression | Golden dataset regression test suite | Yes | Fail |  | See pytest output for details. |
+| 2025-05-15 | matthewcarter-lang | Calibration Regression | test_dark_frame_detection in test_fits_analysis.py | Yes | FAILED | BUG-1747297829 | See bug log. |
+| 2025-05-15 | matthewcarter-lang | Calibration Regression | test_flat_frame_detection in test_fits_analysis.py | Yes | FAILED | BUG-1747297830 | See bug log. |
+| 2025-05-15 | matthewcarter-lang | Calibration Regression | test_bias_frame_detection in test_fits_analysis.py | Yes | FAILED | BUG-1747297831 | See bug log. |
+| 2025-05-15 | matthewcarter-lang | Calibration Regression | test_low_confidence_cases in test_fits_analysis.py | Yes | FAILED | BUG-1747297832 | See bug log. |
+| 2025-05-15 | matthewcarter-lang | Calibration Regression | Golden dataset regression test suite | Yes | Fail |  | See pytest output for details. |
