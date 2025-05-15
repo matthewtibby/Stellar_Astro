@@ -192,3 +192,5 @@
 - Upload speed/ETA display: Show real-time upload speed and estimated time remaining during uploads. (**Status: Backlog**)
 - Equipment auto-detection: Automatically detect telescope/camera/filter info from FITS headers or metadata. (**Status: Backlog**)
 - "Import from previous" option: Let users import settings, templates, or files from a previous project when creating a new one. (**Status: Backlog**) 
+*Calibration*
+Resumable/chunked uploads 
