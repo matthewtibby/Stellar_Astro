@@ -584,11 +584,14 @@ The following table summarizes the calibration options and parameters that must 
 ---
 
 ### Future Features Backlog (Advanced Calibration & Dev Improvements)
-
-#### Calibration
-- Accessibility: keyboard shortcuts, mobile responsiveness, screen reader support.
-- Help & onboarding: inline help links, glossary, first-time user walkthrough.
-- Advanced/power user features: batch processing (create all masters), custom scripts/expressions, export/import calibration settings, master frame versioning, diagnostics summary, flat dark support.
+- Winsorized Sigma Clipping
+- Percentile Clipping
+- Multipoint Dark Scaling
+- Bad Pixel Mapping (user-uploaded or auto-generated)
+- Flat Field Normalisation
+- Master Frame Weighting
+- **Project membership and per-project role management (collaborators, viewers, invites)**
+- Write minimal TypeScript type definitions for clamdjs (virus scanning integration)
 
 **Supporting Tools/Libraries:**
 - numpy, cupy
@@ -1368,4 +1371,4 @@ This section outlines a practical, step-by-step checklist for building both the 
 ### Live Preview Image Generation
 - The UI will support live preview image generation in the Master X Preview box for each calibration type (Dark, Flat, Bias).
 - The backend/algorithm should provide a preview image (e.g., PNG or JPEG) as soon as possible during or after master frame creation, so users can see results immediately.
-- Preview should update automatically when a new master is created or settings are changed. 
+- Preview should update automatically when a new master is created or settings are changed.
