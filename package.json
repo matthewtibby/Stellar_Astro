@@ -18,7 +18,8 @@
     "test": "node cli/scaffold.js test",
     "test:setup": "node cli/scaffold.js test --setup",
     "init-env": "node cli/scaffold.js init-env",
-    "help": "node cli/scaffold.js help"
+    "help": "node cli/scaffold.js help",
+    "test:integration": "jest test/*.integration.test.ts"
   },
   "dependencies": {
     "@heroicons/react": "^2.1.1",
