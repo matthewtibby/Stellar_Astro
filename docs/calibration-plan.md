@@ -195,6 +195,26 @@
 - Python: `astropy`, `ccdproc`, `numpy`, `scipy`, `fitsio`, `celery` (for jobs).
 - Node.js: API gateway, job orchestration, user/session management.
 
+#### e. **Frontend: Upcoming & Planned Features**
+- Real image preview: Support zoom/pan and before/after toggle for master frame previews.
+- Histogram: Add stats overlay (mean, median, min, max, stddev) and warnings for clipping or other issues.
+- UI controls: Add a reset button for each frame type's settings, a reset all button, and a save preset button for calibration settings.
+- Progress indicator, job status, and success confirmation: UI should show progress bar/spinner during master creation, job status (queued/running/failed), and a toast/banner on success.
+
+### 7.2. Calibration UI → Backend/Algorithm Requirements
+
+The following table summarizes the calibration options and parameters that must be supported by the backend and algorithm layer, as required by the current UI design. Each calibration type (Master Dark, Master Flat, Master Bias) has its own set of options for beginner and advanced modes. All options must be supported via API and reflected in job submission payloads. Each calibration type's options are independent; no global settings.
+
+| Calibration Type | Beginner Options | Advanced Options |
+|------------------|------------------|------------------|
+| **Master Dark**  | - Stacking Method: Median, Mean | - Stacking Method: Median, Mean, Winsorized, Linear Fit<br>- Sigma/Kappa Threshold (for relevant methods)<br>- Dark Frame Scaling (+factor)<br>- Bias Subtraction<br>- Amp Glow Suppression<br>- Temperature Matching<br>- Exposure Matching<br>- Cosmetic Correction (method, threshold)<br>- Custom Rejection Expression |
+| **Master Flat**  | - Stacking Method: Mean, Median, Min/Max Rejection | - Stacking Method: Sigma, Winsorized, Linear Fit, Adaptive Weighted, Entropy Weighted<br>- Sigma/Kappa Threshold (for relevant methods)<br>- Weight Parameter (for weighted methods)<br>- Cosmetic Correction (method, threshold)<br>- Custom Rejection Expression |
+| **Master Bias**  | - Stacking Method: Median | - Stacking Method: Median, Sigma, Winsorized, Linear Fit<br>- Sigma/Kappa Threshold (for relevant methods)<br>- Cosmetic Correction (method, threshold)<br>- Custom Rejection Expression |
+
+- Tooltips and defaults in UI should be reflected in backend parameter validation.
+- Each calibration type's options are independent; no global settings.
+- All options must be available via API and job payloads for full automation and reproducibility.
+
 ---
 
 ## 8. Testing & Validation Plan
@@ -564,14 +584,11 @@
 ---
 
 ### Future Features Backlog (Advanced Calibration & Dev Improvements)
-- Winsorized Sigma Clipping
-- Percentile Clipping
-- Multipoint Dark Scaling
-- Bad Pixel Mapping (user-uploaded or auto-generated)
-- Flat Field Normalisation
-- Master Frame Weighting
-- **Project membership and per-project role management (collaborators, viewers, invites)**
-- Write minimal TypeScript type definitions for clamdjs (virus scanning integration)
+
+#### Calibration
+- Accessibility: keyboard shortcuts, mobile responsiveness, screen reader support.
+- Help & onboarding: inline help links, glossary, first-time user walkthrough.
+- Advanced/power user features: batch processing (create all masters), custom scripts/expressions, export/import calibration settings, master frame versioning, diagnostics summary, flat dark support.
 
 **Supporting Tools/Libraries:**
 - numpy, cupy
@@ -1184,71 +1201,171 @@
 
 ---
 
-## Backend Build Tickets Checklist
+## Integration & End-to-End Testing Checklist
 
-- [x] Project & User Management
-    - Implement project creation, membership, and role management endpoints
-    - Implement user authentication and session management (Supabase Auth/JWT)
-- [x] Calibration Frame Upload & Storage
-    - [x] Design the API contract for uploading calibration frames (FITS/RAW)
-    - [x] Implement a secure POST endpoint (e.g., /api/projects/:projectId/calibration-frames/upload)
-    - [x] Require authentication and project ownership for uploads
-    - [x] Accept file, frame type, metadata (camera, exposure, ISO/gain, temp, filter, date, etc.), and optional tags/labels
-    - [x] Validate file type (FITS, RAW, etc.) and size (enforce limits)
-    - [x] Validate required metadata fields and permissions
-    - [x] Check for duplicate files (by hash/metadata) and warn if duplicate
-    - [x] (Optional for MVP) Virus/malware scan on upload
-    - [x] Store files in Supabase storage bucket (calibrated-frames or raw-frames) using the path convention: /projectId/userId/frameType/fileId_filename.fits  
-        - [x] Implemented: File is uploaded to Supabase storage with unique path after validation.
-    - [x] Generate and store a unique file ID and path
-    - [x] Store a CalibrationFrame record in the database with: id, user_id, project_id, type, file_url, metadata (JSON), created_at, tags/labels, version, archived (boolean)
-    - [x] Index on user_id, project_id, type, and archived for fast queries
-    - [x] Return a success response with the new frame's metadata and file URL
-    - [x] Return clear error messages for validation/storage failures
-    - [x] Ensure the endpoint is ready for frontend integration (drag-and-drop, progress, etc.)
-    - [x] (Optional) Support resumable/chunked uploads for large files in the future
-    - [x] Write unit tests for file validation and metadata handling
-    - [x] Write integration tests for the full upload flow (API + storage + DB)
-    - [x] Add regression tests for edge cases (large files, missing metadata, permission errors)
-    - [x] Add unit tests for file validation logic
+- [x] **Implement API Endpoints for Calibration Jobs** (scaffolded, all endpoints are placeholders)
+    - [x] Calibration job submission (upload frames, start job) (scaffolded, placeholder)
+    - [x] Job status polling (scaffolded, placeholder)
+    - [x] Retrieve results (calibrated frames, diagnostics, logs) (scaffolded, placeholder; comparison logic to be implemented)
+- [x] **Write Integration Tests (Full Stack)** (scaffolded, placeholder)
+    - [x] Simulate user flow: upload → calibrate → download/diagnostics via API (scaffolded, placeholder)
+    - [x] Use real/golden FITS datasets for validation (scaffolded, placeholder; comparison logic to be implemented)
+    - [x] Automate tests to run in CI/CD (scaffolded, GitHub Actions workflow in place; TODO: backend services)
+- [ ] **Validate Golden Dataset Regression via API**
+    - [ ] Submit golden dataset jobs through API
+    - [ ] Compare API outputs to expected results
+    - [ ] Log and track any discrepancies or bugs
+- [ ] **Frontend Integration (Optional, but recommended)**
+    - [ ] Upload files via UI
+    - [ ] Start calibration jobs from UI
+    - [ ] Display job status and results in UI
+    - [ ] Ensure seamless user experience
 
-**API Contract Note:**
-- For a Next.js/TypeScript/Supabase stack, the recommended approach is to define the API contract using TypeScript interfaces/types for request/response objects. This ensures type safety and seamless integration with your frontend and backend code.
-- Optionally, you can generate OpenAPI (Swagger) docs from your TypeScript types using tools like `tsoa` or `openapi-typescript`, but TypeScript-first is the most developer-friendly and scalable for your stack.
+---
 
-- [x] Master Frame Stacking
-    - Implement backend logic for master frame stacking (median, mean, sigma-clipping, kappa-sigma)
-    - Support advanced options (user-selected stacking method, thresholds)
-    - Store master frames and metadata in storage/database
-- [x] Calibration Pipeline
-    - Implement calibration job submission endpoint
-    - Build pipeline logic for bias/dark/flat subtraction/division, order control
-    - Integrate advanced algorithms (dark optimization, cosmetic correction, hot/dead pixel maps)
-    - Store data provenance chain for each calibrated light
-- [x] Diagnostics & Heuristic Warnings
-    - Generate and store diagnostics (histograms, SNR, warnings, flat frame analysis)
-    - Implement heuristic warnings (exposure/resolution mismatch, clipping, noise, SNR)
-- [x] Job Queue & Worker Infrastructure
-    - Set up Celery (with Redis/RabbitMQ) for job queueing
-    - Implement worker logic for processing calibration jobs
-    - Add monitoring and error handling for jobs
-- [x] API Endpoints for Jobs & Results
-    - Implement endpoints for job submission, status polling, and result retrieval
-    - Secure all endpoints with authentication and project/user scoping
-    - Expose diagnostics, logs, and downloadable results
-- [x] Quota & Rate Limiting
-    - Implement per-user/project quota tracking (jobs, storage)
-    - Add API endpoints for quota visibility
-- [x] Logging, Monitoring, and Alerts
-    - Integrate structured logging for all backend services
-    - Set up monitoring and alerting for job failures, quota overages, and system health
-- [x] Testable Mocks & Emulator Mode
-    - Implement mock job mode for UI/CI development (fake uploads/results)
-- [x] Unit & Integration Tests
-    - Write unit tests for all backend logic
-    - Write integration tests for end-to-end calibration pipeline
-    - Add golden dataset regression tests
+## Backend Wiring Checklist for E2E Integration
 
-**Note:** MVP will proceed with single-owner projects only; multi-user collaboration is deferred to a future release.
+- [x] **/calibration-frames/upload**
+    - [x] Accept multipart/form-data with FITS file and metadata
+    - [x] Save file to local or cloud storage
+    - [x] Return unique frameId for uploaded file
+- [x] **/calibration-jobs/submit**
+    - [x] Accept POST with input_light_ids, master frame IDs, and settings
+    - [x] Start calibration job (mock or real)
+    - [x] Return jobId and initial status
+- [x] **/calibration-jobs/status**
+    - [x] Accept GET with jobId
+    - [x] Return job status (pending, running, complete, failed)
+    - [x] Update status as job progresses (mock or real)
+- [x] **/calibration-jobs/results**
+    - [x] Accept GET with jobId
+    - [x] Return URLs to calibrated frames, diagnostics JSON, and logs
+- [x] **Diagnostics JSON Endpoint**
+    - [x] Serve diagnostics JSON for completed jobs (can use golden expected JSON for now)
 
---- 
+---
+
+## 12. Wiring Real Python Backend to API (Integration Checklist)
+
+- [ ] 1. **Review the Python Worker's API**
+    - Read the Python worker's FastAPI/Flask code or OpenAPI docs.
+    - Note endpoints, required fields, and file handling (file paths, URLs, or uploads).
+- [ ] 2. **Update Next.js API Job Submission (`submit.ts`)**
+    - Replace mock logic with real HTTP POST to Python worker's `/jobs/submit` (or equivalent).
+    - Pass correct payload (including file references).
+    - Return jobId from Python worker to client.
+- [ ] 3. **Update Status and Results Endpoints**
+    - Update `/status.ts` and `/results.ts` to proxy requests to Python worker.
+    - Return real job status/results to client.
+- [ ] 4. **File Handling**
+    - Ensure files are saved in a location accessible to both Next.js and Python worker (shared disk, or upload to known directory).
+    - Pass file paths or URLs in job submission payload.
+- [ ] 5. **Test End-to-End**
+    - Submit a job via API/UI.
+    - Poll for status and fetch results.
+    - Validate output is real, not mock.
+
+### 12.1. Python Worker Calibration Job Endpoints Checklist
+
+- [x] **Implement Calibration Job Endpoints in Python Worker**
+    - [x] 1. **Submit Calibration Job**
+        - [x] Add POST `/jobs/submit` endpoint
+        - [x] Accepts: input file paths/IDs, calibration settings, project/user/job metadata
+        - [x] Returns: job_id, initial status, validation errors
+    - [x] 2. **Check Job Status**
+        - [x] Add GET `/jobs/status?job_id=...` endpoint
+        - [x] Returns: job_id, status, progress info, error message, timestamps
+    - [x] 3. **Retrieve Job Results**
+        - [x] Add GET `/jobs/results?job_id=...` endpoint
+        - [x] Returns: job_id, output file URLs/paths, diagnostics JSON, warnings/errors, summary stats
+    - [x] 4. **Background calibration task logic**
+        - [x] Launches async job, updates status, stores results/diagnostics
+
+### 12.2. Next.js API Integration Checklist
+
+- [x] Update `/calibration-jobs/submit.ts` to forward job submission to Python worker `/jobs/submit`
+- [x] Update `/calibration-jobs/status.ts` to proxy to Python worker `/jobs/status`
+- [x] Update `/calibration-jobs/results.ts` to proxy to Python worker `/jobs/results`
+- [x] Full flow is now wired for real backend integration (no mocks)
+
+---
+
+# 🚦 Hybrid/Parallel Implementation Plan: Frontend & Real Calibration Logic
+
+This section outlines a practical, step-by-step checklist for building both the frontend (UI/UX) and real calibration backend in parallel. Use this as a living reference to track progress and coordinate milestones.
+
+## 1. Frontend Development (UI/UX)
+
+- [ ] **Scaffold Calibration Frame Upload UI**
+  - Build drag-and-drop/file picker for FITS/RAW files
+  - Metadata entry form (camera, exposure, etc.)
+  - Output: Users can upload files and enter metadata; UI shows progress/errors
+
+- [ ] **Implement Calibration Library Management**
+  - List, filter, and tag uploaded frames
+  - Archive/delete/version frames
+  - Output: Users can manage and organize calibration frames in the UI
+
+- [ ] **Build Calibration Job Wizard**
+  - Step-by-step job creation (select lights, masters, options)
+  - Advanced mode toggle for expert settings
+  - Output: Users can configure and submit calibration jobs via UI
+
+- [ ] **Results Dashboard & Diagnostics Preview**
+  - Show job status, download links, before/after previews, diagnostics
+  - Output: Users can view job progress, results, and diagnostics in a clear dashboard
+
+- [ ] **Onboarding & Help Integration**
+  - Add tooltips, glossary, and walkthroughs for new users
+  - Output: Users receive guidance and support throughout the workflow
+
+- [ ] **Accessibility & Mobile Responsiveness**
+  - Ensure all UI is keyboard accessible, screen reader friendly, and mobile-ready
+  - Output: UI meets accessibility standards and works on all devices
+
+## 2. Backend: Real Calibration Logic
+
+- [ ] **Implement Real Calibration Pipeline in Python Worker**
+  - Use AstroPy/ccdproc for bias, dark, flat, and light frame processing
+  - Output: Worker can process real FITS files and generate calibrated outputs
+
+- [ ] **Diagnostics Generation (Real Data)**
+  - Compute real histograms, stats, and warnings from processed frames
+  - Output: Diagnostics JSON/images reflect actual data, not mocks
+
+- [ ] **Master Frame Stacking (Production Logic)**
+  - Median, mean, sigma-clipping, and advanced stacking
+  - Output: Master frames are generated from real user data
+
+- [ ] **Robust Error Handling & Logging**
+  - Log all job events, errors, and diagnostics
+  - Output: All jobs are auditable and errors are actionable
+
+- [ ] **Performance & Scalability Testing**
+  - Test with large datasets and concurrent jobs
+  - Output: Backend is robust under real-world load
+
+## 3. Integration & Sync Milestones
+
+- [ ] **Connect Frontend to Real Backend API**
+  - Point UI to real calibration endpoints (not mocks)
+  - Output: UI submits jobs and displays results from real backend
+
+- [ ] **End-to-End User Flow Validation**
+  - Run golden dataset and real user data through full pipeline via UI
+  - Output: Users can upload, calibrate, and download results seamlessly
+
+- [ ] **User Feedback & Iteration**
+  - Collect feedback from beta users on both UI and calibration results
+  - Output: Actionable improvements for both frontend and backend
+
+- [ ] **Final QA & Release Readiness**
+  - Regression, accessibility, and performance tests pass
+  - Output: System is ready for production/beta release
+
+---
+
+### Live Preview Image Generation
+- The UI will support live preview image generation in the Master X Preview box for each calibration type (Dark, Flat, Bias).
+- The backend/algorithm should provide a preview image (e.g., PNG or JPEG) as soon as possible during or after master frame creation, so users can see results immediately.
+- Preview should update automatically when a new master is created or settings are changed. 
