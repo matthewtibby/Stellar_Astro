@@ -1,5 +1,7 @@
+import { User } from '@supabase/supabase-js';
+
 export type ProcessingStatus = 'pending' | 'processing' | 'completed' | 'failed';
-export type FileType = 'light' | 'dark' | 'flat' | 'bias' | 'master' | 'final';
+export type FileType = 'light' | 'dark' | 'bias' | 'flat' | 'master-dark' | 'master-bias' | 'master-flat' | 'calibrated' | 'stacked' | 'aligned' | 'pre-processed' | 'post-processed';
 
 export interface FitsFile {
   id: string;
@@ -25,14 +27,41 @@ export interface ProcessingStep {
   updatedAt: string;
 }
 
+export interface ProjectMetadata {
+  date: string;
+  location?: {
+    latitude?: number;
+    longitude?: number;
+    name?: string;
+  };
+  equipment?: {
+    telescope?: string;
+    camera?: string;
+    filters?: string[];
+  };
+  notes?: string;
+}
+
 export interface Project {
+  [x: string]: any;
   id: string;
   userId: string;
   title: string;
   description?: string;
+  metadata: ProjectMetadata;
+  status: 'draft' | 'in_progress' | 'completed' | 'archived' | 'deleted';
   isPublic: boolean;
   createdAt: string;
   updatedAt: string;
+  version: number;
+  steps: {
+    id: string;
+    name: string;
+    status: 'pending' | 'in_progress' | 'completed';
+    completedAt?: string;
+  }[];
+  isFavorite?: boolean;
+  tags?: string[];
 }
 
 export interface PipelineState {
@@ -45,18 +74,23 @@ export interface PipelineState {
 }
 
 export interface UserState {
-  id: string | null;
-  email: string | null;
-  username: string | null;
-  fullName: string | null;
-  avatarUrl: string | null;
-  isAuthenticated: boolean;
+  id: string;
+  email: string;
+  username: string;
+  fullName: string;
+  avatarUrl: string;
   isLoading: boolean;
+  isAuthenticated: boolean;
   error: string | null;
+  subscription: {
+    type: 'FREE' | 'Monthly' | 'Annual' | 'Super';
+    projectLimit: number;
+  };
 }
 
 export interface UserStore extends UserState {
-  setUser: (user: Partial<UserState>) => void;
+  user: User | null;
+  setUser: (user: User) => void;
   setLoading: (isLoading: boolean) => void;
   setError: (error: string | null) => void;
   logout: () => void;
@@ -74,4 +108,14 @@ export interface AppStore extends AppState {
   toggleSidebar: () => void;
   setNotifications: (enabled: boolean) => void;
   setLanguage: (language: string) => void;
+}
+
+export interface StorageFile {
+  name: string;
+  path: string;
+  size: number;
+  created_at: string;
+  type: FileType;
+  url?: string;
+  metadata?: Record<string, any>;
 } 

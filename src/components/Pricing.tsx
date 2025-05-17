@@ -1,1 +1,67 @@
-export default function Pricing() { return ( <section className="py-16 bg-gray-800 text-white"><div className="container mx-auto px-4"><h2 className="text-3xl font-bold mb-8 text-center">Pricing Plans</h2><div className="grid grid-cols-1 md:grid-cols-3 gap-8"><div className="p-6 bg-gray-700 rounded-lg"><h3 className="text-xl font-semibold mb-4">Basic</h3><p className="text-3xl font-bold mb-4">$9.99<span className="text-sm">/month</span></p><ul className="space-y-2 mb-6"><li>Basic image processing</li><li>5GB storage</li><li>Email support</li></ul><button className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">Get Started</button></div><div className="p-6 bg-gray-700 rounded-lg"><h3 className="text-xl font-semibold mb-4">Pro</h3><p className="text-3xl font-bold mb-4">$19.99<span className="text-sm">/month</span></p><ul className="space-y-2 mb-6"><li>Advanced processing</li><li>20GB storage</li><li>Priority support</li></ul><button className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">Get Started</button></div><div className="p-6 bg-gray-700 rounded-lg"><h3 className="text-xl font-semibold mb-4">Enterprise</h3><p className="text-3xl font-bold mb-4">$49.99<span className="text-sm">/month</span></p><ul className="space-y-2 mb-6"><li>Custom processing</li><li>100GB storage</li><li>24/7 support</li></ul><button className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">Get Started</button></div></div></div></section> ); }
+import { PricingCard } from '@/components/PricingCard';
+import { CurrencyProvider } from '@/components/CurrencyProvider';
+
+const FREE_FEATURES = [
+  'Basic calibration tools',
+  'Up to 3 active projects',
+  'Watermarked exports',
+  'Max 2K resolution exports',
+  'Community support'
+];
+
+const PRO_MONTHLY_FEATURES = [
+  'Full processing suite',
+  'Unlimited projects',
+  'No watermarks',
+  'Full resolution exports',
+  'Advanced calibration tools',
+  'Priority support',
+  '30-day storage retention'
+];
+
+const PRO_ANNUAL_FEATURES = [
+  'Everything in Pro Monthly',
+  '2 months free',
+  '90-day storage retention',
+  'Priority email support'
+];
+
+export default function Pricing() {
+  return (
+    <CurrencyProvider>
+      <section className="py-24 relative">
+        {/* Radial spotlight background */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(56,189,248,0.15),transparent_50%)] pointer-events-none z-0" />
+        <div className="container relative z-10">
+          <h2 className="text-3xl font-bold mb-12 text-center">Pricing Plans</h2>
+          <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto px-4">
+            <PricingCard
+              title="Free"
+              description="Perfect for getting started"
+              price={0}
+              interval="month"
+              features={FREE_FEATURES}
+            />
+            <PricingCard
+              title="Pro Monthly"
+              description="Full access, monthly billing"
+              price={15}
+              interval="month"
+              features={PRO_MONTHLY_FEATURES}
+            />
+            <PricingCard
+              title="Pro Annual"
+              description="Save 33% with annual billing"
+              price={120}
+              interval="year"
+              features={PRO_ANNUAL_FEATURES}
+              highlighted={true}
+              badge="Best Value"
+              savings="Save £60 per year"
+            />
+          </div>
+        </div>
+      </section>
+    </CurrencyProvider>
+  );
+}

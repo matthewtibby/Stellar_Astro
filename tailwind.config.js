@@ -1,36 +1,17 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   content: [
-    './pages/**/*.{js,ts,jsx,tsx,mdx}',
-    './components/**/*.{js,ts,jsx,tsx,mdx}',
     './app/**/*.{js,ts,jsx,tsx,mdx}',
+    './components/**/*.{js,ts,jsx,tsx,mdx}',
     './src/**/*.{js,ts,jsx,tsx,mdx}',
   ],
   theme: {
-    extend: {
-      backgroundImage: {
-        'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
-        'gradient-conic': 'conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))',
-      },
-      colors: {
-        'astro': {
-          'dark': '#0a0a0a',
-          'primary': '#3b82f6',
-        },
-        white: '#ffffff',
-        gray: {
-          100: '#f3f4f6',
-          200: '#e5e7eb',
-          900: '#111827',
-        },
-      }
-    },
+    extend: {},
   },
   plugins: [],
   safelist: [
-    'bg-white',
-    'text-gray-900',
-    'antialiased',
+    'bg-black',
+    'text-white',
     'font-bold',
     'tracking-tight',
     'text-4xl',
@@ -54,15 +35,25 @@ module.exports = {
     'focus-visible:ring-offset-2',
     'disabled:pointer-events-none',
     'disabled:opacity-50',
-    'bg-astro-primary',
-    'text-white',
-    'hover:bg-astro-primary/90',
-    'bg-gray-100',
-    'hover:bg-gray-200',
+    'bg-indigo-600',
+    'hover:bg-indigo-700',
+    'bg-slate-800',
+    'hover:bg-slate-700',
     'mx-auto',
     'max-w-7xl',
     'px-4',
     'sm:px-6',
-    'lg:px-8'
-  ]
+    'lg:px-8',
+    'bg-slate-800/70',
+    'backdrop-blur-md',
+    'rounded-2xl',
+    'border',
+    'border-slate-700/50',
+    'hover:shadow-[0_0_15px_rgba(59,130,246,0.2)]',
+    'hover:border-blue-500/50',
+    'hover:transform',
+    'hover:scale-105',
+    'transition-all',
+    'duration-300',
+  ],
 } 

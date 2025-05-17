@@ -1,13 +1,11 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Currency, 
   currencies, 
   currencySymbols, 
   formatPrice, 
-  convertPrice, 
-  EXCHANGE_RATES,
   getCurrencyFromLocale 
 } from '@/lib/currency';
 
@@ -23,11 +21,10 @@ const pricingTiers: PricingTier[] = [
     name: 'Free',
     price: 0,
     features: [
-      'Basic image processing',
-      '1GB storage',
-      'Community support',
-      'Standard exports',
-      'Limited to 100 images/month'
+      '3 projects',
+      'Standard resolution exports',
+      'Stellar-Astro signature on exports',
+      'Basic support'
     ],
     buttonText: 'Get Started'
   },
@@ -35,28 +32,26 @@ const pricingTiers: PricingTier[] = [
     name: 'Monthly',
     price: 15,
     features: [
-      'Advanced image processing',
-      '10GB storage',
-      'Priority email support',
-      'Premium exports',
-      'Unlimited images',
-      'API access'
+      'Unlimited projects',
+      'High resolution exports',
+      'No watermarks',
+      'Priority support',
+      'Advanced processing tools'
     ],
-    buttonText: 'Start Monthly Plan'
+    buttonText: 'Start your 7-day free trial'
   },
   {
     name: 'Annual',
-    price: 10,  // Monthly equivalent of £120/year
+    price: 120,
     features: [
-      'Everything in Monthly plan',
-      '20GB storage',
-      'Priority 24/7 support',
-      'Custom exports',
-      'Unlimited images',
-      'API access',
+      'Unlimited projects',
+      'High resolution exports',
+      'No watermarks',
+      'Priority support',
+      'Advanced processing tools',
       '2 months free'
     ],
-    buttonText: 'Start Annual Plan'
+    buttonText: 'Start your 7-day free trial'
   }
 ];
 
@@ -78,19 +73,32 @@ export default function PricingSection() {
     }
   }, []);
 
-  const getPrice = useMemo(() => (basePrice: number, isAnnual = false) => {
-    try {
-      const adjustedPrice = isAnnual ? basePrice * 12 : basePrice;
-      const convertedPrice = convertPrice(adjustedPrice, 'GBP', selectedCurrency, EXCHANGE_RATES);
-      return formatPrice(
-        convertedPrice,
-        selectedCurrency
+  const formatPriceDisplay = (price: number, isAnnual: boolean = false) => {
+    if (price === 0) {
+      return (
+        <>
+          {formatPrice(0, selectedCurrency)}
+          <span className="text-sm text-gray-400">/month</span>
+        </>
       );
-    } catch (err) {
-      console.error('Error converting price:', err);
-      return formatPrice(basePrice, 'GBP');
     }
-  }, [selectedCurrency]);
+    
+    if (isAnnual) {
+      return (
+        <>
+          {formatPrice(price, selectedCurrency)}
+          <span className="text-sm text-gray-400">/year</span>
+        </>
+      );
+    }
+
+    return (
+      <>
+        {formatPrice(price, selectedCurrency)}
+        <span className="text-sm text-gray-400">/month</span>
+      </>
+    );
+  };
 
   if (isLoading) {
     return (
@@ -113,10 +121,10 @@ export default function PricingSection() {
   }
 
   return (
-    <section className="py-20 bg-gray-900" aria-labelledby="pricing-heading">
-      <div className="container mx-auto px-4">
+    <section className="relative py-24 overflow-hidden" aria-labelledby="pricing-heading">
+      <div className="container mx-auto px-4 relative">
         <div className="flex justify-between items-center mb-12">
-          <h2 id="pricing-heading" className="text-4xl font-bold">Pricing</h2>
+          <h2 id="pricing-heading" className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">Pricing</h2>
           <div className="flex items-center space-x-2">
             <label htmlFor="currency-select" className="text-gray-400">
               Currency:
@@ -147,12 +155,7 @@ export default function PricingSection() {
             >
               <h3 id={`tier-${tier.name}`} className="text-2xl font-semibold mb-4">{tier.name}</h3>
               <p className="text-4xl font-bold mb-6">
-                {tier.price === 0 ? 'Free' : (
-                  <>
-                    {getPrice(tier.price, tier.name === 'Annual')}
-                    <span className="text-sm text-gray-400">/{tier.name.toLowerCase()}</span>
-                  </>
-                )}
+                {formatPriceDisplay(tier.price, tier.name === 'Annual')}
               </p>
               {tier.name === 'Annual' && (
                 <p className="text-indigo-400 mb-4">Save 2 months with annual billing</p>

@@ -34,3 +34,18 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Supabase SSR Authentication
+
+This project uses [`@supabase/ssr`](https://supabase.com/docs/guides/auth/server-side/nextjs) for all authentication and server-side rendering (SSR) with Supabase. 
+
+- **All legacy usage of `@supabase/auth-helpers-nextjs` has been removed.**
+- Middleware and API routes now use `createServerClient` from `@supabase/ssr` for secure, modern SSR authentication.
+- See `middleware.ts` and `src/lib/supabase.ts` for implementation details.
+
+**If you are looking for examples of SSR authentication, refer to these files:**
+- `middleware.ts` (protects routes, handles session cookies)
+- `pages/api/dashboard-stats.ts` (uses SSR client for authenticated API access)
+- `src/lib/supabase.ts` (exports helpers for browser and server usage)
+
+For more information, see the [Supabase SSR docs](https://supabase.com/docs/guides/auth/server-side/nextjs).

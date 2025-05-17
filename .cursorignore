@@ -1,0 +1,20 @@
+# Only ignore specific files
+node_modules/
+.next/
+out/
+build/
+coverage/
+.DS_Store
+*.pem
+*.log
+*.tsbuildinfo
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv
+venv/
+ENV/
+*.zip
+test*.fits 

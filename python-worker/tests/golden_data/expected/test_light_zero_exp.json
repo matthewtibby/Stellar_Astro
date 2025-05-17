@@ -1,0 +1,4 @@
+{
+  "type": "light",
+  "warnings": ["Exposure time is zero or negative for light frame"]
+}
