@@ -19,7 +19,7 @@ def test_calibration_pipeline_regression():
 
     for fits_file in input_files:
         input_path = os.path.join(INPUT_DIR, fits_file)
-        expected_json = os.path.splitext(fits_file)[0] + '.json'
+        expected_json = fits_file.replace('.fits', '.json')
         expected_path = os.path.join(EXPECTED_DIR, expected_json)
         assert os.path.exists(expected_path), f"Expected result file missing: {expected_json}"
 
@@ -37,4 +37,8 @@ def test_calibration_pipeline_regression():
         # Compare key metadata fields (optional, can expand as needed)
         for key, exp_val in expected.get('metadata', {}).items():
             actual_val = result.metadata.get(key)
-            assert actual_val == exp_val, f"{fits_file}: Metadata field '{key}' = {actual_val}, expected {exp_val}" 
+            assert actual_val == exp_val, f"{fits_file}: Metadata field '{key}' = {actual_val}, expected {exp_val}"
+        # Check warnings if present
+        if 'warnings' in expected:
+            for warn in expected['warnings']:
+                assert any(warn in w for w in result.warnings), f"{fits_file}: Expected warning '{warn}' not found in {result.warnings}" 
