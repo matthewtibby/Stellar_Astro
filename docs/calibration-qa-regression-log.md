@@ -2896,3 +2896,18 @@
 | 2025-05-15 | matthewcarter-lang | Calibration Regression | test_bias_frame_detection in test_fits_analysis.py | Yes | FAILED | BUG-1747297831 | See bug log. |
 | 2025-05-15 | matthewcarter-lang | Calibration Regression | test_low_confidence_cases in test_fits_analysis.py | Yes | FAILED | BUG-1747297832 | See bug log. |
 | 2025-05-15 | matthewcarter-lang | Calibration Regression | Golden dataset regression test suite | Yes | Fail |  | See pytest output for details. |
+| 2025-05-15 | matthewcarter-lang | Calibration Regression | Golden dataset regression test suite | Yes | Fail |  | See pytest output for details. |
+| 2025-05-15 | matthewcarter-lang | Calibration Regression | Golden dataset regression test suite | Yes | Fail |  | See pytest output for details. |
+| 2025-05-15 | matthewcarter-lang | Calibration Regression | Golden dataset regression test suite | Yes | Fail |  | See pytest output for details. |
+| 2025-05-15 | matthewcarter-lang | Calibration Regression | Golden dataset regression test suite | Yes | Fail |  | See pytest output for details. |
+| 2025-05-15 | matthewcarter-lang | Calibration Regression | Golden dataset regression test suite | Yes | Fail |  | See pytest output for details. |
+| 2025-05-15 | matthewcarter-lang | Calibration Regression | Golden dataset regression test suite | Yes | Pass |  | See pytest output for details. |
+| 2025-05-15 | matthewcarter-lang | Calibration Regression | Golden dataset regression test suite | Yes | Fail |  | See pytest output for details. |
+| 2025-05-15 | matthewcarter-lang | Calibration Regression | Golden dataset regression test suite | Yes | Fail |  | See pytest output for details. |
+| 2025-05-15 | matthewcarter-lang | Calibration Regression | Golden dataset regression test suite | Yes | Pass |  | See pytest output for details. |
+| 2025-05-15 | matthewcarter-lang | Calibration Regression | Golden dataset regression test suite | Yes | Fail |  | See pytest output for details. |
+| 2025-05-15 | matthewcarter-lang | Calibration Regression | Golden dataset regression test suite | Yes | Fail |  | See pytest output for details. |
+| 2025-05-15 | matthewcarter-lang | Calibration Regression | Golden dataset regression test suite | Yes | Fail |  | See pytest output for details. |
+| 2025-05-15 | matthewcarter-lang | Calibration Regression | Golden dataset regression test suite | Yes | Fail |  | See pytest output for details. |
+| 2025-05-15 | matthewcarter-lang | Calibration Regression | Golden dataset regression test suite | Yes | Fail |  | See pytest output for details. |
+| 2025-05-15 | matthewcarter-lang | Calibration Regression | Golden dataset regression test suite | Yes | Pass |  | See pytest output for details. |
