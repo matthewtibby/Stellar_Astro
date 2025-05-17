@@ -938,6 +938,27 @@ def analyze_fits_headers(header: fits.header.Header) -> FitsAnalysisResult:
     if result.type == 'light' and (header.get('EXPTIME') is not None and header.get('EXPTIME') <= 0):
         confidence = max(0.0, confidence - 0.5)
         result.warnings.append('Exposure time is zero or negative for light frame')
+
+    # Warn for unusual CCD temperature (recommended threshold: abs(temp) > 40)
+    temp = header.get('CCD-TEMP')
+    if temp is not None:
+        try:
+            if abs(float(temp)) > 40:
+                result.warnings.append(f"Unusual CCD temperature: {temp}°C")
+        except Exception:
+            pass
+
+    # Warn for unusual gain (applies to all frame types)
+    gain = header.get('GAIN')
+    if gain is not None:
+        try:
+            if float(gain) <= 0:
+                result.warnings.append("Gain is zero or negative")
+            elif float(gain) > 100:
+                result.warnings.append("Gain is unusually high")
+        except Exception:
+            pass
+
     result.confidence = confidence
     
     # Check for missing essential metadata
@@ -947,7 +968,7 @@ def analyze_fits_headers(header: fits.header.Header) -> FitsAnalysisResult:
     if result.camera_info:
         result.metadata['camera_type'] = 'Color' if result.camera_info.is_color else 'Mono'
         result.metadata['camera_model'] = result.camera_info.name
-    
+
     return result
 
 def check_common_issues(header: fits.header.Header, result: FitsAnalysisResult) -> None:

@@ -318,6 +318,90 @@ async def get_fits_metadata(file_path):
 # Example usage after validation:
 # await save_fits_metadata(file_path, project_id, user_id, metadata)
 
+# In-memory job store for prototyping
+job_store = {}
+
+async def run_calibration_job(job_id: str):
+    # Simulate calibration processing
+    job = job_store.get(job_id)
+    if not job:
+        return
+    job["status"] = "running"
+    await asyncio.sleep(2)  # Simulate processing time
+    # Store mock results/diagnostics
+    job["result"] = {
+        "calibrated_frames": [f"/output/calibrated_{i}.fits" for i in range(1, 3)],
+        "logs": f"/output/{job_id}_logs.txt"
+    }
+    job["diagnostics"] = {
+        "type": "light",
+        "warnings": ["Simulated warning: check exposure time"]
+    }
+    job["warnings"] = ["Simulated warning: check exposure time"]
+    job["status"] = "complete"
+
+@app.post("/jobs/submit")
+async def submit_calibration_job(request: Request, background_tasks: BackgroundTasks):
+    """
+    Submit a new calibration job.
+    Expects JSON payload with:
+      - input_files: list of file paths/IDs
+      - settings: dict of calibration settings (optional)
+      - project_id, user_id, job metadata
+    Returns: job_id, initial status, validation errors
+    """
+    data = await request.json()
+    job_id = f"job_{''.join(random.choices(string.ascii_lowercase + string.digits, k=8))}"
+    job_store[job_id] = {
+        "status": "pending",
+        "input_files": data.get("input_files", []),
+        "settings": data.get("settings", {}),
+        "project_id": data.get("project_id"),
+        "user_id": data.get("user_id"),
+        "created_at": time.time(),
+        "result": None,
+        "diagnostics": None,
+        "warnings": [],
+        "error": None
+    }
+    background_tasks.add_task(run_calibration_job, job_id)
+    return {"job_id": job_id, "status": "pending"}
+
+@app.get("/jobs/status")
+async def get_job_status(job_id: str):
+    """
+    Get the status of a calibration job.
+    Returns: job_id, status, progress info, error message, timestamps
+    """
+    job = job_store.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return {
+        "job_id": job_id,
+        "status": job["status"],
+        "created_at": job["created_at"],
+        "error": job["error"]
+    }
+
+@app.get("/jobs/results")
+async def get_job_results(job_id: str):
+    """
+    Get the results of a completed calibration job.
+    Returns: job_id, output file URLs/paths, diagnostics JSON, warnings/errors, summary stats
+    """
+    job = job_store.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job["status"] != "complete":
+        raise HTTPException(status_code=400, detail="Job not complete")
+    return {
+        "job_id": job_id,
+        "results": job["result"] or {},
+        "diagnostics": job.get("diagnostics", {}),
+        "warnings": job.get("warnings", []),
+        "error": job["error"]
+    }
+
 if __name__ == "__main__":
     # Force port 8000 and prevent port changes
     os.environ['PORT'] = '8000'  # Override any environment variables
