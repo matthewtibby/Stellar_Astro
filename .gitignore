@@ -39,3 +39,32 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Temporary files
+*.zip
+test*.fits
+Example ASTRO PROJECT/
+
+# Python
+*.pyc
+__pycache__/
+*.egg-info/
+
+
+# Test files
+create_test_fits.py
+test_fits_file.py

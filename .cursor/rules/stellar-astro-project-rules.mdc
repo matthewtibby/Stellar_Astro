@@ -1,0 +1,81 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+from pathlib import Path
+
+# Define the content for the Markdown file
+markdown_content = """# 🚀 Cursor Project Rules for Stellar Astro
+
+## 1. File System and Node.js APIs
+- ✅ Only use `fs`, `fs/promises`, `path`, and other Node.js core modules in:
+  - `getServerSideProps`
+  - `getStaticProps`
+  - `getServerSidePaths`
+  - API routes (`/pages/api/*`)
+  - Utility files imported exclusively in server-only code
+- ❌ Do not import or call Node.js core modules (including `fs`, `fs/promises`, `node:*`) in:
+  - React components
+  - Shared utilities used on the client
+  - Client-side hooks
+
+> ✅ Prefer: `import { readFile } from 'fs/promises';`  
+> ❌ Avoid: `import { readFile } from 'node:fs/promises';`
+
+---
+
+## 2. Module Imports
+- Prefer relative imports (`../`, `./`) or Next.js-supported module aliases.
+- Do not use `node:` protocol imports unless explicitly supported by all parts of the toolchain.
+- When unsure if a file is server- or client-side, default to server-only usage for anything requiring system-level access.
+
+---
+
+## 3. File/Directory Structure Standards
+- `/components/`: Client-side React components only (no Node APIs).
+- `/lib/`: Shared utilities. Split into:
+  - `/lib/server/` – Server-only logic (e.g. file reading, API keys, processing)
+  - `/lib/client/` – Safe for use in browser (e.g. formatting helpers, UI logic)
+- `/pages/api/`: API routes only. Do not import React components or use browser-specific code here.
+
+---
+
+## 4. Error Prevention and Debugging
+- Always check `typeof window === 'undefined'` before executing Node-only logic.
+- Use dynamic imports (`await import('fs/promises')`) if importing conditionally inside universal/shared modules.
+- When debugging build errors:
+  - Start by checking the import tree for `fs`, `path`, `node:*`, etc.
+  - Use `console.log(typeof window)` to verify execution context.
+
+---
+
+## 5. Webpack / Next.js Compatibility
+- Do not attempt to polyfill or shim native Node.js modules for browser use unless you are building a full custom server-side tool.
+- If you need access to system files, always route through an API endpoint or server-rendered function.
+- Avoid unnecessary changes to `next.config.js` unless required for integrations.
+
+---
+
+## 6. Build and Deployment Sanity Checks
+- All code in `/components`, `/hooks`, `/pages` (excluding API routes) must build cleanly for the browser.
+- Run `next build` locally before committing potentially risky changes (e.g., new utilities, libraries).
+- Use `npm run lint` and `npm run typecheck` before PRs.
+
+---
+
+## 🎯 Project-Specific Guidance: Stellar Astro
+- **File processing, FITS handling, and disk access** should be abstracted into `/lib/server/astro-processing.ts` and accessed via API routes or SSR.
+- **No direct FITS decoding in React components** — browser can't handle this.
+- Centralize `fs` usage behind a clean API layer (`/pages/api/project/load.ts`, etc.)
+- Split utilities between **data logic (server)** and **UI logic (client)** to keep things modular and maintainable.
+"""
+
+# Define the file path
+file_path = Path("/mnt/data/cursor-project-rules.md")
+
+# Write the content to the file
+file_path.write_text(markdown_content)
+
+# Return the path to the saved file
+file_path.name

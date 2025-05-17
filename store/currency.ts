@@ -1,10 +1,10 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { CurrencyCode } from '@/lib/currency';
+import type { Currency } from '@/lib/currency';
 
 interface CurrencyState {
-  currency: CurrencyCode;
-  setCurrency: (currency: CurrencyCode) => void;
+  currency: Currency;
+  setCurrency: (currency: Currency) => void;
 }
 
 export const useCurrencyStore = create<CurrencyState>()(

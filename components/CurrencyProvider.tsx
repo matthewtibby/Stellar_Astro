@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Currency, getDefaultCurrency, CURRENCIES } from '@/lib/currency';
+import { Currency, getCurrencyFromLocale, CURRENCIES } from '@/lib/currency';
 
 interface CurrencyContextType {
   currency: Currency;
@@ -27,9 +27,9 @@ export function CurrencyProvider({ children }: CurrencyProviderProps) {
   const [currency, setCurrency] = useState<Currency>('GBP');
 
   useEffect(() => {
-    // Get user's country code from browser locale
-    const countryCode = navigator.language.split('-')[1] || 'GB';
-    const defaultCurrency = getDefaultCurrency(countryCode);
+    // Get user's locale from browser
+    const locale = navigator.language;
+    const defaultCurrency = getCurrencyFromLocale(locale);
     setCurrency(defaultCurrency);
   }, []);
 
