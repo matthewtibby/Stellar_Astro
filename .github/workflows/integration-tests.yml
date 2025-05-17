@@ -1,0 +1,51 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  integration-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build Next.js app
+        run: npm run build
+
+      - name: Start Next.js app
+        run: npm run start &
+
+      - name: Wait for server to be ready
+        run: |
+          for i in {1..30}; do
+            if nc -z localhost 3000; then
+              echo "Server is up!"
+              break
+            fi
+            echo "Waiting for server..."
+            sleep 2
+          done
+
+      # TODO: Set up Python worker, Supabase, or any other backend services if needed
+      # - name: Start Python worker
+      #   run: ...
+      # - name: Start Supabase
+      #   run: ...
+
+      - name: Run integration tests
+        run: npm run test:integration
+        # Or use: npx jest test/calibration-jobs.integration.test.ts
+
+      # The job will fail if any test fails 
