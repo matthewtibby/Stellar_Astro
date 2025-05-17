@@ -34,6 +34,7 @@ import ProjectCard, { ProjectCardSkeleton } from '@/src/components/ui/ProjectCar
 import type { HydratedProject } from '@/src/lib/server/getDashboardProjects';
 import { getDashboardProjects } from '@/src/lib/server/getDashboardProjects';
 import { useProjectStore } from '@/src/store/project';
+import CalibrationScaffoldUI from '@/src/components/CalibrationScaffoldUI';
 
 const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
 
@@ -481,8 +482,9 @@ export default function DashboardClient({ user, projects }: { user: { id: string
                             />
                           )}
                           {currentStep === 1 && (
-                            <div className="bg-gray-800/50 rounded-lg p-8 text-center text-blue-200 border border-gray-700">
-                              <p>Processing UI coming soon.</p>
+                            <div className="bg-gray-800/50 rounded-lg p-8 text-blue-200 border border-gray-700">
+                              <h2 className="text-2xl font-bold mb-4">Calibration & Master Frame Creation</h2>
+                              <CalibrationScaffoldUI projectId={activeProject.id} />
                             </div>
                           )}
                           {currentStep === 2 && (
