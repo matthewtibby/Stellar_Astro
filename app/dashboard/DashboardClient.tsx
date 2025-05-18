@@ -13,10 +13,9 @@ import EquipmentAutocomplete from '@/src/components/EquipmentAutocomplete';
 import FitsFileUpload from '@/src/components/FitsFileUpload';
 import StepsIndicator from '@/src/components/StepsIndicator';
 import FileManagementPanel from '@/src/components/FileManagementPanel';
-import { type StorageFile } from '@/src/utils/storage';
+import { type StorageFile, getFilesByType } from '@/src/utils/storage';
 import { createBrowserClient, supabaseUrl, supabaseAnonKey } from '@/src/lib/supabase';
 import { generateUUID } from '@/src/utils/uuid';
-import { UniversalFileUpload } from '@/src/components/UniversalFileUpload';
 import ProjectManagementPanel from '@/src/components/ProjectManagementPanel';
 import FileComparisonPanel from '@/src/components/FileComparisonPanel';
 import ProjectChecklist from '@/src/components/ProjectChecklist';
@@ -35,6 +34,9 @@ import type { HydratedProject } from '@/src/lib/server/getDashboardProjects';
 import { getDashboardProjects } from '@/src/lib/server/getDashboardProjects';
 import { useProjectStore } from '@/src/store/project';
 import CalibrationScaffoldUI from '@/src/components/CalibrationScaffoldUI';
+import CalibrationUploadScaffold from '@/src/components/CalibrationUploadScaffold';
+import { TooltipProvider } from '@/src/components/ui/tooltip';
+import type { FileType } from '@/src/types/fits';
 
 const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
 
@@ -104,6 +106,38 @@ export default function DashboardClient({ user, projects }: { user: { id: string
         });
     }
   }, [user]);
+
+  useEffect(() => {
+    if (activeProject) {
+      // Only enable Next if there is at least one light frame
+      (async () => {
+        try {
+          const filesByType = await getFilesByType(activeProject.id);
+          const hasLight = filesByType['light'] && filesByType['light'].length > 0;
+          setHasUploadedFiles(hasLight);
+        } catch (e) {
+          setHasUploadedFiles(false);
+        }
+      })();
+    }
+  }, [activeProject]);
+
+  useEffect(() => {
+    if (currentStep === 1) {
+      document.getElementById('upload-preview-modal')?.remove();
+      document.getElementById('upload-preview-loading')?.remove();
+      document.getElementById('upload-preview-error')?.remove();
+    }
+  }, [currentStep]);
+
+  // Debug: log currentStep and which step is rendering
+  console.log('[DashboardClient] currentStep:', currentStep);
+  if (currentStep === 0 && activeProject) {
+    console.log('[DashboardClient] Rendering UPLOAD step');
+  }
+  if (currentStep === 1 && activeProject) {
+    console.log('[DashboardClient] Rendering CALIBRATION step');
+  }
 
   // Main dashboard UI
   if (!user) {
@@ -211,372 +245,405 @@ export default function DashboardClient({ user, projects }: { user: { id: string
                     </button>
                   </div>
                   {/* Sidebar and main content grid */}
-                  <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-                    {/* Sidebar */}
-                    <div className="lg:col-span-1">
-                      <div className="sticky top-24 space-y-6">
-                        {/* Files Box */}
-                        <div className="bg-gray-800/50 rounded-lg p-4 shadow-lg border border-gray-700 mb-6">
-                          <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-lg font-semibold text-white">Files</h3>
-                            <button 
-                              onClick={() => setIsFilesExpanded(!isFilesExpanded)}
-                              className="text-gray-400 hover:text-white transition-colors"
-                            >
-                              {isFilesExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-                            </button>
-                          </div>
-                          {isFilesExpanded && (
-                            <div className="space-y-4">
-                              {Object.entries(uploadedFiles).map(([type, files]) => {
-                                if (files.length === 0) return null;
-                                return (
-                                  <div key={type} className="space-y-2">
-                                    <div className="flex items-center space-x-2">
-                                      <Folder className="h-4 w-4 text-gray-400" />
-                                      <h4 className="text-sm font-medium text-gray-300 capitalize">{type} Frames</h4>
-                                      <span className="ml-auto bg-gray-700 text-gray-300 text-xs px-2 py-0.5 rounded-full">
-                                        {files.length}
-                                      </span>
-                                    </div>
-                                    <div className="pl-6 space-y-1 max-h-32 overflow-y-auto">
-                                      {files.map((file, index) => (
-                                        <div key={index} className="flex items-center space-x-2 text-sm text-gray-400">
-                                          <File className="h-3 w-3" />
-                                          <span className="truncate">{file.split('/').pop()}</span>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                        {/* View Box */}
-                        <div className="bg-gray-800/50 rounded-lg p-4 shadow-lg border border-gray-700 mb-6">
-                          <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-lg font-semibold text-white">View</h3>
-                            <div className="flex items-center space-x-2">
-                              <button
-                                className={`p-2 rounded-md ${activeView === 'grid' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-400'}`}
-                                onClick={() => setActiveView('grid')}
+                  <TooltipProvider>
+                    <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+                      {/* Sidebar */}
+                      <div className="lg:col-span-1">
+                        <div className="sticky top-24 space-y-6">
+                          {/* Files Box */}
+                          <div className="bg-gray-800/50 rounded-lg p-4 shadow-lg border border-gray-700 mb-6">
+                            <div className="flex justify-between items-center mb-4">
+                              <h3 className="text-lg font-semibold text-white">Files</h3>
+                              <button 
+                                onClick={() => setIsFilesExpanded(!isFilesExpanded)}
+                                className="text-gray-400 hover:text-white transition-colors"
                               >
-                                <Grid size={18} />
-                              </button>
-                              <button
-                                className={`p-2 rounded-md ${activeView === 'list' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-400'}`}
-                                onClick={() => setActiveView('list')}
-                              >
-                                <List size={18} />
+                                {isFilesExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
                               </button>
                             </div>
+                            {isFilesExpanded && (
+                              <div className="space-y-4">
+                                {Object.entries(uploadedFiles).map(([type, files]) => {
+                                  if (files.length === 0) return null;
+                                  return (
+                                    <div key={type} className="space-y-2">
+                                      <div className="flex items-center space-x-2">
+                                        <Folder className="h-4 w-4 text-gray-400" />
+                                        <h4 className="text-sm font-medium text-gray-300 capitalize">{type} Frames</h4>
+                                        <span className="ml-auto bg-gray-700 text-gray-300 text-xs px-2 py-0.5 rounded-full">
+                                          {files.length}
+                                        </span>
+                                      </div>
+                                      <div className="pl-6 space-y-1 max-h-32 overflow-y-auto">
+                                        {files.map((file, index) => (
+                                          <div key={index} className="flex items-center space-x-2 text-sm text-gray-400">
+                                            <File className="h-3 w-3" />
+                                            <span className="truncate">{file.split('/').pop()}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
-                        </div>
-                        {/* Workflow Steps */}
-                        <div className="bg-gray-800/50 rounded-lg p-4 shadow-lg border border-gray-700">
-                          <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-lg font-semibold text-white">Workflow Steps</h3>
-                            <button 
-                              onClick={() => setIsWorkflowExpanded(!isWorkflowExpanded)}
-                              className="text-gray-400 hover:text-white transition-colors"
-                            >
-                              {isWorkflowExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-                            </button>
-                          </div>
-                          {isWorkflowExpanded && (
-                            <div className="space-y-2">
-                              {/* Example steps, replace with your actual workflowSteps array */}
-                              {['Upload & Organize', 'Process & Stack', 'Export & Share'].map((step, idx) => (
-                                <div
-                                  key={step}
-                                  className={`flex items-center p-3 rounded-md cursor-pointer transition-colors ${
-                                    currentStep === idx ? 'bg-blue-600/20 border-l-4 border-blue-500' :
-                                    currentStep > idx ? 'bg-green-600/20' : 'hover:bg-gray-700/30'
-                                  }`}
-                                  onClick={() => setCurrentStep(idx)}
+                          {/* View Box */}
+                          <div className="bg-gray-800/50 rounded-lg p-4 shadow-lg border border-gray-700 mb-6">
+                            <div className="flex justify-between items-center mb-4">
+                              <h3 className="text-lg font-semibold text-white">View</h3>
+                              <div className="flex items-center space-x-2">
+                                <button
+                                  className={`p-2 rounded-md ${activeView === 'grid' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-400'}`}
+                                  onClick={() => setActiveView('grid')}
                                 >
-                                  <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-3 ${
-                                    currentStep === idx ? 'bg-blue-600' :
-                                    currentStep > idx ? 'bg-green-600' : 'bg-gray-700'
-                                  }`}>
-                                    {currentStep > idx ? (
-                                      <CheckCircle size={16} className="text-white" />
-                                    ) : (
-                                      <Settings size={16} className="text-white" />
-                                    )}
-                                  </div>
-                                  <span className={`flex-1 ${
-                                    currentStep === idx ? 'text-white font-medium' :
-                                    currentStep > idx ? 'text-green-300' : 'text-gray-400'
-                                  }`}>
-                                    {step}
-                                  </span>
-                                  {currentStep === idx && <ChevronDown size={16} className="text-gray-400" />}
-                                </div>
-                              ))}
+                                  <Grid size={18} />
+                                </button>
+                                <button
+                                  className={`p-2 rounded-md ${activeView === 'list' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-400'}`}
+                                  onClick={() => setActiveView('list')}
+                                >
+                                  <List size={18} />
+                                </button>
+                              </div>
                             </div>
-                          )}
+                          </div>
+                          {/* Workflow Steps */}
+                          <div className="bg-gray-800/50 rounded-lg p-4 shadow-lg border border-gray-700">
+                            <div className="flex justify-between items-center mb-4">
+                              <h3 className="text-lg font-semibold text-white">Workflow Steps</h3>
+                              <button 
+                                onClick={() => setIsWorkflowExpanded(!isWorkflowExpanded)}
+                                className="text-gray-400 hover:text-white transition-colors"
+                              >
+                                {isWorkflowExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                              </button>
+                            </div>
+                            {isWorkflowExpanded && (
+                              <div className="space-y-2">
+                                {/* Example steps, replace with your actual workflowSteps array */}
+                                {['Upload & Organize', 'Process & Stack', 'Export & Share'].map((step, idx) => (
+                                  <div
+                                    key={step}
+                                    className={`flex items-center p-3 rounded-md cursor-pointer transition-colors ${
+                                      currentStep === idx ? 'bg-blue-600/20 border-l-4 border-blue-500' :
+                                      currentStep > idx ? 'bg-green-600/20' : 'hover:bg-gray-700/30'
+                                    }`}
+                                    onClick={() => setCurrentStep(idx)}
+                                  >
+                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-3 ${
+                                      currentStep === idx ? 'bg-blue-600' :
+                                      currentStep > idx ? 'bg-green-600' : 'bg-gray-700'
+                                    }`}>
+                                      {currentStep > idx ? (
+                                        <CheckCircle size={16} className="text-white" />
+                                      ) : (
+                                        <Settings size={16} className="text-white" />
+                                      )}
+                                    </div>
+                                    <span className={`flex-1 ${
+                                      currentStep === idx ? 'text-white font-medium' :
+                                      currentStep > idx ? 'text-green-300' : 'text-gray-400'
+                                    }`}>
+                                      {step}
+                                    </span>
+                                    {currentStep === idx && <ChevronDown size={16} className="text-gray-400" />}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    {/* Main Content Area */}
-                    <div className="lg:col-span-3">
-                      {/* Breadcrumb Navigation */}
-                      <div className="flex items-center space-x-2 mb-6 text-sm">
-                        <button
-                          onClick={() => setActiveProject(null)}
-                          className="text-gray-400 hover:text-white transition-colors"
-                        >
-                          Dashboard
-                        </button>
-                        <ChevronRight size={16} className="text-gray-500" />
-                        {activeProject ? (
-                          <>
-                            <button
-                              onClick={() => setActiveProject(null)}
-                              className="text-white hover:text-blue-400 transition-colors"
+                      {/* Main Content Area */}
+                      <div className="lg:col-span-3">
+                        {/* Breadcrumb Navigation */}
+                        <div className="flex items-center space-x-2 mb-6 text-sm">
+                          <button
+                            onClick={() => setActiveProject(null)}
+                            className="text-gray-400 hover:text-white transition-colors"
+                          >
+                            Dashboard
+                          </button>
+                          <ChevronRight size={16} className="text-gray-500" />
+                          {activeProject ? (
+                            <>
+                              <button
+                                onClick={() => setActiveProject(null)}
+                                className="text-white hover:text-blue-400 transition-colors"
+                              >
+                                {activeProject.title}
+                              </button>
+                              <ChevronRight size={16} className="text-gray-500" />
+                              <span className="text-white">
+                                {['Upload & Organize', 'Process & Stack', 'Export & Share'][currentStep] || 'Step'}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-white">All Projects</span>
+                          )}
+                        </div>
+
+                        {/* Project Limit Warning */}
+                        {showLimitWarning && (
+                          <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+                            <p className="text-yellow-500">
+                              Warning: You are approaching your project limit. Free users are limited to 5 projects.
+                              Consider upgrading to Pro for unlimited projects.
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Search/Filter/Sort Controls */}
+                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+                          <div className="flex flex-1 gap-2">
+                            <input
+                              type="text"
+                              placeholder="Search projects..."
+                              value={searchTerm}
+                              onChange={e => setSearchTerm(e.target.value)}
+                              className="w-full md:w-64 px-3 py-2 bg-gray-800/50 border border-gray-700 rounded-md text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              title="Search your projects by name"
+                            />
+                            <select
+                              value={filterStatus}
+                              onChange={e => setFilterStatus(e.target.value)}
+                              className="px-3 py-2 bg-gray-800/50 border border-gray-700 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                             >
-                              {activeProject.title}
+                              <option value="">All Statuses</option>
+                              <option value="draft">Draft</option>
+                              <option value="in_progress">In Progress</option>
+                              <option value="completed">Completed</option>
+                              <option value="archived">Archived</option>
+                              <option value="deleted">Deleted</option>
+                            </select>
+                            <select
+                              value={sortBy}
+                              onChange={e => setSortBy(e.target.value)}
+                              className="px-3 py-2 bg-gray-800/50 border border-gray-700 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                              <option value="created_at">Sort by Date</option>
+                              <option value="name">Sort by Name</option>
+                            </select>
+                            <select
+                              value={sortOrder}
+                              onChange={e => setSortOrder(e.target.value as 'asc' | 'desc')}
+                              className="px-3 py-2 bg-gray-800/50 border border-gray-700 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                              <option value="desc">Desc</option>
+                              <option value="asc">Asc</option>
+                            </select>
+                          </div>
+                          {/* Tag and favorite controls */}
+                          <div className="flex flex-wrap gap-2 mb-4">
+                            <button
+                              className={`flex items-center px-3 py-1 rounded-md border ${filterFavorites ? 'bg-yellow-500 text-black border-yellow-600' : 'bg-gray-800 text-gray-200 border-gray-700'}`}
+                              onClick={() => setFilterFavorites(f => !f)}
+                              title="Show only favorite projects"
+                            >
+                              <Star className="h-4 w-4 mr-1" fill={filterFavorites ? 'currentColor' : 'none'} /> Favorites
                             </button>
-                            <ChevronRight size={16} className="text-gray-500" />
-                            <span className="text-white">
-                              {['Upload & Organize', 'Process & Stack', 'Export & Share'][currentStep] || 'Step'}
-                            </span>
-                          </>
+                            <select
+                              value={filterTag}
+                              onChange={e => setFilterTag(e.target.value)}
+                              className="px-3 py-1 rounded-md border bg-gray-800 text-gray-200 border-gray-700"
+                              title="Filter by tag"
+                            >
+                              <option value="">All Tags</option>
+                              {/* Replace with your tags logic if available */}
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Onboarding Banner */}
+                        {showOnboarding && (
+                          <div className="mb-6 p-4 bg-blue-900/70 border border-blue-500/30 rounded-lg flex flex-col md:flex-row md:items-center md:justify-between gap-4 relative">
+                            <div className="flex items-center gap-3">
+                              <Info className="text-blue-300 h-6 w-6" />
+                              <div>
+                                <h2 className="text-lg font-semibold text-blue-100 mb-1">Welcome to Stellar Astro!</h2>
+                                <p className="text-blue-200 text-sm mb-2">Get started by:</p>
+                                <ol className="list-decimal list-inside text-blue-100 text-sm space-y-1">
+                                  <li><b>Create a Project</b>: Start something new to organise your astrophotography work.</li>
+                                  <li><b>Edit an Existing Project</b>: Continue working on or updating a project you've already started.</li>
+                                  <li><b>Start a Collaboration</b>: Invite others to join and work together on a project.</li>
+                                </ol>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => setShowOnboarding(false)}
+                              className="absolute top-2 right-2 md:static md:ml-6 px-3 py-1 bg-blue-700 text-blue-100 rounded hover:bg-blue-800 transition-colours"
+                              title="Dismiss onboarding"
+                            >
+                              Dismiss
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Project List/Grid and Details/Workflow */}
+                        {activeProject ? (
+                          <div className="p-4 space-y-4">
+                            {/* Workflow Stepper */}
+                            <StepsIndicator
+                              steps={workflowSteps}
+                              currentStep={currentStep}
+                            />
+                            {/* Breadcrumb Navigation for steps */}
+                            {activeProject && (
+                              <div className="flex items-center space-x-2 mb-6 text-sm">
+                                <button
+                                  onClick={() => setActiveProject(null)}
+                                  className="text-gray-400 hover:text-white transition-colors"
+                                >
+                                  Dashboard
+                                </button>
+                                <ChevronRight size={16} className="text-gray-500" />
+                                <button
+                                  onClick={() => setActiveProject(null)}
+                                  className="text-white hover:text-blue-400 transition-colors"
+                                >
+                                  {activeProject.title}
+                                </button>
+                                <ChevronRight size={16} className="text-gray-500" />
+                                <span className="text-white">
+                                  {['Upload & Organize', 'Process & Stack', 'Export & Share'][currentStep] || 'Step'}
+                                </span>
+                              </div>
+                            )}
+                            {/* Step Content: Only show one step at a time */}
+                            {currentStep === 0 && activeProject && (
+                              <div id="upload-step-root">
+                                {/* Onboarding/empty state illustration and tips */}
+                                <div className="flex flex-col items-center justify-center mb-8">
+                                  <svg width="100" height="100" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <rect x="20" y="40" width="80" height="50" rx="10" fill="#232946" />
+                                    <rect x="30" y="50" width="60" height="8" rx="4" fill="#3b4a6b" />
+                                    <rect x="30" y="62" width="40" height="8" rx="4" fill="#3b4a6b" />
+                                    <circle cx="60" cy="90" r="6" fill="#3b4a6b" />
+                                    <rect x="45" y="20" width="30" height="10" rx="5" fill="#232946" />
+                                    <rect x="50" y="25" width="20" height="3" rx="1.5" fill="#3b4a6b" />
+                                  </svg>
+                                  <h2 className="text-2xl font-bold text-blue-200 mt-4 mb-2">Upload Your FITS Files</h2>
+                                  <p className="text-blue-300 text-center max-w-xl">
+                                    Start by uploading your raw astrophotography frames. Drag and drop or browse for your <span className="font-semibold text-blue-400">Light</span>, <span className="font-semibold text-blue-400">Dark</span>, <span className="font-semibold text-blue-400">Flat</span>, and <span className="font-semibold text-blue-400">Bias</span> files. You can always add more later!
+                                  </p>
+                                </div>
+                                <CalibrationUploadScaffold
+                                  projectId={activeProject.id}
+                                  userId={user.id}
+                                  onUploadComplete={() => setHasUploadedFiles(true)}
+                                />
+                                {/* Navigation Buttons */}
+                                <div className="flex justify-end mt-6">
+                                  <button
+                                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                                    onClick={() => setCurrentStep(1)}
+                                    disabled={!hasUploadedFiles}
+                                  >
+                                    Next
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                            {currentStep === 1 && activeProject && (
+                              <div id="calibration-step-root">
+                                {/* Breadcrumb and Previous button */}
+                                <div className="flex items-center mb-4">
+                                  <button
+                                    className="px-3 py-1 bg-gray-700 text-white rounded hover:bg-gray-600 mr-4"
+                                    onClick={() => setCurrentStep(0)}
+                                  >
+                                    Previous
+                                  </button>
+                                  <span className="text-blue-200 font-semibold">Process & Stack</span>
+                                </div>
+                                <div className="bg-gray-800/50 rounded-lg p-8 text-blue-200 border border-gray-700">
+                                  <h2 className="text-2xl font-bold mb-4">Calibration & Master Frame Creation</h2>
+                                  <CalibrationScaffoldUI projectId={activeProject.id} />
+                                </div>
+                              </div>
+                            )}
+                            {currentStep === 2 && (
+                              <div className="mb-4 p-4 bg-blue-900/70 border border-blue-500/30 rounded-lg text-blue-100">
+                                <b>Step 3: Export your results</b><br />
+                                Download or share your processed images. (UI coming soon)
+                              </div>
+                            )}
+                          </div>
                         ) : (
-                          <span className="text-white">All Projects</span>
+                          <>
+                            {activeView === 'grid' ? (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {loading || !projectList ? (
+                                  Array.from({ length: 4 }).map((_, i) => <ProjectCardSkeleton key={i} />)
+                                ) : (
+                                  projectList.map((project: HydratedProject) => (
+                                    <ProjectCard
+                                      key={project.id}
+                                      id={project.id}
+                                      targetName={project.targetName || project.title || '—'}
+                                      status={['new', 'in_progress', 'completed'].includes(project.status) ? (project.status as 'new' | 'in_progress' | 'completed') : 'new'}
+                                      thumbnailUrl={project.thumbnailUrl || ''}
+                                      userImageUrl={project.userImageUrl}
+                                      creationDate={project.creationDate || ''}
+                                      frameCount={typeof project.frameCount === 'number' ? project.frameCount : 0}
+                                      fileSize={typeof project.fileSize === 'number' ? `${(project.fileSize / 1024 / 1024).toFixed(2)} MB` : '—'}
+                                      equipment={Array.isArray(project.equipment) ? project.equipment.map(e => ({
+                                        type: e.type as 'telescope' | 'camera' | 'filter',
+                                        name: e.name
+                                      })) : []}
+                                      target={project.target}
+                                      title={project.title}
+                                      updatedAt={project.updatedAt}
+                                      onDelete={() => handleDeleteProject(project.id)}
+                                      onProjectDeleted={handleProjectDeleted}
+                                      onClick={() => {
+                                        setActiveProject(project);
+                                        setCurrentStep(0);
+                                      }}
+                                    />
+                                  ))
+                                )}
+                              </div>
+                            ) : (
+                              <div className="space-y-4">
+                                {loading || !projectList ? (
+                                  Array.from({ length: 4 }).map((_, i) => <ProjectCardSkeleton key={i} />)
+                                ) : (
+                                  projectList.map((project: HydratedProject) => (
+                                    <ProjectCard
+                                      key={project.id}
+                                      id={project.id}
+                                      targetName={project.targetName || project.title || '—'}
+                                      status={['new', 'in_progress', 'completed'].includes(project.status) ? (project.status as 'new' | 'in_progress' | 'completed') : 'new'}
+                                      thumbnailUrl={project.thumbnailUrl || ''}
+                                      userImageUrl={project.userImageUrl}
+                                      creationDate={project.creationDate || ''}
+                                      frameCount={typeof project.frameCount === 'number' ? project.frameCount : 0}
+                                      fileSize={typeof project.fileSize === 'number' ? `${(project.fileSize / 1024 / 1024).toFixed(2)} MB` : '—'}
+                                      equipment={Array.isArray(project.equipment) ? project.equipment.map(e => ({
+                                        type: e.type as 'telescope' | 'camera' | 'filter',
+                                        name: e.name
+                                      })) : []}
+                                      target={project.target}
+                                      title={project.title}
+                                      updatedAt={project.updatedAt}
+                                      onDelete={() => handleDeleteProject(project.id)}
+                                      onProjectDeleted={handleProjectDeleted}
+                                      onClick={() => {
+                                        setActiveProject(project);
+                                        setCurrentStep(0);
+                                      }}
+                                    />
+                                  ))
+                                )}
+                              </div>
+                            )}
+                          </>
                         )}
                       </div>
-
-                      {/* Project Limit Warning */}
-                      {showLimitWarning && (
-                        <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
-                          <p className="text-yellow-500">
-                            Warning: You are approaching your project limit. Free users are limited to 5 projects.
-                            Consider upgrading to Pro for unlimited projects.
-                          </p>
-                        </div>
-                      )}
-
-                      {/* Search/Filter/Sort Controls */}
-                      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-                        <div className="flex flex-1 gap-2">
-                          <input
-                            type="text"
-                            placeholder="Search projects..."
-                            value={searchTerm}
-                            onChange={e => setSearchTerm(e.target.value)}
-                            className="w-full md:w-64 px-3 py-2 bg-gray-800/50 border border-gray-700 rounded-md text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            title="Search your projects by name"
-                          />
-                          <select
-                            value={filterStatus}
-                            onChange={e => setFilterStatus(e.target.value)}
-                            className="px-3 py-2 bg-gray-800/50 border border-gray-700 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          >
-                            <option value="">All Statuses</option>
-                            <option value="draft">Draft</option>
-                            <option value="in_progress">In Progress</option>
-                            <option value="completed">Completed</option>
-                            <option value="archived">Archived</option>
-                            <option value="deleted">Deleted</option>
-                          </select>
-                          <select
-                            value={sortBy}
-                            onChange={e => setSortBy(e.target.value)}
-                            className="px-3 py-2 bg-gray-800/50 border border-gray-700 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          >
-                            <option value="created_at">Sort by Date</option>
-                            <option value="name">Sort by Name</option>
-                          </select>
-                          <select
-                            value={sortOrder}
-                            onChange={e => setSortOrder(e.target.value as 'asc' | 'desc')}
-                            className="px-3 py-2 bg-gray-800/50 border border-gray-700 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          >
-                            <option value="desc">Desc</option>
-                            <option value="asc">Asc</option>
-                          </select>
-                        </div>
-                        {/* Tag and favorite controls */}
-                        <div className="flex flex-wrap gap-2 mb-4">
-                          <button
-                            className={`flex items-center px-3 py-1 rounded-md border ${filterFavorites ? 'bg-yellow-500 text-black border-yellow-600' : 'bg-gray-800 text-gray-200 border-gray-700'}`}
-                            onClick={() => setFilterFavorites(f => !f)}
-                            title="Show only favorite projects"
-                          >
-                            <Star className="h-4 w-4 mr-1" fill={filterFavorites ? 'currentColor' : 'none'} /> Favorites
-                          </button>
-                          <select
-                            value={filterTag}
-                            onChange={e => setFilterTag(e.target.value)}
-                            className="px-3 py-1 rounded-md border bg-gray-800 text-gray-200 border-gray-700"
-                            title="Filter by tag"
-                          >
-                            <option value="">All Tags</option>
-                            {/* Replace with your tags logic if available */}
-                          </select>
-                        </div>
-                      </div>
-
-                      {/* Onboarding Banner */}
-                      {showOnboarding && (
-                        <div className="mb-6 p-4 bg-blue-900/70 border border-blue-500/30 rounded-lg flex flex-col md:flex-row md:items-center md:justify-between gap-4 relative">
-                          <div className="flex items-center gap-3">
-                            <Info className="text-blue-300 h-6 w-6" />
-                            <div>
-                              <h2 className="text-lg font-semibold text-blue-100 mb-1">Welcome to Stellar Astro!</h2>
-                              <p className="text-blue-200 text-sm mb-2">Get started by:</p>
-                              <ol className="list-decimal list-inside text-blue-100 text-sm space-y-1">
-                                <li><b>Create a Project</b>: Start something new to organise your astrophotography work.</li>
-                                <li><b>Edit an Existing Project</b>: Continue working on or updating a project you've already started.</li>
-                                <li><b>Start a Collaboration</b>: Invite others to join and work together on a project.</li>
-                              </ol>
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => setShowOnboarding(false)}
-                            className="absolute top-2 right-2 md:static md:ml-6 px-3 py-1 bg-blue-700 text-blue-100 rounded hover:bg-blue-800 transition-colours"
-                            title="Dismiss onboarding"
-                          >
-                            Dismiss
-                          </button>
-                        </div>
-                      )}
-
-                      {/* Project List/Grid and Details/Workflow */}
-                      {activeProject ? (
-                        <div className="p-4 space-y-4">
-                          {/* Workflow Stepper */}
-                          <StepsIndicator
-                            steps={workflowSteps}
-                            currentStep={currentStep}
-                          />
-                          {/* Onboarding Banner for each step */}
-                          {currentStep === 0 && (
-                            <div className="mb-4 p-4 bg-blue-900/70 border border-blue-500/30 rounded-lg text-blue-100">
-                              <b>Step 1: Upload your FITS files</b><br />
-                              Drag and drop your FITS files below. Upload at least one light frame to continue.
-                            </div>
-                          )}
-                          {currentStep === 1 && (
-                            <div className="mb-4 p-4 bg-blue-900/70 border border-blue-500/30 rounded-lg text-blue-100">
-                              <b>Step 2: Process your data</b><br />
-                              Run processing steps on your uploaded files. (UI coming soon)
-                            </div>
-                          )}
-                          {currentStep === 2 && (
-                            <div className="mb-4 p-4 bg-blue-900/70 border border-blue-500/30 rounded-lg text-blue-100">
-                              <b>Step 3: Export your results</b><br />
-                              Download or share your processed images. (UI coming soon)
-                            </div>
-                          )}
-                          {/* Step Content */}
-                          {currentStep === 0 && (
-                            <UniversalFileUpload
-                              projectId={activeProject.id}
-                              userId={user?.id}
-                              onUploadComplete={() => {/* Optionally advance to next step if files uploaded */}}
-                              onValidationError={() => {}}
-                            />
-                          )}
-                          {currentStep === 1 && (
-                            <div className="bg-gray-800/50 rounded-lg p-8 text-blue-200 border border-gray-700">
-                              <h2 className="text-2xl font-bold mb-4">Calibration & Master Frame Creation</h2>
-                              <CalibrationScaffoldUI projectId={activeProject.id} />
-                            </div>
-                          )}
-                          {currentStep === 2 && (
-                            <div className="bg-gray-800/50 rounded-lg p-8 text-center text-blue-200 border border-gray-700">
-                              <p>Export and sharing UI coming soon.</p>
-                            </div>
-                          )}
-                          {/* Navigation Buttons */}
-                          <div className="flex justify-between mt-6">
-                            <button
-                              className="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600 disabled:opacity-50"
-                              onClick={() => setCurrentStep(s => Math.max(0, s - 1))}
-                              disabled={currentStep === 0}
-                            >
-                              Previous
-                            </button>
-                            <button
-                              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-                              onClick={() => setCurrentStep(s => Math.min(2, s + 1))}
-                              disabled={currentStep === 2}
-                            >
-                              Next
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <>
-                          {activeView === 'grid' ? (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                              {loading || !projectList ? (
-                                Array.from({ length: 4 }).map((_, i) => <ProjectCardSkeleton key={i} />)
-                              ) : (
-                                projectList.map((project: HydratedProject) => (
-                                  <ProjectCard
-                                    key={project.id}
-                                    id={project.id}
-                                    targetName={project.targetName || project.title || '—'}
-                                    status={['new', 'in_progress', 'completed'].includes(project.status) ? (project.status as 'new' | 'in_progress' | 'completed') : 'new'}
-                                    thumbnailUrl={project.thumbnailUrl || ''}
-                                    userImageUrl={project.userImageUrl}
-                                    creationDate={project.creationDate || ''}
-                                    frameCount={typeof project.frameCount === 'number' ? project.frameCount : 0}
-                                    fileSize={typeof project.fileSize === 'number' ? `${(project.fileSize / 1024 / 1024).toFixed(2)} MB` : '—'}
-                                    equipment={Array.isArray(project.equipment) ? project.equipment.map(e => ({
-                                      type: e.type as 'telescope' | 'camera' | 'filter',
-                                      name: e.name
-                                    })) : []}
-                                    target={project.target}
-                                    title={project.title}
-                                    updatedAt={project.updatedAt}
-                                    onDelete={() => handleDeleteProject(project.id)}
-                                    onProjectDeleted={handleProjectDeleted}
-                                    onClick={() => setActiveProject(project)}
-                                  />
-                                ))
-                              )}
-                            </div>
-                          ) : (
-                            <div className="space-y-4">
-                              {loading || !projectList ? (
-                                Array.from({ length: 4 }).map((_, i) => <ProjectCardSkeleton key={i} />)
-                              ) : (
-                                projectList.map((project: HydratedProject) => (
-                                  <ProjectCard
-                                    key={project.id}
-                                    id={project.id}
-                                    targetName={project.targetName || project.title || '—'}
-                                    status={['new', 'in_progress', 'completed'].includes(project.status) ? (project.status as 'new' | 'in_progress' | 'completed') : 'new'}
-                                    thumbnailUrl={project.thumbnailUrl || ''}
-                                    userImageUrl={project.userImageUrl}
-                                    creationDate={project.creationDate || ''}
-                                    frameCount={typeof project.frameCount === 'number' ? project.frameCount : 0}
-                                    fileSize={typeof project.fileSize === 'number' ? `${(project.fileSize / 1024 / 1024).toFixed(2)} MB` : '—'}
-                                    equipment={Array.isArray(project.equipment) ? project.equipment.map(e => ({
-                                      type: e.type as 'telescope' | 'camera' | 'filter',
-                                      name: e.name
-                                    })) : []}
-                                    target={project.target}
-                                    title={project.title}
-                                    updatedAt={project.updatedAt}
-                                    onDelete={() => handleDeleteProject(project.id)}
-                                    onProjectDeleted={handleProjectDeleted}
-                                    onClick={() => setActiveProject(project)}
-                                  />
-                                ))
-                              )}
-                            </div>
-                          )}
-                        </>
-                      )}
                     </div>
-                  </div>
+                  </TooltipProvider>
                 </div>
               </div>
             </div>

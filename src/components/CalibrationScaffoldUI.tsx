@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Info, Loader2, CheckCircle2, XCircle, RefreshCw, Star, Moon, Sun, Zap } from 'lucide-react';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './ui/tooltip';
+import CalibrationUploadScaffold from './CalibrationUploadScaffold';
 
 const FRAME_TYPES = [
   { key: 'dark', label: 'Master Dark' },
@@ -269,6 +270,10 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string }> = ({ projectId }) =
 
   return (
     <TooltipProvider>
+      {/* Upload Scaffold: Step 1 */}
+      <div className="h-8" />
+      <div className="border-b border-blue-900/40 mb-8" />
+      {/* Existing calibration workflow UI follows */}
       <div className="flex flex-col h-full bg-[#0a0d13]/80 rounded-2xl shadow-2xl border border-[#232946]/60 p-6 backdrop-blur-md">
         {/* Success Toast/Banner with Confetti */}
         {showSuccess && (

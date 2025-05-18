@@ -568,6 +568,16 @@ export async function getFilesByType(projectId: string): Promise<Record<FileType
     const userId = user.id;
     console.log('[getFilesByType] User authenticated:', userId);
 
+    // Fetch all project_files for this project
+    const { data: projectFiles, error: pfError } = await client
+      .from('project_files')
+      .select('file_path, file_type, metadata')
+      .eq('project_id', projectId)
+      .eq('user_id', userId);
+    if (pfError) {
+      console.error('[getFilesByType] Error fetching project_files:', pfError);
+    }
+
     // Initialize the result object with empty arrays for each type
     const result: Record<FileType, StorageFile[]> = {
       'light': [],
@@ -591,7 +601,6 @@ export async function getFilesByType(projectId: string): Promise<Record<FileType
         .from(STORAGE_BUCKETS.RAW_FRAMES)
         .list(folderPath);
       if (error) {
-        // Only log error if folder doesn't exist, not a fatal error
         if (error.message && error.message.includes('The resource was not found')) {
           continue;
         }
@@ -600,15 +609,18 @@ export async function getFilesByType(projectId: string): Promise<Record<FileType
       }
       if (files && Array.isArray(files)) {
         for (const file of files) {
-          // Only include files, not folders
           if (file.name && !file.name.endsWith('/')) {
+            // Try to find matching project_files row for this file
+            const dbMeta = projectFiles?.find(
+              (pf) => pf.file_path.endsWith(`/${type}/${file.name}`) && pf.file_type === type
+            );
             result[type].push({
               name: file.name,
               path: `${folderPath}/${file.name}`,
               size: file.metadata?.size || 0,
               created_at: file.created_at,
               type: type,
-              metadata: file.metadata
+              metadata: dbMeta?.metadata || file.metadata
             });
           }
         }
@@ -621,4 +633,8 @@ export async function getFilesByType(projectId: string): Promise<Record<FileType
     console.error('[getFilesByType] Error:', error);
     throw error;
   }
+}
+
+export async function deleteRawFrame(filePath: string): Promise<void> {
+  return deleteFitsFile(filePath);
 }
