@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { Upload, Info, X, Eye, Trash2 } from 'lucide-react';
+import { Upload, Info, X, Eye, Trash2, Lightbulb, Moon, Sun, Zap } from 'lucide-react';
 import { uploadRawFrame, deleteRawFrame, getFitsFileUrl } from '../utils/storage';
 import { getFilesByType } from '../utils/storage';
 import { type FileType } from '../types/fits';
@@ -8,10 +8,10 @@ import { useToast } from '../hooks/useToast';
 import { Tooltip, TooltipTrigger, TooltipContent } from './ui/tooltip';
 
 const FRAME_TYPES: { key: FileType; label: string; icon: React.ReactNode; tooltip: string }[] = [
-  { key: 'light', label: 'Light', icon: <Eye />, tooltip: 'Light frames: your actual images.' },
-  { key: 'dark', label: 'Dark', icon: <Info />, tooltip: 'Dark frames: sensor noise calibration.' },
-  { key: 'flat', label: 'Flat', icon: <Info />, tooltip: 'Flat frames: correct vignetting/dust.' },
-  { key: 'bias', label: 'Bias', icon: <Info />, tooltip: 'Bias frames: read noise calibration.' },
+  { key: 'light', label: 'Light', icon: <Lightbulb className="w-6 h-6 text-yellow-400 drop-shadow" />, tooltip: 'Light frames: your actual images.' },
+  { key: 'dark', label: 'Dark', icon: <Moon className="w-6 h-6 text-blue-400 drop-shadow" />, tooltip: 'Dark frames: sensor noise calibration.' },
+  { key: 'flat', label: 'Flat', icon: <Sun className="w-6 h-6 text-yellow-400 drop-shadow" />, tooltip: 'Flat frames: correct vignetting/dust.' },
+  { key: 'bias', label: 'Bias', icon: <Zap className="w-6 h-6 text-pink-400 drop-shadow" />, tooltip: 'Bias frames: read noise calibration.' },
 ];
 
 interface CalibrationUploadScaffoldProps {
@@ -183,7 +183,14 @@ const CalibrationUploadScaffold: React.FC<CalibrationUploadScaffoldProps> = ({ p
             tabIndex={0}
           >
             {icon} {label}
-            <span className="ml-1 text-blue-300" title={tooltip}><Info className="inline h-4 w-4" /></span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="ml-1 text-blue-300" tabIndex={-1}><Info className="inline h-4 w-4 cursor-pointer" /></span>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="z-50 bg-gray-900 text-blue-100 p-2 rounded shadow border border-blue-800 text-xs max-w-xs">
+                {tooltip}
+              </TooltipContent>
+            </Tooltip>
           </button>
         ))}
       </div>

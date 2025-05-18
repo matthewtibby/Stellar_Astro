@@ -100,7 +100,7 @@ const Confetti = () => (
   </div>
 );
 
-const CalibrationScaffoldUI: React.FC<{ projectId: string }> = ({ projectId }) => {
+const CalibrationScaffoldUI: React.FC<{ projectId: string; onBack?: () => void }> = ({ projectId, onBack }) => {
   const [selectedType, setSelectedType] = useState<MasterType>('dark');
   const [tabState, setTabState] = useState({
     dark: {
@@ -898,7 +898,11 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string }> = ({ projectId }) =
         </div>
         {/* Action Buttons */}
         <div className="flex justify-end gap-4 mt-8">
-          <button className="px-6 py-2 bg-[#232946] text-white rounded shadow hover:bg-[#181c23]">Back</button>
+          {onBack && (
+            <button className="px-6 py-2 bg-[#232946] text-white rounded shadow hover:bg-[#181c23]" onClick={onBack}>
+              Previous
+            </button>
+          )}
           <button className="px-6 py-2 bg-[#183153] text-white rounded shadow-md hover:bg-[#102040]">Save Settings</button>
         </div>
       </div>

@@ -547,19 +547,13 @@ export default function DashboardClient({ user, projects }: { user: { id: string
                             )}
                             {currentStep === 1 && activeProject && (
                               <div id="calibration-step-root">
-                                {/* Breadcrumb and Previous button */}
+                                {/* Breadcrumb only */}
                                 <div className="flex items-center mb-4">
-                                  <button
-                                    className="px-3 py-1 bg-gray-700 text-white rounded hover:bg-gray-600 mr-4"
-                                    onClick={() => setCurrentStep(0)}
-                                  >
-                                    Previous
-                                  </button>
                                   <span className="text-blue-200 font-semibold">Process & Stack</span>
                                 </div>
                                 <div className="bg-gray-800/50 rounded-lg p-8 text-blue-200 border border-gray-700">
                                   <h2 className="text-2xl font-bold mb-4">Calibration & Master Frame Creation</h2>
-                                  <CalibrationScaffoldUI projectId={activeProject.id} />
+                                  <CalibrationScaffoldUI projectId={activeProject.id} onBack={() => setCurrentStep(0)} />
                                 </div>
                               </div>
                             )}
