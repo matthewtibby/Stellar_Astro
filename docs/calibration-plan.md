@@ -2,6 +2,34 @@
 
 ---
 
+## 🚩 Outstanding Work (Checklist)
+
+> **Track and update this section as features are completed!**
+
+- [ ] **Cosmetic Correction**
+  - Hot/cold pixel removal (basic thresholding)
+  - L.A.Cosmic integration (see astroscrappy)
+  - Bad pixel map support (user upload)
+- [ ] **Diagnostics & Metadata**
+  - Compute and save stats (mean, median, std, min, max)
+  - Generate histogram images/JSON
+  - Save all relevant metadata in FITS header
+- [ ] **Testing & Validation**
+  - Unit tests for all stacking/correction methods
+  - Golden dataset regression tests (compare to PixInsight/Siril output)
+  - Performance/load tests (large batch)
+- [ ] **Integration & API Exposure**
+  - Expose all options via API/job payload
+  - Connect to job queue and storage
+  - Document all parameters and usage
+- [ ] **Frontend/UX Enhancements**
+  - Real image preview: zoom/pan, before/after toggle
+  - Histogram overlay and stats in UI
+  - Progress indicator, job status, and success confirmation
+  - Advanced mode toggle and controls
+
+---
+
 ## 1. What is Calibration?  
 ### 1.1. Definition & Purpose  
 **Calibration** in astrophotography is the process of removing systematic errors and artifacts from raw astronomical images. These errors include sensor noise, vignetting, dust shadows, and electronic bias. Calibration ensures that the final stacked image is as clean, accurate, and artifact-free as possible.
@@ -1366,9 +1394,77 @@ This section outlines a practical, step-by-step checklist for building both the 
   - Regression, accessibility, and performance tests pass
   - Output: System is ready for production/beta release
 
----
-
 ### Live Preview Image Generation
 - The UI will support live preview image generation in the Master X Preview box for each calibration type (Dark, Flat, Bias).
 - The backend/algorithm should provide a preview image (e.g., PNG or JPEG) as soon as possible during or after master frame creation, so users can see results immediately.
 - Preview should update automatically when a new master is created or settings are changed.
+
+## 7.3. Calibration Worker Implementation Plan (Python)
+
+**Goal:** Deliver a robust, extensible Python calibration worker for master frame creation (bias, dark, flat) supporting all stacking and correction features required by the UI and competitive with PixInsight, APP, Siril, and open source tools.
+
+### References & Best Practices
+- **PixInsight:** Industry standard for calibration, see [BatchPreprocessing Docs](https://pixinsight.com/doc/docs/BatchPreprocessing/BatchPreprocessing.html)
+- **Astro Pixel Processor:** [Manual](https://www.astropixelprocessor.com/manual/)
+- **Siril:** [Processing Docs](https://siril.org/processing/)
+- **Open Source:**
+  - [astro-pipelines](https://github.com/avilqu/astro-pipelines) (Python, astropy/ccdproc)
+  - [aptools](https://github.com/ricsonc/aptools) (Python, custom stacking/calibration)
+
+### Core Features (All Master Types)
+- [x] Mean stacking (ccdproc)
+- [x] Median stacking (ccdproc)
+- [x] Sigma-clipping stacking (ccdproc)
+- [x] Winsorized stacking (custom numpy)
+- [x] Linear fit rejection stacking (custom numpy)
+- [x] Min/Max rejection stacking (custom numpy)
+- [x] Adaptive/entropy-weighted stacking (custom numpy)
+- [ ] Cosmetic correction (hot/cold pixel, L.A.Cosmic, bad pixel map)
+- [ ] Custom rejection expressions (advanced)
+- [ ] Diagnostics: stats, histograms, warnings
+- [ ] Save master frame (FITS, with metadata)
+- [ ] Modular entrypoint for future advanced features
+
+### Implementation Steps & Checklist
+
+1. **Scaffold calibration_worker.py**
+   - [x] Create Python module with docstring, references, and function stubs
+   - [x] Implement mean/median/sigma stacking using ccdproc
+   - [x] Add CLI/test harness for local dev
+
+2. **Implement Stacking Algorithms**
+   - [x] Mean, median, sigma-clipping (ccdproc)
+   - [x] Winsorized, linear fit, min/max, adaptive/entropy (custom, see aptools/astro-pipelines)
+   - [x] Parameterize all options for UI integration
+
+3. **Cosmetic Correction**
+   - [ ] Hot/cold pixel removal (basic thresholding)
+   - [ ] L.A.Cosmic integration (see astroscrappy)
+   - [ ] Bad pixel map support (user upload)
+
+4. **Diagnostics & Metadata**
+   - [ ] Compute and save stats (mean, median, std, min, max)
+   - [ ] Generate histogram images/JSON
+   - [ ] Save all relevant metadata in FITS header
+
+5. **Testing & Validation**
+   - [ ] Unit tests for all stacking/correction methods
+   - [ ] Golden dataset regression tests (compare to PixInsight/Siril output)
+   - [ ] Performance/load tests (large batch)
+   - [ ] **Test stacking methods with real data (next step)**
+
+6. **Integration**
+   - [ ] Expose all options via API/job payload
+   - [ ] Connect to job queue and storage
+   - [ ] Document all parameters and usage
+
+### Open Source Leverage
+- Use `ccdproc` for core stacking and calibration math
+- Use `astroscrappy` for L.A.Cosmic (cosmetic correction)
+- Use `astro-pipelines` and `aptools` for reference/test data and advanced stacking
+
+### Deliverables
+- [ ] calibration_worker.py with all core features
+- [ ] Example scripts/notebooks for each master type
+- [ ] Documentation for all options and algorithms
+- [ ] Test suite and golden dataset validation

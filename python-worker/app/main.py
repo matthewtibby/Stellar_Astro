@@ -1,3 +1,6 @@
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).resolve().parents[2]))
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Request, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -9,7 +12,6 @@ import os
 import asyncio
 import signal
 import time
-import sys
 import requests
 import io
 import matplotlib.pyplot as plt
@@ -22,6 +24,10 @@ import random
 import string
 from .fits_analysis import analyze_fits_headers
 import logging
+from src.lib.server.calibration_worker import create_master_frame, save_master_frame, save_master_preview, analyze_frames, recommend_stacking, infer_frame_type
+from src.lib.server.supabase_io import download_file, upload_file
+from pydantic import BaseModel
+import traceback
 
 logger = logging.getLogger(__name__)
 
@@ -321,54 +327,93 @@ async def get_fits_metadata(file_path):
 # Example usage after validation:
 # await save_fits_metadata(file_path, project_id, user_id, metadata)
 
-# In-memory job store for prototyping
-job_store = {}
-
-async def run_calibration_job(job_id: str):
-    # Simulate calibration processing
-    job = job_store.get(job_id)
-    if not job:
-        return
-    job["status"] = "running"
-    await asyncio.sleep(2)  # Simulate processing time
-    # Store mock results/diagnostics
-    job["result"] = {
-        "calibrated_frames": [f"/output/calibrated_{i}.fits" for i in range(1, 3)],
-        "logs": f"/output/{job_id}_logs.txt"
-    }
-    job["diagnostics"] = {
-        "type": "light",
-        "warnings": ["Simulated warning: check exposure time"]
-    }
-    job["warnings"] = ["Simulated warning: check exposure time"]
-    job["status"] = "complete"
+class CalibrationJobRequest(BaseModel):
+    input_bucket: str
+    input_paths: list[str]
+    output_bucket: str
+    output_base: str
+    settings: dict = {}
+    project_id: str = None
+    user_id: str = None
+    metadata: dict = None
+    test_name: str = None
 
 @app.post("/jobs/submit")
-async def submit_calibration_job(request: Request, background_tasks: BackgroundTasks):
-    """
-    Submit a new calibration job.
-    Expects JSON payload with:
-      - input_files: list of file paths/IDs
-      - settings: dict of calibration settings (optional)
-      - project_id, user_id, job metadata
-    Returns: job_id, initial status, validation errors
-    """
-    data = await request.json()
-    job_id = f"job_{''.join(random.choices(string.ascii_lowercase + string.digits, k=8))}"
-    job_store[job_id] = {
-        "status": "pending",
-        "input_files": data.get("input_files", []),
-        "settings": data.get("settings", {}),
-        "project_id": data.get("project_id"),
-        "user_id": data.get("user_id"),
-        "created_at": time.time(),
-        "result": None,
-        "diagnostics": None,
-        "warnings": [],
-        "error": None
-    }
-    background_tasks.add_task(run_calibration_job, job_id)
-    return {"job_id": job_id, "status": "pending"}
+async def submit_job(job: CalibrationJobRequest, request: Request):
+    print(f"[API] Received calibration job: {job.dict()}")
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            local_files = []
+            for i, spath in enumerate(job.input_paths):
+                local_path = os.path.join(tmpdir, f"input_{i}.fits")
+                print(f"[API] Downloading {spath} from bucket {job.input_bucket} to {local_path}")
+                download_file(job.input_bucket, spath, local_path)
+                local_files.append(local_path)
+            print(f"[API] Downloaded {len(local_files)} files.")
+
+            # Extract settings
+            method = job.settings.get('stackingMethod', 'median')
+            sigma = float(job.settings.get('sigmaThreshold', 3.0))
+            cosmetic = job.settings.get('cosmeticCorrection', False)
+            cosmetic_method = job.settings.get('cosmeticMethod', 'hot_pixel_map')
+            cosmetic_threshold = float(job.settings.get('cosmeticThreshold', 0.5))
+
+            print(f"[API] Starting calibration: method={method}, sigma={sigma}, cosmetic={cosmetic}, cosmetic_method={cosmetic_method}, cosmetic_threshold={cosmetic_threshold}")
+
+            # Frame analysis and recommendation
+            frame_type = infer_frame_type(job.input_paths)
+            stats = analyze_frames(local_files)
+            rec_method, rec_sigma, reason = recommend_stacking(stats, method, sigma)
+            print(f"[API] Frame analysis: {stats}")
+            print(f"[API] Recommendation: {reason}")
+
+            master = create_master_frame(
+                local_files,
+                method=method,
+                sigma_clip=sigma if method in ['sigma', 'winsorized'] else None,
+                cosmetic=cosmetic,
+                cosmetic_method=cosmetic_method,
+                cosmetic_threshold=cosmetic_threshold
+            )
+            fits_path = os.path.join(tmpdir, 'master.fits')
+            png_path = os.path.join(tmpdir, 'master.png')
+            save_master_frame(master, fits_path)
+            save_master_preview(master, png_path)
+            fits_storage_path = job.output_base + '.fits'
+            png_storage_path = job.output_base + '.png'
+            # Extra debug prints and file existence check
+            print(f"[DEBUG] About to check file size for: {fits_path}")
+            if not os.path.exists(fits_path):
+                print(f"[ERROR] FITS file does not exist at: {fits_path}")
+            else:
+                print(f"[DEBUG] FITS file exists at: {fits_path}")
+                file_size_bytes = os.path.getsize(fits_path)
+                file_size_mb = file_size_bytes / (1024 * 1024)
+                print(f"[DEBUG] Output FITS file size: {file_size_mb:.2f} MB ({file_size_bytes} bytes)")
+            print(f"[DEBUG] About to upload file to Supabase: {fits_storage_path}")
+            import sys
+            sys.stdout.flush()
+            upload_file(job.output_bucket, fits_storage_path, fits_path, public=False)
+            preview_url = upload_file(job.output_bucket, png_storage_path, png_path, public=True)
+            print(f"[API] Master FITS uploaded to: {fits_storage_path}")
+            print(f"[API] Preview PNG uploaded to: {png_storage_path}")
+            print(f"[API] Preview public URL: {preview_url}")
+            return JSONResponse({
+                "preview_url": preview_url,
+                "fits_path": fits_storage_path,
+                "analysis": stats,
+                "recommendation": {
+                    "method": rec_method,
+                    "sigma": rec_sigma,
+                    "reason": reason
+                },
+                "userChoiceIsOptimal": rec_method == method and rec_sigma == sigma,
+                "jobId": f"job-{os.urandom(4).hex()}"
+            })
+    except Exception as e:
+        print(f"[API] Error during calibration: {e}", file=sys.stderr)
+        traceback.print_exc()
+        return JSONResponse({"error": str(e), "trace": traceback.format_exc()}, status_code=500)
 
 @app.get("/jobs/status")
 async def get_job_status(job_id: str):
