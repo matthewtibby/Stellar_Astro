@@ -1,6 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Info, Loader2, CheckCircle2, XCircle, RefreshCw, Star, Moon, Sun, Zap } from 'lucide-react';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './ui/tooltip';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from './ui/dialog';
+import { supabase } from '../lib/supabaseClient';
 
 const FRAME_TYPES = [
   { key: 'dark', label: 'Master Dark' },
@@ -99,7 +108,11 @@ const Confetti = () => (
   </div>
 );
 
-const CalibrationScaffoldUI: React.FC<{ projectId: string }> = ({ projectId }) => {
+// Example bucket and path logic (replace with real project/user logic as needed)
+const SUPABASE_INPUT_BUCKET = 'raw-frames';
+const SUPABASE_OUTPUT_BUCKET = 'calibrated-frames';
+
+const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = ({ projectId, userId }) => {
   const [selectedType, setSelectedType] = useState<MasterType>('dark');
   const [tabState, setTabState] = useState({
     dark: {
@@ -147,6 +160,42 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string }> = ({ projectId }) =
   const [fileSearch, setFileSearch] = useState('');
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(true);
   const modalRef = useRef<HTMLDivElement>(null);
+  const [recommendationDialog, setRecommendationDialog] = useState<null | {
+    recommendation: { method: string; sigma?: number; reason: string };
+    userMethod: string;
+    userSigma?: number;
+    onAccept: () => void;
+    onDecline: () => void;
+  }>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [realFiles, setRealFiles] = useState<string[]>([]);
+
+  // Add a warning if userId is undefined
+  useEffect(() => {
+    if (!userId) {
+      console.warn('CalibrationScaffoldUI: userId is undefined! The parent component must pass a valid userId prop.');
+    }
+  }, [userId]);
+
+  // Fetch real files from Supabase when selectedType or projectId or userId changes
+  useEffect(() => {
+    const fetchFiles = async () => {
+      const folderPath = `${userId}/${projectId}/${selectedType}/`;
+      console.log('Supabase list:', folderPath);
+      if (!userId) {
+        setRealFiles([]);
+        return;
+      }
+      const { data, error } = await supabase.storage.from('raw-frames').list(folderPath);
+      console.log('Supabase list result:', data, error);
+      if (error) {
+        setRealFiles([]);
+        return;
+      }
+      setRealFiles((data || []).filter(f => !f.name.endsWith('/')).map(f => f.name));
+    };
+    fetchFiles();
+  }, [selectedType, projectId, userId]);
 
   // Keyboard accessibility for modal
   useEffect(() => {
@@ -159,7 +208,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string }> = ({ projectId }) =
   }, [showFileModal]);
 
   // Filtered files for modal
-  const filteredFiles = PLACEHOLDER_FILES[selectedType].filter(f => f.toLowerCase().includes(fileSearch.toLowerCase()));
+  const filteredFiles = realFiles.filter(f => f.toLowerCase().includes(fileSearch.toLowerCase()));
 
   // Helper to get/set current tab state
   const currentTab = tabState[selectedType];
@@ -230,17 +279,81 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string }> = ({ projectId }) =
     alert('Preset saved! (UI only, not persisted)');
   };
 
-  // Simulate job creation
-  const handleCreateMaster = () => {
+  // Helper to submit calibration job
+  const submitCalibrationJob = async (settings: any) => {
     setJobStatus('queued');
-    setTimeout(() => {
-      setJobStatus('running');
-      setTimeout(() => {
-        setJobStatus('success');
-        setShowSuccess(true);
-        setTimeout(() => setShowSuccess(false), 2500);
-      }, 2000);
-    }, 1000);
+    try {
+      // Use real files if available, else fallback to placeholder
+      const input_paths = realFiles.map(f => `${userId}/${projectId}/${selectedType}/${f}`);
+      const output_base = `${userId}/${projectId}/${selectedType}/master_${selectedType}`;
+      const reqBody = {
+        input_bucket: SUPABASE_INPUT_BUCKET,
+        input_paths,
+        output_bucket: SUPABASE_OUTPUT_BUCKET,
+        output_base,
+        advanced_settings: settings.advanced_settings,
+        projectId,
+        userId,
+        // ...add other required fields
+      };
+      const res = await fetch(`/api/projects/${projectId}/calibration-jobs/submit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(reqBody),
+      });
+      const data = await res.json();
+      if (data.userChoiceIsOptimal === false && data.recommendation) {
+        setRecommendationDialog({
+          recommendation: data.recommendation,
+          userMethod: settings.advanced_settings?.stackingMethod || settings.stackingMethod,
+          userSigma: settings.advanced_settings?.sigmaThreshold || settings.sigmaThreshold,
+          onAccept: () => {
+            setRecommendationDialog(null);
+            // Re-submit with recommended settings
+            submitCalibrationJob({ ...settings, advanced_settings: { ...settings.advanced_settings, stackingMethod: data.recommendation.method, sigmaThreshold: data.recommendation.sigma } });
+          },
+          onDecline: () => {
+            setRecommendationDialog(null);
+            setJobStatus('running');
+            setTimeout(() => {
+              setJobStatus('success');
+              setShowSuccess(true);
+              setTimeout(() => setShowSuccess(false), 2500);
+            }, 2000);
+          },
+        });
+      } else {
+        setJobStatus('running');
+        // Use preview_url from API response
+        if (data.preview_url) {
+          setPreviewUrl(data.preview_url);
+        }
+        setTimeout(() => {
+          setJobStatus('success');
+          setShowSuccess(true);
+          setTimeout(() => setShowSuccess(false), 2500);
+        }, 2000);
+      }
+    } catch (e) {
+      setJobStatus('failed');
+    }
+  };
+
+  // Update handleCreateMaster to use the new API logic
+  const handleCreateMaster = () => {
+    // Gather settings for API
+    const settings = {
+      input_light_ids: PLACEHOLDER_FILES[selectedType],
+      advanced_settings: {
+        stackingMethod: currentTab.stackingMethod,
+        sigmaThreshold: currentTab.sigmaThreshold,
+        // ...add other advanced settings as needed
+      },
+      projectId,
+      userId,
+      // ...add other required fields
+    };
+    submitCalibrationJob(settings);
   };
 
   // Ripple effect for primary action button
@@ -317,62 +430,31 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string }> = ({ projectId }) =
           </div>
         )}
         {/* Master Tabs with Color Indicators */}
-        <div className="flex gap-4 mb-8">
+        <div className="flex gap-2 mb-4 flex-wrap">
           {FRAME_TYPES.map(ft => (
             <button
               key={ft.key}
               onClick={() => setSelectedType(ft.key as MasterType)}
-              className={`flex items-center gap-2 px-6 py-3 rounded-full font-semibold text-lg transition-all border-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0d13] shadow-sm ${selectedType === ft.key ? 'bg-gradient-to-r from-blue-900 via-blue-700 to-blue-900 text-white shadow-lg' : 'bg-[#10131a] text-blue-200 hover:bg-[#181c23]'}`}
-              style={{ position: 'relative', transition: 'background 0.3s, color 0.3s, box-shadow 0.3s' }}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-full font-semibold text-base transition-all border-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0d13] shadow-sm ${selectedType === ft.key ? 'bg-gradient-to-r from-blue-900 via-blue-700 to-blue-900 text-white shadow-lg' : 'bg-[#10131a] text-blue-200 hover:bg-[#181c23]'}`}
+              style={{ position: 'relative', minWidth: '120px', transition: 'background 0.3s, color 0.3s, box-shadow 0.3s' }}
             >
-              <span className={`absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full ${STATUS_COLORS[MASTER_STATUS[ft.key as MasterType]]}`}></span>
-              <span className="ml-5 flex items-center gap-2">
+              <span className={`absolute left-2 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full ${STATUS_COLORS[MASTER_STATUS[ft.key as MasterType]]}`}></span>
+              <span className="ml-4 flex items-center gap-1">
                 {FRAME_TYPE_ICONS[ft.key as MasterType]}
-                <span className="drop-shadow font-extrabold text-xl tracking-tight">{ft.label}</span>
+                <span className="drop-shadow font-bold text-base tracking-tight">{ft.label}</span>
               </span>
-              <span className={`ml-2 text-xs ${selectedType === ft.key ? 'text-white' : 'text-blue-300'}`}>{STATUS_LABELS[MASTER_STATUS[ft.key as MasterType]]}</span>
+              <span className={`ml-1 text-xs ${selectedType === ft.key ? 'text-white' : 'text-blue-300'}`}>{STATUS_LABELS[MASTER_STATUS[ft.key as MasterType]]}</span>
             </button>
           ))}
         </div>
-        <div className="flex flex-row gap-8 w-full transition-all duration-500 animate-fade-in">
+        <div className="flex flex-row gap-6 w-full transition-all duration-500 animate-fade-in">
           {/* Center: Files and Settings for Selected Type */}
-          <div className="w-2/5 bg-[#10131a]/90 rounded-2xl p-10 border border-[#232946]/60 flex flex-col shadow-xl relative">
-            {/* Icon Button Group (top right, outside header) */}
-            <div className="absolute top-6 right-6 flex gap-2 bg-[#181c23] rounded-full px-2 py-1 shadow border border-[#232946]/60 z-10">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    className="p-2 rounded-full hover:bg-blue-900 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
-                    onClick={handleResetCurrent}
-                    aria-label={`Reset ${FRAME_TYPES.find(f => f.key === selectedType)?.label} to defaults`}
-                  >
-                    <RefreshCw className="w-5 h-5 text-blue-200" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="animate-fade-in">
-                  Reset to defaults
-                </TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    className="p-2 rounded-full hover:bg-blue-900 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
-                    onClick={handleSavePreset}
-                    aria-label="Save current settings as preset"
-                  >
-                    <Star className="w-5 h-5 text-blue-200" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="animate-fade-in">
-                  Save current settings as preset
-                </TooltipContent>
-              </Tooltip>
-            </div>
+          <div className="w-2/5 bg-[#10131a]/90 rounded-2xl p-6 border border-[#232946]/60 flex flex-col shadow-xl relative">
             {/* Header row: title left, status chip right */}
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
                 {FRAME_TYPE_ICONS[selectedType]}
-                <h3 className="text-2xl font-extrabold text-white tracking-tight drop-shadow">{FRAME_TYPES.find(f => f.key === selectedType)?.label} Calibration</h3>
+                <h3 className="text-lg font-bold text-white tracking-tight drop-shadow">{FRAME_TYPES.find(f => f.key === selectedType)?.label} Calibration</h3>
                 <span className="ml-2 px-2 py-1 rounded-full bg-green-900 text-green-300 text-xs font-semibold flex items-center gap-1 shadow">
                   <CheckCircle2 className="w-3 h-3" /> {STATUS_LABELS[MASTER_STATUS[selectedType]]}
                 </span>
@@ -381,7 +463,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string }> = ({ projectId }) =
             {/* Files for selected type */}
             <div className="mb-8">
               <div className="flex items-center mb-2">
-                <span className="font-medium text-blue-200 mr-2">{PLACEHOLDER_FILES[selectedType].length} files</span>
+                <span className="font-medium text-blue-200 mr-2">{realFiles.length} files</span>
                 <button
                   className="ml-auto text-xs text-blue-400 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
                   onClick={() => setShowFileModal(true)}
@@ -390,7 +472,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string }> = ({ projectId }) =
                   View All
                 </button>
               </div>
-              {PLACEHOLDER_FILES[selectedType].length === 0 ? (
+              {realFiles.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-8">
                   <EmptyFilesSVG />
                   <div className="text-blue-200 mt-4 mb-2 font-semibold text-lg">No {FRAME_TYPES.find(f => f.key === selectedType)?.label} files yet!</div>
@@ -404,7 +486,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string }> = ({ projectId }) =
                 </div>
               ) : (
                 <div className="flex flex-row gap-2 flex-wrap mb-1">
-                  {PLACEHOLDER_FILES[selectedType].slice(0, 3).map((file, idx) => (
+                  {realFiles.slice(0, 3).map((file, idx) => (
                     <Tooltip key={file}>
                       <TooltipTrigger asChild>
                         <div
@@ -420,9 +502,9 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string }> = ({ projectId }) =
                       </TooltipContent>
                     </Tooltip>
                   ))}
-                  {PLACEHOLDER_FILES[selectedType].length > 3 && (
+                  {realFiles.length > 3 && (
                     <div className="w-12 h-12 bg-blue-900 rounded-full flex items-center justify-center text-xs text-blue-200 border border-[#232946]/60 shadow">
-                      +{PLACEHOLDER_FILES[selectedType].length - 3}
+                      +{realFiles.length - 3}
                     </div>
                   )}
                 </div>
@@ -431,13 +513,16 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string }> = ({ projectId }) =
             {/* Divider */}
             <div className="h-px bg-[#232946]/40 mb-8" />
             {/* Calibration Settings */}
-            <div className="flex flex-col gap-8">
+            <div className="flex flex-col gap-6">
               {/* Beginner/Advanced toggle with labels */}
-              <div className="flex items-center mb-6 gap-6">
+              <div className="flex items-center mb-4 gap-4">
                 <span className="font-medium text-blue-200">Beginner</span>
                 <label className="inline-flex relative items-center cursor-pointer">
                   <input type="checkbox" className="sr-only peer" checked={tabState.dark.advanced} onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, advanced: e.target.checked } }))} />
-                  <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:bg-blue-600 transition-all"></div>
+                  <div className="w-10 h-5 bg-gray-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:bg-blue-600 transition-all flex items-center justify-start peer-checked:justify-end">
+                    {!tabState.dark.advanced && <span className="w-3 h-3 bg-white rounded-full ml-1" />}
+                    {tabState.dark.advanced && <span className="w-3 h-3 bg-blue-300 rounded-full mr-1" />}
+                  </div>
                 </label>
                 <span className="font-medium text-blue-200">Advanced</span>
               </div>
@@ -804,7 +889,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string }> = ({ projectId }) =
               ref={actionBtnRef}
               className="mt-8 mb-4 px-6 py-3 bg-gradient-to-r from-blue-700 via-blue-600 to-blue-800 text-white rounded-xl shadow-lg hover:from-blue-800 hover:to-blue-900 font-semibold text-lg w-full transition-transform active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 overflow-hidden relative"
               onClick={handleCreateMasterWithRipple}
-              disabled={jobStatus === 'queued' || jobStatus === 'running'}
+              disabled={jobStatus === 'queued' || jobStatus === 'running' || realFiles.length === 0}
               style={{ boxShadow: '0 4px 24px 0 rgba(30, 64, 175, 0.15)' }}
             >
               {jobStatus === 'queued' || jobStatus === 'running' ? (
@@ -815,8 +900,13 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string }> = ({ projectId }) =
                 `Create ${FRAME_TYPES.find(f => f.key === selectedType)?.label}`
               )}
             </button>
+            {realFiles.length === 0 && (
+              <div className="text-red-400 mt-2 text-center">
+                No files found in <code>{`raw-frames/${userId}/${projectId}/${selectedType}/`}</code>. Please upload files to proceed.
+              </div>
+            )}
             {/* Icon Button Group (below primary action) */}
-            <div className="flex gap-2 justify-center mt-4 mb-8 bg-[#181c23] rounded-full px-2 py-1 shadow border border-[#232946]/60">
+            <div className="flex gap-2 justify-center mt-4 mb-4 bg-[#181c23] rounded-full px-2 py-1 shadow border border-[#232946]/60">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
@@ -868,7 +958,17 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string }> = ({ projectId }) =
           <div className="w-3/5 bg-[#10131a] rounded-2xl p-10 border border-[#232946]/60 flex flex-col items-center shadow-xl">
             <h3 className="text-xl font-bold mb-6 text-white">{FRAME_TYPES.find(f => f.key === selectedType)?.label} Preview</h3>
             <div className="w-72 h-72 bg-[#232946] rounded-2xl flex items-center justify-center text-3xl text-blue-200 border-2 border-[#232946] mb-10 shadow-lg">
-              SA
+              {previewUrl ? (
+                <img
+                  src={previewUrl}
+                  alt={`${FRAME_TYPES.find(f => f.key === selectedType)?.label} Preview`}
+                  className="w-full h-full object-contain rounded-2xl"
+                  style={{ background: '#232946' }}
+                  onError={() => setPreviewUrl(null)}
+                />
+              ) : (
+                'SA'
+              )}
             </div>
             <button
               className="px-4 py-2 bg-gray-800 text-blue-200 rounded hover:bg-blue-700 mb-8 flex items-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
@@ -896,6 +996,36 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string }> = ({ projectId }) =
           <button className="px-6 py-2 bg-[#232946] text-white rounded shadow hover:bg-[#181c23]">Back</button>
           <button className="px-6 py-2 bg-[#183153] text-white rounded shadow-md hover:bg-[#102040]">Save Settings</button>
         </div>
+        {recommendationDialog && (
+          <Dialog open onOpenChange={open => !open && setRecommendationDialog(null)}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Stellar Astro Recommendation</DialogTitle>
+                <DialogDescription>
+                  We analyzed your frames and recommend using <b>{recommendationDialog.recommendation.method}</b>
+                  {recommendationDialog.recommendation.sigma && <> (sigma={recommendationDialog.recommendation.sigma})</>}
+                  instead of your choice (<b>{recommendationDialog.userMethod}</b>
+                  {recommendationDialog.userSigma && <> (sigma={recommendationDialog.userSigma})</>}).<br />
+                  <span className="block mt-2 text-blue-400">{recommendationDialog.recommendation.reason}</span>
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <button
+                  className="px-4 py-2 bg-blue-700 text-white rounded shadow hover:bg-blue-800"
+                  onClick={recommendationDialog.onAccept}
+                >
+                  Use Recommendation
+                </button>
+                <button
+                  className="px-4 py-2 bg-gray-700 text-white rounded shadow hover:bg-gray-800"
+                  onClick={recommendationDialog.onDecline}
+                >
+                  Proceed with My Choice
+                </button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
     </TooltipProvider>
   );
