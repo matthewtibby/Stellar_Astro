@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation';
 import { getDashboardProjects, HydratedProject } from '@/src/lib/server/getDashboardProjects';
 
 export default async function DashboardPage() {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   const typedUser: SupabaseUser | null = user ?? null;
 

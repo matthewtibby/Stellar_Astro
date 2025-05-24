@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getSupabaseClient } from '@/src/lib/supabase';
+import { supabase } from '@/src/lib/supabaseClient';
 import { SessionTemplate } from '@/types/session';
 import { setProjectName, setProjectDescription, setSelectedTarget, setSelectedTelescope, setSelectedCamera, setSelectedFilters } from '../store/project';
 import { useProjects } from '@/src/hooks/useProjects';
@@ -22,7 +22,7 @@ const DashboardPage = () => {
   useEffect(() => {
     const fetchSessionTemplates = async () => {
       try {
-        const { data, error } = await getSupabaseClient()
+        const { data, error } = await supabase
           .from('session_templates')
           .select('*');
 
