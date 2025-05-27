@@ -87,6 +87,7 @@ export default function DashboardClient({ user, projects }: { user: { id: string
   const [subscription, setSubscription] = useState('free');
   const [loading, setLoading] = useState(false);
   const [projectList, setProjectList] = useState<HydratedProject[]>(projects);
+  const [showUserCard, setShowUserCard] = useState(() => !showOnboarding);
 
   const workflowSteps = [
     { id: 0, name: "Upload Files", icon: Settings },
@@ -129,6 +130,10 @@ export default function DashboardClient({ user, projects }: { user: { id: string
       document.getElementById('upload-preview-error')?.remove();
     }
   }, [currentStep]);
+
+  useEffect(() => {
+    setShowUserCard(!showOnboarding);
+  }, [showOnboarding]);
 
   // Debug: log currentStep and which step is rendering
   console.log('[DashboardClient] currentStep:', currentStep);
@@ -179,6 +184,14 @@ export default function DashboardClient({ user, projects }: { user: { id: string
     }
   };
 
+  // Add status filter bar state
+  const statusFilters = [
+    { label: 'All', value: '' },
+    { label: 'In Progress', value: 'in_progress' },
+    { label: 'Completed', value: 'completed' },
+    { label: 'Failed', value: 'failed' },
+  ];
+
   // Main dashboard UI
   return (
     <>
@@ -198,48 +211,53 @@ export default function DashboardClient({ user, projects }: { user: { id: string
                   <div className="flex justify-between items-center mb-8">
                     <div className="flex items-center space-x-4">
                       <NotificationCenter />
-                      <div className="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center">
-                        <span className="text-white text-xl font-medium">
-                          {user.email.charAt(0).toUpperCase()}
-                        </span>
-                      </div>
-                      <div>
-                        <h1 className="text-2xl font-bold text-white">Welcome, {user.email.split('@')[0] || 'User'}!
-                          <span className={`ml-2 px-2 py-1 rounded text-xs font-semibold ${
-                            subscription === 'monthly' ? 'bg-green-600 text-white' :
-                            subscription === 'annual' ? 'bg-yellow-600 text-white' :
-                            'bg-gray-700 text-gray-300'
-                          }`}>
-                            {subscription.charAt(0).toUpperCase() + subscription.slice(1)}
-                          </span>
-                        </h1>
-                        <p className="text-gray-400">{user.email}</p>
-                        {/* TEMP: Manual subscription change for testing */}
-                        <div className="mt-2">
-                          <label className="text-xs text-gray-400 mr-2">Change Subscription:</label>
-                          <select
-                            value={subscription}
-                            onChange={async (e) => {
-                              const newType = e.target.value;
-                              setSubscription(newType);
-                              await supabase
-                                .from('profiles')
-                                .update({ subscription: newType })
-                                .eq('id', user.id);
-                            }}
-                            className="bg-gray-800 text-white border border-gray-700 rounded px-2 py-1"
-                          >
-                            <option value="free">Free</option>
-                            <option value="monthly">Monthly</option>
-                            <option value="annual">Annual</option>
-                          </select>
+                      {showUserCard && (
+                        <div className="w-fit">
+                          <div className="flex items-center space-x-4">
+                            <div className="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center">
+                              <span className="text-white text-xl font-medium">
+                                {user.email.charAt(0).toUpperCase()}
+                              </span>
+                            </div>
+                            <div>
+                              <h1 className="text-2xl font-bold text-white">Welcome, {user.email.split('@')[0] || 'User'}!
+                                <span className={`ml-2 px-2 py-1 rounded text-xs font-semibold ${
+                                  subscription === 'monthly' ? 'bg-green-600 text-white' :
+                                  subscription === 'annual' ? 'bg-yellow-600 text-white' :
+                                  'bg-gray-700 text-gray-300'
+                                }`}>
+                                  {subscription.charAt(0).toUpperCase() + subscription.slice(1)}
+                                </span>
+                              </h1>
+                              <p className="text-gray-400">{user.email}</p>
+                              {/* TEMP: Manual subscription change for testing */}
+                              <div className="mt-2">
+                                <label className="text-xs text-gray-400 mr-2">Change Subscription:</label>
+                                <select
+                                  value={subscription}
+                                  onChange={async (e) => {
+                                    const newType = e.target.value;
+                                    setSubscription(newType);
+                                    await supabase
+                                      .from('profiles')
+                                      .update({ subscription: newType })
+                                      .eq('id', user.id);
+                                  }}
+                                  className="bg-gray-800 text-white border border-gray-700 rounded px-2 py-1"
+                                >
+                                  <option value="free">Free</option>
+                                  <option value="monthly">Monthly</option>
+                                  <option value="annual">Annual</option>
+                                </select>
+                              </div>
+                            </div>
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
-                    {/* New Project Button */}
                     <button
                       onClick={() => setShowNewProject(true)}
-                      className="flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow transition-colors focus:outline-none"
+                      className="flex items-center gap-2 px-5 py-2 bg-blue-600 text-white font-semibold rounded-lg shadow transition-all focus:outline-none new-project-btn"
                     >
                       <Plus size={18} /> New Project
                     </button>
@@ -250,44 +268,6 @@ export default function DashboardClient({ user, projects }: { user: { id: string
                       {/* Sidebar */}
                       <div className="lg:col-span-1">
                         <div className="sticky top-24 space-y-6">
-                          {/* Files Box */}
-                          <div className="bg-gray-800/50 rounded-lg p-4 shadow-lg border border-gray-700 mb-6">
-                            <div className="flex justify-between items-center mb-4">
-                              <h3 className="text-lg font-semibold text-white">Files</h3>
-                              <button 
-                                onClick={() => setIsFilesExpanded(!isFilesExpanded)}
-                                className="text-gray-400 hover:text-white transition-colors"
-                              >
-                                {isFilesExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-                              </button>
-                            </div>
-                            {isFilesExpanded && (
-                              <div className="space-y-4">
-                                {Object.entries(uploadedFiles).map(([type, files]) => {
-                                  if (files.length === 0) return null;
-                                  return (
-                                    <div key={type} className="space-y-2">
-                                      <div className="flex items-center space-x-2">
-                                        <Folder className="h-4 w-4 text-gray-400" />
-                                        <h4 className="text-sm font-medium text-gray-300 capitalize">{type} Frames</h4>
-                                        <span className="ml-auto bg-gray-700 text-gray-300 text-xs px-2 py-0.5 rounded-full">
-                                          {files.length}
-                                        </span>
-                                      </div>
-                                      <div className="pl-6 space-y-1 max-h-32 overflow-y-auto">
-                                        {files.map((file, index) => (
-                                          <div key={index} className="flex items-center space-x-2 text-sm text-gray-400">
-                                            <File className="h-3 w-3" />
-                                            <span className="truncate">{file.split('/').pop()}</span>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </div>
                           {/* View Box */}
                           <div className="bg-gray-800/50 rounded-lg p-4 shadow-lg border border-gray-700 mb-6">
                             <div className="flex justify-between items-center mb-4">
@@ -395,63 +375,45 @@ export default function DashboardClient({ user, projects }: { user: { id: string
                         )}
 
                         {/* Search/Filter/Sort Controls */}
-                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-                          <div className="flex flex-1 gap-2">
+                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6 mt-2">
+                          <div className="flex flex-1 gap-2 items-center">
                             <input
                               type="text"
                               placeholder="Search projects..."
                               value={searchTerm}
                               onChange={e => setSearchTerm(e.target.value)}
-                              className="w-full md:w-64 px-3 py-2 bg-gray-800/50 border border-gray-700 rounded-md text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              className="w-full md:w-64 px-3 py-2 bg-gray-800/50 border border-gray-700 rounded-md text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow"
                               title="Search your projects by name"
                             />
                             <select
-                              value={filterStatus}
-                              onChange={e => setFilterStatus(e.target.value)}
-                              className="px-3 py-2 bg-gray-800/50 border border-gray-700 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            >
-                              <option value="">All Statuses</option>
-                              <option value="draft">Draft</option>
-                              <option value="in_progress">In Progress</option>
-                              <option value="completed">Completed</option>
-                              <option value="archived">Archived</option>
-                              <option value="deleted">Deleted</option>
-                            </select>
-                            <select
                               value={sortBy}
                               onChange={e => setSortBy(e.target.value)}
-                              className="px-3 py-2 bg-gray-800/50 border border-gray-700 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              className="px-3 py-2 bg-gray-800/50 border border-gray-700 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 shadow"
                             >
                               <option value="created_at">Sort by Date</option>
                               <option value="name">Sort by Name</option>
+                              <option value="fileSize">Sort by Size</option>
                             </select>
                             <select
                               value={sortOrder}
                               onChange={e => setSortOrder(e.target.value as 'asc' | 'desc')}
-                              className="px-3 py-2 bg-gray-800/50 border border-gray-700 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              className="px-3 py-2 bg-gray-800/50 border border-gray-700 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 shadow"
                             >
                               <option value="desc">Desc</option>
                               <option value="asc">Asc</option>
                             </select>
                           </div>
-                          {/* Tag and favorite controls */}
-                          <div className="flex flex-wrap gap-2 mb-4">
-                            <button
-                              className={`flex items-center px-3 py-1 rounded-md border ${filterFavorites ? 'bg-yellow-500 text-black border-yellow-600' : 'bg-gray-800 text-gray-200 border-gray-700'}`}
-                              onClick={() => setFilterFavorites(f => !f)}
-                              title="Show only favorite projects"
-                            >
-                              <Star className="h-4 w-4 mr-1" fill={filterFavorites ? 'currentColor' : 'none'} /> Favorites
-                            </button>
-                            <select
-                              value={filterTag}
-                              onChange={e => setFilterTag(e.target.value)}
-                              className="px-3 py-1 rounded-md border bg-gray-800 text-gray-200 border-gray-700"
-                              title="Filter by tag"
-                            >
-                              <option value="">All Tags</option>
-                              {/* Replace with your tags logic if available */}
-                            </select>
+                          <div className="flex flex-wrap gap-2 mb-0">
+                            {statusFilters.map(f => (
+                              <button
+                                key={f.value}
+                                className={`px-4 py-1 rounded-full text-sm font-medium border transition-colors shadow-sm ${filterStatus === f.value ? 'bg-blue-600 text-white border-blue-700' : 'bg-gray-800 text-gray-200 border-gray-700 hover:bg-gray-700'}`}
+                                onClick={() => setFilterStatus(f.value)}
+                                aria-pressed={filterStatus === f.value}
+                              >
+                                {f.label}
+                              </button>
+                            ))}
                           </div>
                         </div>
 
@@ -565,75 +527,60 @@ export default function DashboardClient({ user, projects }: { user: { id: string
                             )}
                           </div>
                         ) : (
-                          <>
-                            {activeView === 'grid' ? (
-                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                                {loading || !projectList ? (
-                                  Array.from({ length: 4 }).map((_, i) => <ProjectCardSkeleton key={i} />)
-                                ) : (
-                                  projectList.map((project: HydratedProject) => (
-                                    <ProjectCard
-                                      key={project.id}
-                                      id={project.id}
-                                      targetName={project.targetName || project.title || '—'}
-                                      status={['new', 'in_progress', 'completed'].includes(project.status) ? (project.status as 'new' | 'in_progress' | 'completed') : 'new'}
-                                      thumbnailUrl={project.thumbnailUrl || ''}
-                                      userImageUrl={project.userImageUrl}
-                                      creationDate={project.creationDate || ''}
-                                      frameCount={typeof project.frameCount === 'number' ? project.frameCount : 0}
-                                      fileSize={typeof project.fileSize === 'number' ? `${(project.fileSize / 1024 / 1024).toFixed(2)} MB` : '—'}
-                                      equipment={Array.isArray(project.equipment) ? project.equipment.map(e => ({
-                                        type: e.type as 'telescope' | 'camera' | 'filter',
-                                        name: e.name
-                                      })) : []}
-                                      target={project.target}
-                                      title={project.title}
-                                      updatedAt={project.updatedAt}
-                                      onDelete={() => handleDeleteProject(project.id)}
-                                      onProjectDeleted={handleProjectDeleted}
-                                      onClick={() => {
-                                        setActiveProject(project);
-                                        setCurrentStep(0);
-                                      }}
-                                    />
-                                  ))
-                                )}
-                              </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {loading || !projectList ? (
+                              Array.from({ length: 4 }).map((_, i) => <ProjectCardSkeleton key={i} />)
                             ) : (
-                              <div className="space-y-4">
-                                {loading || !projectList ? (
-                                  Array.from({ length: 4 }).map((_, i) => <ProjectCardSkeleton key={i} />)
-                                ) : (
-                                  projectList.map((project: HydratedProject) => (
-                                    <ProjectCard
-                                      key={project.id}
-                                      id={project.id}
-                                      targetName={project.targetName || project.title || '—'}
-                                      status={['new', 'in_progress', 'completed'].includes(project.status) ? (project.status as 'new' | 'in_progress' | 'completed') : 'new'}
-                                      thumbnailUrl={project.thumbnailUrl || ''}
-                                      userImageUrl={project.userImageUrl}
-                                      creationDate={project.creationDate || ''}
-                                      frameCount={typeof project.frameCount === 'number' ? project.frameCount : 0}
-                                      fileSize={typeof project.fileSize === 'number' ? `${(project.fileSize / 1024 / 1024).toFixed(2)} MB` : '—'}
-                                      equipment={Array.isArray(project.equipment) ? project.equipment.map(e => ({
-                                        type: e.type as 'telescope' | 'camera' | 'filter',
-                                        name: e.name
-                                      })) : []}
-                                      target={project.target}
-                                      title={project.title}
-                                      updatedAt={project.updatedAt}
-                                      onDelete={() => handleDeleteProject(project.id)}
-                                      onProjectDeleted={handleProjectDeleted}
-                                      onClick={() => {
-                                        setActiveProject(project);
-                                        setCurrentStep(0);
-                                      }}
-                                    />
-                                  ))
-                                )}
-                              </div>
+                              projectList
+                                .filter(project => {
+                                  if (filterStatus && project.status !== filterStatus) return false;
+                                  if (searchTerm && !(project.title?.toLowerCase().includes(searchTerm.toLowerCase()) || project.targetName?.toLowerCase().includes(searchTerm.toLowerCase()))) return false;
+                                  return true;
+                                })
+                                .sort((a, b) => {
+                                  if (sortBy === 'name') {
+                                    return sortOrder === 'asc'
+                                      ? (a.title || '').localeCompare(b.title || '')
+                                      : (b.title || '').localeCompare(a.title || '');
+                                  } else if (sortBy === 'fileSize') {
+                                    const aSize = typeof a.fileSize === 'number' ? a.fileSize : 0;
+                                    const bSize = typeof b.fileSize === 'number' ? b.fileSize : 0;
+                                    return sortOrder === 'asc' ? aSize - bSize : bSize - aSize;
+                                  } else {
+                                    // created_at
+                                    const aDate = new Date(a.creationDate || 0).getTime();
+                                    const bDate = new Date(b.creationDate || 0).getTime();
+                                    return sortOrder === 'asc' ? aDate - bDate : bDate - aDate;
+                                  }
+                                })
+                                .map((project: HydratedProject) => (
+                                  <ProjectCard
+                                    key={project.id}
+                                    id={project.id}
+                                    targetName={project.targetName || project.title || '—'}
+                                    status={['new', 'in_progress', 'completed', 'failed'].includes(project.status) ? (project.status as 'new' | 'in_progress' | 'completed' | 'failed') : 'new'}
+                                    thumbnailUrl={project.thumbnailUrl || ''}
+                                    userImageUrl={project.userImageUrl}
+                                    creationDate={project.creationDate || ''}
+                                    frameCount={typeof project.frameCount === 'number' ? project.frameCount : 0}
+                                    fileSize={typeof project.fileSize === 'number' ? `${(project.fileSize / 1024 / 1024).toFixed(2)} MB` : '—'}
+                                    equipment={Array.isArray(project.equipment) ? project.equipment.map(e => ({
+                                      type: e.type as 'telescope' | 'camera' | 'filter',
+                                      name: e.name
+                                    })) : []}
+                                    target={project.target}
+                                    title={project.title}
+                                    updatedAt={project.updatedAt}
+                                    onDelete={() => handleDeleteProject(project.id)}
+                                    onProjectDeleted={handleProjectDeleted}
+                                    onClick={() => {
+                                      setActiveProject(project);
+                                      setCurrentStep(0);
+                                    }}
+                                  />
+                                ))
                             )}
-                          </>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -656,6 +603,18 @@ export default function DashboardClient({ user, projects }: { user: { id: string
           }}
         />
       )}
+      <style jsx global>{`
+        .new-project-btn {
+          box-shadow: 0 2px 8px 0 rgba(56,189,248,0.15);
+          transition: box-shadow 0.2s, transform 0.15s;
+        }
+        .new-project-btn:hover, .new-project-btn:focus {
+          background: linear-gradient(90deg, #2563eb 0%, #1e40af 100%);
+          box-shadow: 0 4px 24px 0 rgba(56,189,248,0.35), 0 1.5px 8px 0 rgba(56,189,248,0.15);
+          transform: scale(1.045);
+          outline: none;
+        }
+      `}</style>
     </>
   );
 }
