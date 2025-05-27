@@ -35,6 +35,7 @@ import type { HydratedProject } from '@/src/lib/server/getDashboardProjects';
 import { getDashboardProjects } from '@/src/lib/server/getDashboardProjects';
 import { useProjectStore } from '@/src/store/project';
 import CalibrationScaffoldUI from '@/src/components/CalibrationScaffoldUI';
+import { activityFeedEnabled } from '@/src/utils/notificationConfig';
 
 const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
 

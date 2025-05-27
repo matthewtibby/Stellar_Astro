@@ -31,4 +31,6 @@ export const notificationEvents = {
 
 export function shouldNotify(eventType: keyof typeof notificationEvents) {
   return notificationEvents[eventType]?.enabled;
-} 
+}
+
+export const activityFeedEnabled = true; // Set to false to disable Activity Feed globally 
