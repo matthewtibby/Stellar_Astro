@@ -53,7 +53,7 @@ fi
 # Start Python worker server first
 echo "Starting Python worker server..."
 cd python-worker
-source venv/bin/activate
+source ../.venv/bin/activate
 export PYTHONPATH=$PYTHONPATH:$(pwd)
 
 # Start uvicorn and wait for it to be ready

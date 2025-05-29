@@ -43,7 +43,7 @@ export interface ProjectMetadata {
 }
 
 export interface Project {
-  [x: string]: any;
+  [x: string]: unknown;
   id: string;
   userId: string;
   title: string;
@@ -117,5 +117,5 @@ export interface StorageFile {
   created_at: string;
   type: FileType;
   url?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 } 

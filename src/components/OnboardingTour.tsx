@@ -14,10 +14,7 @@ import {
 } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 
-// @ts-ignore
 import { Button } from "@/components/ui/button"
-// @ts-ignore
-import { Progress } from "@/components/ui/progress"
 import { cn } from "@/lib/utils"
 
 // Constants
@@ -255,22 +252,21 @@ export function DashboardTourProvider({
                           
                           <AnimatePresence mode="wait">
                             <div>
-                              {(
-                                motion.div as any
-                              )({
-                                key: `tour-content-${currentStep}`,
-                                initial: { opacity: 0, scale: 0.95, filter: "blur(4px)" },
-                                animate: { opacity: 1, scale: 1, filter: "blur(0px)" },
-                                exit: { opacity: 0, scale: 0.95, filter: "blur(4px)" },
-                                className: "min-h-[80px]",
-                                transition: {
+                              <motion.div
+                                key={`tour-content-${currentStep}`}
+                                initial={{ opacity: 0, scale: 0.95 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.95 }}
+                                style={{ filter: currentStep === -1 ? "blur(4px)" : "blur(0px)", minHeight: 80 }}
+                                transition={{
                                   duration: 0.2,
                                   height: {
                                     duration: 0.4,
                                   },
-                                },
-                                children: steps[currentStep]?.content,
-                              })}
+                                }}
+                              >
+                                {steps[currentStep]?.content}
+                              </motion.div>
                               
                               <div className="mt-5 flex flex-col gap-3">
                                 <div className="h-1 bg-primary rounded-full overflow-hidden">
@@ -377,12 +373,9 @@ export function DashboardTourWelcomeDialog({
       <div className="fixed inset-0 overflow-hidden">
         <div className="foo">
           <motion.div
-            initial={{ scale: 0.7, filter: "blur(10px)" }}
-            animate={{
-              scale: 1,
-              filter: "blur(0px)",
-              y: [0, -8, 0],
-            }}
+            initial={{ scale: 0.7 }}
+            animate={{ scale: 1, y: [0, -8, 0] }}
+            style={{ filter: "blur(0px)" }}
             transition={{
               duration: 0.4,
               ease: "easeOut",
@@ -395,16 +388,11 @@ export function DashboardTourWelcomeDialog({
           >
             <div className="fixed inset-0 z-[100] rounded-md border-2 border-primary">
               <div className="relative mb-4">
-                {(
-                  motion.div as any
-                )({
-                  initial: { scale: 0.7, filter: "blur(10px)" },
-                  animate: {
-                    scale: 1,
-                    filter: "blur(0px)",
-                    y: [0, -8, 0],
-                  },
-                  transition: {
+                <motion.div
+                  initial={{ scale: 0.7 }}
+                  animate={{ scale: 1, y: [0, -8, 0] }}
+                  style={{ filter: "blur(0px)", position: "absolute", right: 0, top: 0 }}
+                  transition={{
                     duration: 0.4,
                     ease: "easeOut",
                     y: {
@@ -412,30 +400,26 @@ export function DashboardTourWelcomeDialog({
                       repeat: Number.POSITIVE_INFINITY,
                       ease: "easeInOut",
                     },
-                  },
-                  className: "absolute right-0 top-0",
-                  children: <Compass className="h-24 w-24 text-primary" />,
-                })}
-                {(
-                  motion.div as any
-                )({
-                  initial: { opacity: 0 },
-                  animate: { 
-                    opacity: 1,
-                    rotate: [0, 360],
-                  },
-                  transition: {
+                  }}
+                >
+                  <Compass className="h-24 w-24 text-primary" />
+                </motion.div>
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1, rotate: [0, 360] }}
+                  style={{ position: "absolute", right: 0, top: 0 }}
+                  transition={{
                     delay: 0.3,
                     duration: 0.5,
                     rotate: {
                       duration: 20,
                       repeat: Number.POSITIVE_INFINITY,
                       ease: "linear",
-                    }
-                  },
-                  className: "absolute right-0 top-0",
-                  children: <Sparkles className="h-6 w-6 text-primary" />,
-                })}
+                    },
+                  }}
+                >
+                  <Sparkles className="h-6 w-6 text-primary" />
+                </motion.div>
               </div>
               <div className="text-center">
                 <h2 className="text-2xl font-medium mb-4">Welcome to Your Dashboard</h2>
@@ -582,26 +566,16 @@ function Confetti() {
     <div className="fixed inset-0 pointer-events-none z-[1000] overflow-hidden">
       {Array.from({ length: 100 }).map((_, i) => (
         <div className="absolute w-2 h-2 rounded-full" key={i}>
-          {(
-            motion.div as any
-          )({
-            className: "absolute",
-            initial: { 
-              top: "-10%", 
-              left: `${Math.random() * 100}%`,
-              backgroundColor: `hsl(${Math.random() * 360}, 100%, 50%)`,
-            },
-            animate: {
-              top: "100%",
-              left: `${Math.random() * 100}%`,
-              rotate: Math.random() * 360,
-            },
-            transition: {
+          <motion.div
+            initial={{ top: "-10%", left: `${Math.random() * 100}%` }}
+            animate={{ top: "100%", left: `${Math.random() * 100}%`, rotate: Math.random() * 360 }}
+            style={{ backgroundColor: `hsl(${Math.random() * 360}, 100%, 50%)`, position: "absolute" }}
+            transition={{
               duration: Math.random() * 2 + 2,
               ease: "easeOut",
               delay: Math.random() * 0.5,
-            },
-          })}
+            }}
+          ></motion.div>
         </div>
       ))}
     </div>

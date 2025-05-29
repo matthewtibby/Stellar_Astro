@@ -1,16 +1,23 @@
+import ProjectUploadClient from '@/src/components/ProjectUploadClient';
 import { createSupabaseServerClient } from '@/src/lib/supabaseServer';
-import { redirect } from 'next/navigation';
-import UploadClientPage from './UploadClientPage';
+import { getDashboardProjects } from '@/src/lib/server/getDashboardProjects';
 
-export default async function ProjectUploadPage({ params }: { params: { projectId: string } }) {
+interface UploadPageParams {
+  params: { projectId: string };
+}
+
+export default async function ProjectUploadPage({ params }: UploadPageParams) {
   const supabase = createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
-  const projectId = params.projectId;
-  const userId = user?.id;
-
-  if (!userId || !projectId) {
-    redirect('/dashboard');
-  }
-
-  return <UploadClientPage projectId={projectId} userId={userId} />;
+  const projectId = params?.projectId;
+  if (!user || !projectId) return <div className="text-white p-8">Project or user not found.</div>;
+  const projects = await getDashboardProjects(user.id);
+  const project = projects.find(p => p.id === projectId);
+  return (
+    <ProjectUploadClient
+      projectId={projectId}
+      userId={user.id}
+      projectName={project?.title || 'Project Upload'}
+    />
+  );
 } 

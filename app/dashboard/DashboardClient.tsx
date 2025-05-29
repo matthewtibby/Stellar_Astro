@@ -1,40 +1,15 @@
 "use client";
 import React, { useEffect, useState, useRef } from 'react';
-import { useRouter, useParams } from 'next/navigation';
-import { useUserStore } from '@/src/store/user';
-import { 
-  User, Plus, Grid, List, Image, Settings, Share2, CheckCircle, ChevronRight, ChevronDown, FolderOpen, Upload, Layers, Sliders, Share, LogOut, X, FileText, Camera as CameraIcon, Star, LucideIcon, File, Folder, Trash2, AlertCircle, Info, Tag, Copy, Archive, ChevronLeft
-} from 'lucide-react';
-import Link from 'next/link';
-import TargetAutocomplete from '@/components/TargetAutocomplete';
-import { AstronomicalTarget } from '@/src/data/astronomicalTargets';
-import { Telescope, Camera as CameraType, Filter } from '@/src/data/equipmentDatabase';
-import EquipmentAutocomplete from '@/src/components/EquipmentAutocomplete';
-import FitsFileUpload from '@/src/components/FitsFileUpload';
-import StepsIndicator from '@/src/components/StepsIndicator';
-import FileManagementPanel from '@/src/components/FileManagementPanel';
-import { type StorageFile } from '@/src/utils/storage';
+import { useRouter } from 'next/navigation';
 import { createBrowserClient, supabaseUrl, supabaseAnonKey } from '@/src/lib/supabase';
-import { generateUUID } from '@/src/utils/uuid';
-import { UniversalFileUpload } from '@/src/components/UniversalFileUpload';
-import ProjectManagementPanel from '@/src/components/ProjectManagementPanel';
-import FileComparisonPanel from '@/src/components/FileComparisonPanel';
-import ProjectChecklist from '@/src/components/ProjectChecklist';
-import { Project as BaseProject, ChecklistItem } from '@/src/types/project';
-import WelcomeDashboard from '@/src/components/WelcomeDashboard';
 import AuthSync from '@/components/AuthSync';
-import { useToast } from '@/src/hooks/useToast';
-import { projectTemplates } from '@/src/utils/projectTemplates';
-import { DashboardTourProvider, useDashboardTour } from '@/src/components/OnboardingTour';
 import ActivityFeed from '../components/ActivityFeed';
 import NotificationCenter from '../components/NotificationCenter';
 import DashboardStats from '../components/DashboardStats';
 import NewProjectModal from '@/src/components/NewProjectModal';
 import ProjectCard, { ProjectCardSkeleton } from '@/src/components/ui/ProjectCard';
 import type { HydratedProject } from '@/src/lib/server/getDashboardProjects';
-import { getDashboardProjects } from '@/src/lib/server/getDashboardProjects';
-import { useProjectStore } from '@/src/store/project';
-import CalibrationScaffoldUI from '@/src/components/CalibrationScaffoldUI';
+import { Plus, X, LayoutGrid, List as ListIcon } from 'lucide-react';
 
 const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
 
@@ -42,56 +17,11 @@ export default function DashboardClient({ user, projects }: { user: { id: string
   // State and logic from previous DashboardPage
   const router = useRouter();
   const [activeView, setActiveView] = useState('grid');
-  const [activeProject, setActiveProject] = useState<HydratedProject | null>(null);
   const [showNewProject, setShowNewProject] = useState(false);
-  const [currentStep, setCurrentStep] = useState(0);
-  const [showSidebar, setShowSidebar] = useState(false);
-  const [showLimitWarning, setShowLimitWarning] = useState(false);
-  const [isViewExpanded, setIsViewExpanded] = useState(true);
-  const [isWorkflowExpanded, setIsWorkflowExpanded] = useState(true);
-  const [isFilesExpanded, setIsFilesExpanded] = useState(true);
-  const [hasUploadedFiles, setHasUploadedFiles] = useState(false);
-  const [projectName, setProjectName] = useState('');
-  const [projectDescription, setProjectDescription] = useState('');
-  const [selectedTarget, setSelectedTarget] = useState<AstronomicalTarget | null>(null);
-  const [selectedTelescope, setSelectedTelescope] = useState<Telescope | null>(null);
-  const [selectedCamera, setSelectedCamera] = useState<CameraType | null>(null);
-  const [selectedFilters, setSelectedFilters] = useState<Filter[]>([]);
-  const [uploadedFiles, setUploadedFiles] = useState<Record<string, string[]>>({ light: [], dark: [], flat: [], bias: [] });
-  const [uploadErrors, setUploadErrors] = useState<Record<string, string>>({});
-  const params = useParams();
-  const currentProjectId = params?.projectId ? (Array.isArray(params.projectId) ? params.projectId[0] : params.projectId) : null;
-  const [selectedFile, setSelectedFile] = useState<StorageFile | null>(null);
-  const fileListRef = useRef<{ refresh: () => void }>(null);
-  const [projectNameEdit, setProjectNameEdit] = useState('');
-  const [isSavingProjectName, setIsSavingProjectName] = useState(false);
-  const { addToast } = useToast();
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState<{ open: boolean, projectId?: string }>({ open: false });
-  const [isSavingStep, setIsSavingStep] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState('');
-  const [sortBy, setSortBy] = useState('created_at');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  const [showOnboarding, setShowOnboarding] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('stellar_onboarding_dismissed') !== 'true';
-    }
-    return true;
-  });
-  const [filterFavorites, setFilterFavorites] = useState(false);
-  const [filterTag, setFilterTag] = useState('');
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
-  const [isPublic, setIsPublic] = useState(false);
-  const [subscription, setSubscription] = useState('free');
+  const [openStats, setOpenStats] = useState(false);
   const [loading, setLoading] = useState(false);
   const [projectList, setProjectList] = useState<HydratedProject[]>(projects);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-
-  const workflowSteps = [
-    { id: 0, name: "Upload Files", icon: Settings },
-    { id: 1, name: "Process", icon: Settings },
-    { id: 2, name: "Export", icon: Settings },
-  ];
+  const [subscription, setSubscription] = useState('free');
 
   useEffect(() => {
     if (user) {
@@ -114,37 +44,6 @@ export default function DashboardClient({ user, projects }: { user: { id: string
       </div>
     );
   }
-
-  // Add this function to refresh projects after deletion
-  const handleProjectDeleted = async () => {
-    if (user?.id) {
-      setLoading(true);
-      try {
-        const res = await fetch(`/api/projects?userId=${user.id}`);
-        if (!res.ok) throw new Error('Failed to fetch projects');
-        const refreshed = await res.json();
-        setProjectList(refreshed);
-      } catch (err) {
-        // Optionally show a toast or error
-      } finally {
-        setLoading(false);
-      }
-    }
-  };
-
-  // E2E delete handler
-  const handleDeleteProject = async (projectId: string) => {
-    try {
-      // Optimistically remove the project from the list
-      setProjectList(prev => prev.filter(p => p.id !== projectId));
-      await useProjectStore.getState().deleteProject(projectId);
-      addToast('success', 'Project deleted successfully');
-      // Optionally refetch to ensure sync with backend
-      await handleProjectDeleted();
-    } catch (err: any) {
-      addToast('error', err?.message || 'Failed to delete project');
-    }
-  };
 
   // Main dashboard UI
   return (
@@ -342,6 +241,13 @@ export default function DashboardClient({ user, projects }: { user: { id: string
                   <div className="lg:col-span-3">
                     {/* Breadcrumb Navigation */}
                     <div className="flex items-center space-x-2 mb-6 text-sm">
+                      <button
+                        onClick={() => setActiveProject(null)}
+                        className="text-gray-400 hover:text-white transition-colors"
+                      >
+                        Dashboard
+                      </button>
+                      <ChevronRight size={16} className="text-gray-500" />
                       {activeProject ? (
                         <>
                           <button
@@ -360,188 +266,116 @@ export default function DashboardClient({ user, projects }: { user: { id: string
                       )}
                     </div>
 
-                    {/* Project Limit Warning */}
-                    {showLimitWarning && (
-                      <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
-                        <p className="text-yellow-500">
-                          Warning: You are approaching your project limit. Free users are limited to 5 projects.
-                          Consider upgrading to Pro for unlimited projects.
-                        </p>
-                      </div>
-                    )}
-
-                    {/* Project List/Grid and Details/Workflow */}
-                    {activeProject ? (
-                      <div className="p-4 space-y-4">
-                        {/* Workflow Stepper */}
-                        <StepsIndicator
-                          steps={workflowSteps}
-                          currentStep={currentStep}
-                        />
-                        {/* Onboarding Banner for each step */}
-                        {currentStep === 0 && (
-                          <div className="mb-4 p-4 bg-blue-900/70 border border-blue-500/30 rounded-lg text-blue-100">
-                            <b>Step 1: Upload your FITS files</b><br />
-                            Drag and drop your FITS files below. Upload at least one light frame to continue.
-                          </div>
-                        )}
-                        {currentStep === 1 && (
-                          <div className="mb-4 p-4 bg-blue-900/70 border border-blue-500/30 rounded-lg text-blue-100">
-                            <b>Step 2: Process your data</b><br />
-                            Run processing steps on your uploaded files. (UI coming soon)
-                          </div>
-                        )}
-                        {currentStep === 2 && (
-                          <div className="mb-4 p-4 bg-blue-900/70 border border-blue-500/30 rounded-lg text-blue-100">
-                            <b>Step 3: Export your results</b><br />
-                            Download or share your processed images. (UI coming soon)
-                          </div>
-                        )}
-                        {/* Step Content */}
-                        {currentStep === 0 && (
-                          <UniversalFileUpload
-                            projectId={activeProject.id}
-                            userId={user?.id}
-                            onUploadComplete={() => {/* Optionally advance to next step if files uploaded */}}
-                            onValidationError={() => {}}
-                          />
-                        )}
-                        {currentStep === 1 && (
-                          <div className="bg-gray-800/50 rounded-lg p-8 text-blue-200 border border-gray-700">
-                            <h2 className="text-2xl font-bold mb-4">Calibration & Master Frame Creation</h2>
-                            <CalibrationScaffoldUI projectId={activeProject.id} userId={user.id} />
-                          </div>
-                        )}
-                        {currentStep === 2 && (
-                          <div className="bg-gray-800/50 rounded-lg p-8 text-center text-blue-200 border border-gray-700">
-                            <p>Export and sharing UI coming soon.</p>
-                          </div>
-                        )}
-                        {/* Navigation Buttons */}
-                        <div className="flex justify-between mt-6">
-                          <button
-                            className="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600 disabled:opacity-50"
-                            onClick={() => setCurrentStep(s => Math.max(0, s - 1))}
-                            disabled={currentStep === 0}
-                          >
-                            Previous
-                          </button>
-                          <button
-                            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-                            onClick={() => setCurrentStep(s => Math.min(2, s + 1))}
-                            disabled={currentStep === 2}
-                          >
-                            Next
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <>
-                        {activeView === 'grid' ? (
-                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {loading || !projectList ? (
-                              Array.from({ length: 4 }).map((_, i) => <ProjectCardSkeleton key={i} />)
-                            ) : (
-                              projectList.map((project: HydratedProject) => (
-                                <ProjectCard
-                                  key={project.id}
-                                  id={project.id}
-                                  targetName={project.targetName || project.title || '—'}
-                                  status={['new', 'in_progress', 'completed'].includes(project.status) ? (project.status as 'new' | 'in_progress' | 'completed') : 'new'}
-                                  thumbnailUrl={project.thumbnailUrl || ''}
-                                  userImageUrl={project.userImageUrl}
-                                  creationDate={project.creationDate || ''}
-                                  frameCount={typeof project.frameCount === 'number' ? project.frameCount : 0}
-                                  fileSize={typeof project.fileSize === 'number' ? `${(project.fileSize / 1024 / 1024).toFixed(2)} MB` : '—'}
-                                  equipment={Array.isArray(project.equipment) ? project.equipment.map(e => ({
-                                    type: e.type as 'telescope' | 'camera' | 'filter',
-                                    name: e.name
-                                  })) : []}
-                                  target={project.target}
-                                  title={project.title}
-                                  updatedAt={project.updatedAt}
-                                  onDelete={() => handleDeleteProject(project.id)}
-                                  onProjectDeleted={handleProjectDeleted}
-                                  onClick={() => setActiveProject(project)}
-                                />
-                              ))
-                            )}
-                          </div>
-                        ) : (
-                          <div className="space-y-4">
-                            {loading || !projectList ? (
-                              Array.from({ length: 4 }).map((_, i) => <ProjectCardSkeleton key={i} />)
-                            ) : (
-                              projectList.map((project: HydratedProject) => (
-                                <ProjectCard
-                                  key={project.id}
-                                  id={project.id}
-                                  targetName={project.targetName || project.title || '—'}
-                                  status={['new', 'in_progress', 'completed'].includes(project.status) ? (project.status as 'new' | 'in_progress' | 'completed') : 'new'}
-                                  thumbnailUrl={project.thumbnailUrl || ''}
-                                  userImageUrl={project.userImageUrl}
-                                  creationDate={project.creationDate || ''}
-                                  frameCount={typeof project.frameCount === 'number' ? project.frameCount : 0}
-                                  fileSize={typeof project.fileSize === 'number' ? `${(project.fileSize / 1024 / 1024).toFixed(2)} MB` : '—'}
-                                  equipment={Array.isArray(project.equipment) ? project.equipment.map(e => ({
-                                    type: e.type as 'telescope' | 'camera' | 'filter',
-                                    name: e.name
-                                  })) : []}
-                                  target={project.target}
-                                  title={project.title}
-                                  updatedAt={project.updatedAt}
-                                  onDelete={() => handleDeleteProject(project.id)}
-                                  onProjectDeleted={handleProjectDeleted}
-                                  onClick={() => setActiveProject(project)}
-                                />
-                              ))
-                            )}
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </div>
+          {/* Projects Section */}
+          <div className="flex flex-col items-center w-full">
+            <div className="flex flex-col sm:flex-row items-center justify-between w-full mb-6 gap-4">
+              <h2 className="text-2xl font-bold text-white text-center sm:text-left">All Projects</h2>
+              <div className="flex items-center gap-2">
+                <button
+                  className={`p-2 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400 ${activeView === 'grid' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-400 hover:bg-gray-600'}`}
+                  onClick={() => setActiveView('grid')}
+                  aria-label="Grid view"
+                >
+                  <LayoutGrid size={20} />
+                </button>
+                <button
+                  className={`p-2 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400 ${activeView === 'list' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-400 hover:bg-gray-600'}`}
+                  onClick={() => setActiveView('list')}
+                  aria-label="List view"
+                >
+                  <ListIcon size={20} />
+                </button>
               </div>
             </div>
+            {/* Project List/Grid */}
+            {activeView === 'grid' ? (
+              <div className="w-full flex justify-center">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 w-full max-w-7xl">
+                  {loading || !projectList ? (
+                    Array.from({ length: 4 }).map((_, i) => <ProjectCardSkeleton key={i} />)
+                  ) : (
+                    projectList.map((project: HydratedProject) => (
+                      <ProjectCard
+                        key={project.id}
+                        id={project.id}
+                        targetName={project.targetName || project.title || '—'}
+                        status={['new', 'in_progress', 'completed'].includes(project.status) ? (project.status as 'new' | 'in_progress' | 'completed') : 'new'}
+                        thumbnailUrl={project.thumbnailUrl || ''}
+                        userImageUrl={project.userImageUrl}
+                        creationDate={project.creationDate || ''}
+                        frameCount={typeof project.frameCount === 'number' ? project.frameCount : 0}
+                        fileSize={typeof project.fileSize === 'number' ? `${(project.fileSize / 1024 / 1024).toFixed(2)} MB` : '—'}
+                        equipment={Array.isArray(project.equipment) ? project.equipment.map(e => ({
+                          type: e.type as 'telescope' | 'camera' | 'filter',
+                          name: e.name
+                        })) : []}
+                        target={project.target}
+                        title={project.title}
+                        updatedAt={project.updatedAt}
+                        onClick={() => router.push(`/dashboard/${project.id}/upload`)}
+                      />
+                    ))
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="w-full flex justify-center">
+                <div className="space-y-4 w-full max-w-4xl">
+                  {loading || !projectList ? (
+                    Array.from({ length: 4 }).map((_, i) => <ProjectCardSkeleton key={i} />)
+                  ) : (
+                    projectList.map((project: HydratedProject) => (
+                      <ProjectCard
+                        key={project.id}
+                        id={project.id}
+                        targetName={project.targetName || project.title || '—'}
+                        status={['new', 'in_progress', 'completed'].includes(project.status) ? (project.status as 'new' | 'in_progress' | 'completed') : 'new'}
+                        thumbnailUrl={project.thumbnailUrl || ''}
+                        userImageUrl={project.userImageUrl}
+                        creationDate={project.creationDate || ''}
+                        frameCount={typeof project.frameCount === 'number' ? project.frameCount : 0}
+                        fileSize={typeof project.fileSize === 'number' ? `${(project.fileSize / 1024 / 1024).toFixed(2)} MB` : '—'}
+                        equipment={Array.isArray(project.equipment) ? project.equipment.map(e => ({
+                          type: e.type as 'telescope' | 'camera' | 'filter',
+                          name: e.name
+                        })) : []}
+                        target={project.target}
+                        title={project.title}
+                        updatedAt={project.updatedAt}
+                        onClick={() => router.push(`/dashboard/${project.id}/upload`)}
+                      />
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
           </div>
+          {/* Stats Flyout */}
+          {openStats && (
+            <div className="fixed top-0 right-0 h-full w-96 bg-gray-900 border-l border-gray-700 shadow-2xl z-50 flex flex-col">
+              <div className="flex items-center justify-between p-4 border-b border-gray-700">
+                <span className="text-lg font-semibold text-white">Dashboard Stats</span>
+                <button onClick={() => setOpenStats(false)} className="text-gray-400 hover:text-white">
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4">
+                <DashboardStats user={user} />
+              </div>
+            </div>
+          )}
         </div>
-      </DashboardTourProvider>
+      </div>
       <ActivityFeed />
       {/* New Project Modal/Panel */}
       {showNewProject && (
         <NewProjectModal
           onClose={() => setShowNewProject(false)}
           onProjectCreated={(newProject) => {
-            setActiveProject(newProject);
-            setCurrentStep(0);
             setShowNewProject(false);
           }}
         />
       )}
     </>
-  );
-}
-
-// CollapsibleStats component
-function CollapsibleStats({ user }: { user: { id: string; email: string } | null }) {
-  const [open, setOpen] = React.useState(false); // collapsed by default
-  return (
-    <div className="mb-6">
-      <button
-        onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-2 px-4 py-2 bg-gray-800 text-white rounded-t-lg border border-b-0 border-gray-700 hover:bg-gray-700 transition-colors focus:outline-none"
-        aria-expanded={open}
-        aria-controls="dashboard-stats-panel"
-      >
-        <span className="font-semibold">Dashboard Stats</span>
-        {open ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-      </button>
-      {open && (
-        <div id="dashboard-stats-panel" className="bg-gray-800/50 border border-t-0 border-gray-700 rounded-b-lg p-4">
-          <DashboardStats user={user} />
-        </div>
-      )}
-    </div>
   );
 } 

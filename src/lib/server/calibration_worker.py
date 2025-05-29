@@ -25,10 +25,7 @@ from astropy.nddata import CCDData
 import astropy.units as u
 import matplotlib.pyplot as plt
 import tempfile
-try:
-    from .supabase_io import download_file, upload_file, get_public_url, list_files
-except ImportError:
-    from supabase_io import download_file, upload_file, get_public_url, list_files
+from src.lib.server.supabase_io import download_file, upload_file, get_public_url, list_files
 
 # --- Stacking Methods ---
 def load_ccd_list(file_list):

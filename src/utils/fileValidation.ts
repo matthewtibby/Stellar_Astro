@@ -1,5 +1,3 @@
-import { FITSParser } from 'jsfitsio';
-
 export interface FITSValidationResult {
   isValid: boolean;
   warnings: string[];

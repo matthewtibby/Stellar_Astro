@@ -1,7 +1,7 @@
 export type FileType = 'light' | 'dark' | 'flat' | 'bias';
 
 export interface FitsMetadata {
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface FitsValidationResult {

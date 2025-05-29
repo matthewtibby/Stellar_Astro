@@ -1,4 +1,4 @@
-import { FITSValidationResult, validateFITSFile } from './fileValidation';
+import { validateFITSFile } from './fileValidation';
 
 export interface FileMetadata {
   exposure?: number;

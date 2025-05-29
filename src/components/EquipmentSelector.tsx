@@ -5,6 +5,7 @@ import { EquipmentItem, telescopes, cameras } from '@/src/utils/equipment';
 import { useCurrency } from '@/components/CurrencyProvider';
 import { formatPrice } from '@/lib/currency';
 import { Check, ChevronDown, ChevronUp } from 'lucide-react';
+import Image from 'next/image';
 
 interface EquipmentSelectorProps {
   onSelectTelescope: (telescope: EquipmentItem) => void;
@@ -52,10 +53,12 @@ export default function EquipmentSelector({
               >
                 <div className="flex items-center space-x-3">
                   <div className="w-12 h-12 rounded-md overflow-hidden">
-                    <img 
+                    <Image 
                       src={telescope.imageUrl} 
                       alt={telescope.name} 
                       className="w-full h-full object-cover"
+                      width={48}
+                      height={48}
                     />
                   </div>
                   <div>
@@ -121,10 +124,12 @@ export default function EquipmentSelector({
               >
                 <div className="flex items-center space-x-3">
                   <div className="w-12 h-12 rounded-md overflow-hidden">
-                    <img 
+                    <Image 
                       src={camera.imageUrl} 
                       alt={camera.name} 
                       className="w-full h-full object-cover"
+                      width={48}
+                      height={48}
                     />
                   </div>
                   <div>

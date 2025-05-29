@@ -10,6 +10,7 @@ import {
   DialogFooter,
 } from './ui/dialog';
 import { supabase } from '../lib/supabaseClient';
+import Image from 'next/image';
 
 const FRAME_TYPES = [
   { key: 'dark', label: 'Master Dark' },
@@ -57,30 +58,9 @@ const STATUS_LABELS: Record<MasterStatus, string> = {
   not_started: 'Not Started',
 };
 
-// Add new state for pixel rejection algorithm and cosmetic correction method/threshold
-type PixelRejectionAlgorithm = 'sigma' | 'winsorized' | 'linear_fit';
-const PIXEL_REJECTION_ALGORITHMS = [
-  { value: 'sigma', label: 'Sigma Clipping' },
-  { value: 'winsorized', label: 'Winsorized Sigma Clipping' },
-  { value: 'linear_fit', label: 'Linear Fit Clipping' },
-];
 const COSMETIC_METHODS = [
   { value: 'hot_pixel_map', label: 'Hot Pixel Map' },
   { value: 'la_cosmic', label: 'L.A.Cosmic' },
-];
-
-// Add Master Flat stacking methods and tooltips
-const FLAT_BEGINNER_METHODS = [
-  { value: 'mean', label: 'Mean (Average)', info: 'Adds all pixel values and divides by number of frames. Simple, fast, but sensitive to outliers.' },
-  { value: 'median', label: 'Median', info: 'Selects the median value per pixel. More robust to dust/defects or minor variations between frames.' },
-  { value: 'minmax', label: 'Min/Max Rejection', info: 'Drops highest and lowest before averaging. Helps remove outliers.' },
-];
-const FLAT_ADVANCED_METHODS = [
-  { value: 'sigma', label: 'Sigma Clipping', info: 'Removes outlier pixel values based on a standard deviation threshold.' },
-  { value: 'winsorized', label: 'Winsorized Sigma Clipping', info: 'Similar to sigma clipping, but replaces outliers instead of discarding them.' },
-  { value: 'linear_fit', label: 'Linear Fit Clipping', info: 'Compares pixel values across frames and fits a line to reject inconsistent ones.' },
-  { value: 'adaptive_weighted', label: 'Adaptive Weighted Average', info: 'Assigns weights to each frame/pixel based on quality.' },
-  { value: 'entropy_weighted', label: 'Entropy Weighted Average', info: 'Prioritizes frames with lowest noise/entropy.' },
 ];
 
 // SVG illustration for empty state
@@ -822,7 +802,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                           value={tabState.dark.cosmeticMethod}
                           onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, cosmeticMethod: e.target.value } }))}
                         >
-                          {COSMETIC_METHODS.map(m => (
+                          {COSMETIC_METHODS.map((m: { value: string; label: string }) => (
                             <option key={m.value} value={m.value}>{m.label}</option>
                           ))}
                         </select>
@@ -959,11 +939,13 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
             <h3 className="text-xl font-bold mb-6 text-white">{FRAME_TYPES.find(f => f.key === selectedType)?.label} Preview</h3>
             <div className="w-72 h-72 bg-[#232946] rounded-2xl flex items-center justify-center text-3xl text-blue-200 border-2 border-[#232946] mb-10 shadow-lg">
               {previewUrl ? (
-                <img
+                <Image
                   src={previewUrl}
                   alt={`${FRAME_TYPES.find(f => f.key === selectedType)?.label} Preview`}
                   className="w-full h-full object-contain rounded-2xl"
                   style={{ background: '#232946' }}
+                  width={288}
+                  height={288}
                   onError={() => setPreviewUrl(null)}
                 />
               ) : (

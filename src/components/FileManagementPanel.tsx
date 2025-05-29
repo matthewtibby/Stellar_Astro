@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { getFilesByType, validateFitsFile, uploadRawFrame, getFitsFileUrl, deleteFitsFile } from '@/src/utils/storage';
-import { File, Trash2, Download, Eye, RefreshCw, FolderOpen, Upload, AlertCircle, Info, ChevronDown, ChevronUp, X } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { getFilesByType, getFitsFileUrl, deleteFitsFile } from '@/src/utils/storage';
+import { File, Trash2, Download, Eye, RefreshCw, ChevronDown, ChevronUp, X, Info, AlertCircle } from 'lucide-react';
 import { type FileType, type StorageFile } from '@/src/types/store';
 import { type FitsMetadata, type FitsValidationResult, type FitsAnalysisResult } from '@/src/types/fits';
 import { createBrowserClient } from '@supabase/ssr';
@@ -13,12 +13,6 @@ const INITIAL_FILE_TYPES: FileType[] = ['light', 'dark', 'bias', 'flat'];
 interface FileManagementPanelProps {
   projectId: string;
   onRefresh?: () => void;
-  onValidationError?: (error: string) => void;
-}
-
-interface SelectedFile {
-  file: File;
-  type: FileType;
 }
 
 interface FileMetadataProps {
@@ -110,10 +104,6 @@ function FileMetadata({ metadata, isExpanded, onToggle }: FileMetadataProps) {
 }
 
 // Add interfaces for state
-interface FileWarnings {
-  [key: string]: string[];
-}
-
 interface ExpandedFiles {
   [key: string]: boolean;
 }
@@ -131,18 +121,6 @@ interface FilesByType extends Record<FileType, StorageFile[]> {
   'aligned': StorageFile[];
   'pre-processed': StorageFile[];
   'post-processed': StorageFile[];
-}
-
-interface UploadProgress {
-  [key: string]: number;
-}
-
-interface FileValidationResult {
-  isValid: boolean;
-  type: FileType;
-  metadata: FitsMetadata;
-  analysis?: FitsAnalysisResult;
-  error?: string;
 }
 
 // Update the file type mapping to handle null values
@@ -173,19 +151,12 @@ const fileTypeLabels: Record<FileType, string> = {
   'post-processed': 'Post-Processed'
 };
 
-export default function FileManagementPanel({ projectId, onRefresh, onValidationError }: FileManagementPanelProps) {
-  const [files, setFiles] = useState<StorageFile[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [currentFile, setCurrentFile] = useState<string | null>(null);
-  const [selectedFileMetadata, setSelectedFileMetadata] = useState<NonNullable<FitsValidationResult['metadata']> | null>(null);
-  const [fileWarnings, setFileWarnings] = useState<FileWarnings>({});
+export default function FileManagementPanel({ projectId, onRefresh }: FileManagementPanelProps) {
   const [moveNotification, setMoveNotification] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<FileType>('light');
   const [searchTerm, setSearchTerm] = useState('');
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
-  const [userId, setUserId] = useState<string | null>(null);
   const [tagFilter, setTagFilter] = useState('');
 
   const supabase = createBrowserClient(
@@ -229,29 +200,15 @@ export default function FileManagementPanel({ projectId, onRefresh, onValidation
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewCache, setPreviewCache] = useState<Record<string, string>>({});
 
-  // Get user ID on component mount
-  useEffect(() => {
-    const getUser = async () => {
-      const { data: { user }, error } = await supabase.auth.getUser();
-      if (error || !user) {
-        setError('User not authenticated');
-        return;
-      }
-      setUserId(user.id);
-    };
-    getUser();
-  }, [supabase]);
-
   const loadFiles = async () => {
     if (!projectId) return;
     try {
       setLoading(true);
       const files = await getFilesByType(projectId);
       setFilesByType(files);
-      setError(null);
       setHasLoadedFiles(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load files');
+      console.error('Error loading files:', err);
     } finally {
       setLoading(false);
     }
@@ -377,47 +334,24 @@ export default function FileManagementPanel({ projectId, onRefresh, onValidation
       await loadFiles();
       if (onRefresh) onRefresh();
     } catch (error) {
-      setError(error instanceof Error ? error.message : 'Failed to delete file');
+      console.error('Error deleting file:', error);
     }
   };
 
   // Filter files by tag
   const filteredFiles = tagFilter.trim()
     ? filesByType[activeTab].filter(f => {
-        const tags = Array.isArray(f.metadata?.tags)
-          ? f.metadata.tags
-          : Array.isArray((f as any).tags)
-            ? (f as any).tags
-            : [];
+        const tags = Array.isArray((f as unknown as { tags?: unknown }).tags) ? (f as unknown as { tags: string[] }).tags : [];
         return tags.some((tag: string) => tag.toLowerCase().includes(tagFilter.toLowerCase()));
       })
     : filesByType[activeTab];
-
-  const fileTypeIcons: Record<FileType, React.ReactNode> = {
-    'light': <FolderOpen className="h-4 w-4" />,
-    'dark': <FolderOpen className="h-4 w-4" />,
-    'bias': <FolderOpen className="h-4 w-4" />,
-    'flat': <FolderOpen className="h-4 w-4" />,
-    'master-dark': <FolderOpen className="h-4 w-4" />,
-    'master-bias': <FolderOpen className="h-4 w-4" />,
-    'master-flat': <FolderOpen className="h-4 w-4" />,
-    'calibrated': <FolderOpen className="h-4 w-4" />,
-    'stacked': <FolderOpen className="h-4 w-4" />,
-    'aligned': <FolderOpen className="h-4 w-4" />,
-    'pre-processed': <FolderOpen className="h-4 w-4" />,
-    'post-processed': <FolderOpen className="h-4 w-4" />
-  };
-
-  const handleTypeClick = (type: FileType) => {
-    // ... existing code ...
-  };
 
   const handleCalibrationProgress = () => {
     const requiredTypes: FileType[] = ['dark', 'bias', 'flat'];
     const missingTypes = requiredTypes.filter(type => filesByType[type].length === 0);
 
     if (filesByType['light'].length === 0) {
-      setError('Cannot progress to calibration: No light frames found. Please upload light frames first.');
+      console.error('Cannot progress to calibration: No light frames found. Please upload light frames first.');
       return;
     }
 
@@ -498,7 +432,6 @@ export default function FileManagementPanel({ projectId, onRefresh, onValidation
   const renderFileList = (files: StorageFile[]) => {
     return files.map((file) => {
       const fileType = getFileTypeFromPath(file.path);
-      const warnings = fileWarnings[file.name] || [];
       const isExpanded = expandedFiles[file.name] || false;
       
       return (
@@ -540,41 +473,14 @@ export default function FileManagementPanel({ projectId, onRefresh, onValidation
               </button>
             </div>
           </div>
-          {/* Show metadata if available */}
-          {selectedFileMetadata && (
-            <FileMetadata 
-              metadata={selectedFileMetadata} 
-              isExpanded={isExpanded}
-              onToggle={() => toggleFileExpansion(file.name)}
-            />
-          )}
-          {/* Show warnings if any */}
-          {warnings.length > 0 && (
-            <div className="mt-2 p-2 bg-yellow-900/50 rounded-md text-sm">
-              <div className="flex items-start space-x-2">
-                <AlertCircle className="h-4 w-4 text-yellow-400 mt-0.5" />
-                <div className="space-y-1">
-                  {warnings.map((warning: string, i: number) => (
-                    <div key={i} className="text-yellow-600 text-sm">
-                      ⚠️ {warning}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
           {/* Display tags as chips/badges */}
           <div className="flex flex-wrap gap-1">
-            {(Array.isArray(file.metadata?.tags)
-              ? file.metadata.tags
-              : Array.isArray((file as any).tags)
-                ? (file as any).tags
-                : []
-            ).map((tag: string, i: number) => (
-              <span key={i} className="bg-blue-700 text-blue-100 text-xs px-2 py-0.5 rounded-full mr-1 mb-1">
-                {tag}
-              </span>
-            ))}
+            {(Array.isArray((file as unknown as { tags?: unknown }).tags) ? (file as unknown as { tags: string[] }).tags : [])
+              .map((tag: string, i: number) => (
+                <span key={i} className="bg-blue-700 text-blue-100 text-xs px-2 py-0.5 rounded-full mr-1 mb-1">
+                  {tag}
+                </span>
+              ))}
           </div>
         </div>
       );
@@ -593,12 +499,6 @@ export default function FileManagementPanel({ projectId, onRefresh, onValidation
 
   return (
     <div className="space-y-4">
-      {error && (
-        <div className="p-4 bg-red-900/50 text-red-200 rounded-md border border-red-800">
-          {error}
-        </div>
-      )}
-      
       {moveNotification && (
         <div className="p-4 bg-yellow-900/50 text-yellow-200 rounded-md border border-yellow-800">
           {moveNotification}
