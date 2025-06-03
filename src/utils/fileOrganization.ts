@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-import { FITSValidationResult, validateFITSFile } from './fileValidation';
-=======
 import { validateFITSFile } from './fileValidation';
->>>>>>> calibration
 
 export interface FileMetadata {
   exposure?: number;
@@ -41,22 +37,23 @@ export async function organizeFiles(files: File[], projectId: string, userId: st
   // Organize files based on validation results
   files.forEach((file, index) => {
     const validation = validationResults[index];
-    const frameType = validation.metadata.frameType;
+    const frameType = validation.metadata?.frameType;
 
     // Add file to appropriate category
-    if (frameType && frameType in organized) {
+    if (frameType && typeof frameType === 'string' && frameType in organized) {
       (organized[frameType as keyof Omit<OrganizedFiles, 'metadata'>] as File[]).push(file);
     } else {
       organized.unknown.push(file);
     }
 
-    // Store metadata
+    // Store metadata, with type guards
+    const meta = validation.metadata || {};
     organized.metadata[file.name] = {
-      exposure: validation.metadata.exposureTime,
-      gain: validation.metadata.gain,
-      temperature: validation.metadata.temperature,
-      filter: validation.metadata.filter,
-      dateObs: validation.metadata.observationDate
+      exposure: typeof meta.exposureTime === 'number' ? meta.exposureTime : undefined,
+      gain: typeof meta.gain === 'number' ? meta.gain : undefined,
+      temperature: typeof meta.temperature === 'number' ? meta.temperature : undefined,
+      filter: typeof meta.filter === 'string' ? meta.filter : undefined,
+      dateObs: typeof meta.observationDate === 'string' ? meta.observationDate : undefined,
     };
   });
 

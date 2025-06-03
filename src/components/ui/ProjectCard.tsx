@@ -13,11 +13,6 @@ import {
   Share2,
   Telescope,
   Trash2,
-<<<<<<< HEAD
-  Edit3,
-  AlertCircle,
-=======
->>>>>>> calibration
 } from "lucide-react";
 import {
   Card,
@@ -27,10 +22,6 @@ import { Button } from "./button";
 import {
   Dialog,
   DialogContent,
-<<<<<<< HEAD
-  DialogDescription,
-=======
->>>>>>> calibration
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -41,28 +32,15 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "./tooltip";
-<<<<<<< HEAD
-import {
-  Tooltip as TooltipComponent,
-  TooltipContent as TooltipContentComponent,
-  TooltipProvider as TooltipProviderComponent,
-  TooltipTrigger as TooltipTriggerComponent,
-} from "@/components/ui/tooltip";
-import { getSkyViewThumbnailUrl } from '@/src/lib/client/skyview';
-import { useToast } from '@/src/hooks/useToast';
-=======
 import { getSkyViewThumbnailUrl } from '@/src/lib/client/skyview';
 import { useToast } from '@/src/hooks/useToast';
 import Image from 'next/image';
->>>>>>> calibration
 
 interface Equipment {
   type: "telescope" | "camera" | "filter";
   name: string;
 }
 
-<<<<<<< HEAD
-=======
 interface ProjectTarget {
   name: string;
   coordinates: { ra: string; dec: string };
@@ -75,7 +53,6 @@ interface ProjectTarget {
   fitsMetadata?: Record<string, unknown>;
 }
 
->>>>>>> calibration
 interface ProjectCardProps {
   id: string;
   targetName: string;
@@ -95,8 +72,7 @@ interface ProjectCardProps {
   name?: string;
   updatedAt?: string;
   onProjectNameUpdate?: (id: string, newName: string) => Promise<void>;
-<<<<<<< HEAD
-  target?: any;
+  target?: ProjectTarget;
   onProjectDeleted?: () => void;
 }
 
@@ -109,12 +85,6 @@ function useTimeout(callback: () => void, delay: number | null) {
   }, [callback, delay]);
 }
 
-=======
-  target?: ProjectTarget;
-  onProjectDeleted?: () => void;
-}
-
->>>>>>> calibration
 function ProjectCard({
   id,
   targetName,
@@ -137,28 +107,10 @@ function ProjectCard({
   target,
   onProjectDeleted,
 }: ProjectCardProps) {
-<<<<<<< HEAD
-  console.log('ProjectCard props:', { id, frameCount, targetName, status, thumbnailUrl, userImageUrl, creationDate, fileSize, equipment, title, name, updatedAt, target });
-=======
->>>>>>> calibration
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
   const [editedName, setEditedName] = useState(title || name || 'Untitled Project');
   const [isSavingName, setIsSavingName] = useState(false);
-<<<<<<< HEAD
-  const [hovered, setHovered] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [showUndo, setShowUndo] = useState(false);
-  const [deletedProject, setDeletedProject] = useState<any>(null);
-  const [undoTimeout, setUndoTimeout] = useState<NodeJS.Timeout | null>(null);
-  const [showSuccess, setShowSuccess] = useState(false);
-  const { addToast } = useToast();
-  const [editingEquipment, setEditingEquipment] = useState<{ type: string; index: number } | null>(null);
-  const [editedEquipmentName, setEditedEquipmentName] = useState('');
-  const [thumbnailLoading, setThumbnailLoading] = useState(false);
-  const [isEditingObject, setIsEditingObject] = useState(false);
-  const [editedObject, setEditedObject] = useState(targetName || title || name || '—');
-=======
   const [showUndo, setShowUndo] = useState(false);
   const [deletedProject, setDeletedProject] = useState<{
     id: string;
@@ -179,7 +131,6 @@ function ProjectCard({
   const [showSuccess, setShowSuccess] = useState(false);
   const { addToast } = useToast();
   const [thumbnailLoading, setThumbnailLoading] = useState(false);
->>>>>>> calibration
   
   const handleDelete = async () => {
     console.log('[ProjectCard] handleDelete called for project:', id);
@@ -265,17 +216,6 @@ function ProjectCard({
     return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
-<<<<<<< HEAD
-  const getSupabaseClient = async () => {
-    if (typeof window !== 'undefined') {
-      const mod = await import('@/src/lib/supabaseClient');
-      return mod.supabase;
-    }
-    return null;
-  };
-
-=======
->>>>>>> calibration
   // Fallbacks for missing fields
   const dataFallbacks: string[] = [];
   const safeTargetName = targetName || title || name || '—';
@@ -290,7 +230,6 @@ function ProjectCard({
   if (!updatedAt) dataFallbacks.push('updatedAt');
   const safeEquipment = Array.isArray(equipment) ? equipment : [];
   if (!Array.isArray(equipment) || equipment.length === 0) dataFallbacks.push('equipment');
-<<<<<<< HEAD
   const safeStatus = ['new', 'in_progress', 'completed'].includes(status) ? status : 'new';
   if (!['new', 'in_progress', 'completed'].includes(status)) dataFallbacks.push('status');
   const safeDisplayImage = displayImage || '/images/placeholder.jpg';
@@ -304,11 +243,6 @@ function ProjectCard({
     !safeDisplayImage || safeDisplayImage === '/images/placeholder.jpg',
   ].some(Boolean);
 
-=======
-  const safeDisplayImage = displayImage || '/images/placeholder.jpg';
-  if (!displayImage) dataFallbacks.push('displayImage');
-
->>>>>>> calibration
   // Log when the delete confirmation dialog renders and relevant state/props
   useEffect(() => {
     if (showDeleteConfirm) {
@@ -320,10 +254,6 @@ function ProjectCard({
   // Placeholder async update function (to be implemented)
   async function handleInlineEditSave(field: string, value: string) {
     setIsSavingName(true);
-<<<<<<< HEAD
-    setError(null);
-=======
->>>>>>> calibration
     try {
       if (field === 'object') setThumbnailLoading(true);
       const res = await fetch('/api/project-file-metadata', {
@@ -341,55 +271,12 @@ function ProjectCard({
         await onProjectNameUpdate(id, value.trim());
       }
       addToast('success', `${field === 'object' ? 'Object name' : 'Equipment'} updated!`);
-<<<<<<< HEAD
-    } catch (err: any) {
-      setError(err.message || 'Failed to update name');
-      addToast('error', err.message || 'Failed to update');
-=======
->>>>>>> calibration
     } finally {
       setIsSavingName(false);
       if (field === 'object') setTimeout(() => setThumbnailLoading(false), 1200);
     }
   }
 
-<<<<<<< HEAD
-  // Equipment inline edit handler
-  const handleEquipmentEdit = (type: string, index: number, name: string) => {
-    setEditingEquipment({ type, index });
-    setEditedEquipmentName(name);
-  };
-  const handleEquipmentSave = async (type: string, index: number) => {
-    await handleInlineEditSave(type, editedEquipmentName);
-    setEditingEquipment(null);
-    setEditedEquipmentName('');
-  };
-
-  return (
-    <div
-      className={`transition-all duration-300 ${className || ''} focus:outline-none focus:ring-2 focus:ring-blue-500 hover:shadow-xl active:scale-[0.98]`}
-      style={{ cursor: onClick ? 'pointer' : undefined }}
-      onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      data-fallbacks={dataFallbacks.join(',')}
-      tabIndex={0}
-      aria-label={`Project card for ${safeTargetName}`}
-      role="button"
-      onKeyDown={e => {
-        // Only trigger if the event target is the card itself (not an input, textarea, or button)
-        if (
-          onClick &&
-          (e.key === 'Enter' || e.key === ' ') &&
-          e.target === e.currentTarget
-        ) {
-          e.preventDefault();
-          onClick();
-        }
-      }}
-    >
-      <Card className="w-full max-w-[400px] min-h-[340px] max-h-[400px] bg-gray-900/80 border border-gray-800 rounded-3xl overflow-hidden shadow-lg flex flex-col">
-=======
   return (
     <div className={className || ''} data-fallbacks={dataFallbacks.join(',')}>
       <Card
@@ -405,7 +292,6 @@ function ProjectCard({
           }
         }) : undefined}
       >
->>>>>>> calibration
         {/* Top Section: Image with overlays */}
         <div className="relative flex-1 min-h-[180px] max-h-[180px] aspect-square bg-gray-900">
           {thumbnailLoading && (
@@ -416,11 +302,7 @@ function ProjectCard({
               </svg>
             </div>
           )}
-<<<<<<< HEAD
-          <img
-=======
           <Image
->>>>>>> calibration
             src={safeDisplayImage}
             alt={safeTargetName}
             className="object-cover w-full h-full min-h-[180px] max-h-[180px] aspect-square bg-black"
@@ -431,11 +313,8 @@ function ProjectCard({
               }
             }}
             onLoad={() => setThumbnailLoading(false)}
-<<<<<<< HEAD
-=======
             width={180}
             height={180}
->>>>>>> calibration
           />
           {/* Project Name (centered top) */}
           <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 w-full flex flex-col items-center pointer-events-auto group">
@@ -486,24 +365,8 @@ function ProjectCard({
                 >
                   {projectName}
                 </h3>
-<<<<<<< HEAD
-                {hovered && (
-                  <button
-                    className="text-white hover:text-blue-400 p-1 rounded-full transition"
-                    style={{ marginLeft: '-8px' }}
-                    title="Edit project name"
-                    onClick={e => { e.stopPropagation(); setIsEditingName(true); }}
-                  >
-                    <Edit3 className="h-5 w-5" />
-                  </button>
-                )}
               </div>
             )}
-            {error && <div className="text-red-400 text-xs mt-1">{error}</div>}
-=======
-              </div>
-            )}
->>>>>>> calibration
             {showSuccess && <div className="text-green-400 text-xs mt-1 flex items-center gap-1"><span>✓</span> Updated!</div>}
           </div>
         </div>
@@ -513,60 +376,7 @@ function ProjectCard({
           <div className="flex items-center justify-between mb-0.5">
             <div className="font-semibold text-xs flex items-center gap-1">
               Object:
-<<<<<<< HEAD
-              {isEditingObject ? (
-                <form
-                  className="flex items-center gap-1"
-                  onSubmit={async e => {
-                    e.preventDefault();
-                    if (!editedObject.trim()) return;
-                    await handleInlineEditSave('object', editedObject.trim());
-                    setIsEditingObject(false);
-                  }}
-                >
-                  <input
-                    className="font-mono text-xs bg-gray-800/80 rounded px-1 py-0.5 text-white border border-gray-600 focus:ring-2 focus:ring-blue-500"
-                    value={editedObject}
-                    onChange={e => setEditedObject(e.target.value)}
-                    disabled={isSavingName}
-                    autoFocus
-                    maxLength={64}
-                    style={{ width: '7em' }}
-                  />
-                  <button
-                    type="submit"
-                    className="ml-1 text-blue-400 hover:text-blue-600 disabled:opacity-50"
-                    disabled={isSavingName || !editedObject.trim()}
-                    title="Save"
-                  >
-                    {isSavingName ? <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg> : '✓'}
-                  </button>
-                  <button
-                    type="button"
-                    className="ml-1 text-gray-400 hover:text-gray-600 disabled:opacity-50"
-                    onClick={() => { setIsEditingObject(false); setEditedObject(safeTargetName); }}
-                    disabled={isSavingName}
-                    title="Cancel"
-                  >
-                    ×
-                  </button>
-                </form>
-              ) : (
-                <>
-                  <span className="font-mono">{safeTargetName}</span>
-                  <button
-                    className="ml-1 text-white/60 hover:text-blue-400 p-0.5 rounded-full"
-                    onClick={e => { e.stopPropagation(); setIsEditingObject(true); setEditedObject(safeTargetName); }}
-                    disabled={isSavingName}
-                    title="Edit object name"
-                  >
-                    <Edit3 className="h-4 w-4" />
-                  </button>
-                </>
-              )}
-=======
               <span className="font-mono">{safeTargetName}</span>
->>>>>>> calibration
             </div>
             <Badge
               variant="default"
@@ -575,27 +385,14 @@ function ProjectCard({
                 ' text-xs px-3 py-1 shadow rounded-full whitespace-nowrap min-w-[90px] text-center'
               }
             >
-<<<<<<< HEAD
               {getStatusLabel()}
-=======
-                {getStatusLabel()}
->>>>>>> calibration
             </Badge>
           </div>
           {/* Metadata Block */}
           <div className="flex flex-col gap-0.5 text-[10px] text-primary-foreground/80 mb-1 bg-primary/60 rounded-md px-1 py-0.5">
-<<<<<<< HEAD
-            <div className="flex items-center gap-1 flex-nowrap whitespace-nowrap overflow-hidden">
-              <Calendar className="w-3 h-3 flex-shrink-0" />
-              <span className="truncate max-w-[90px]">{safeCreationDate}</span>
-              <span className="mx-1">•</span>
-              <Edit3 className="w-3 h-3 flex-shrink-0" />
-              <span className="truncate max-w-[90px]">{safeUpdatedAt}</span>
-=======
             <div className="flex items-center gap-2 flex-nowrap whitespace-nowrap overflow-hidden">
               <Calendar className="w-3 h-3 flex-shrink-0" />
               <span className="truncate max-w-[90px]">{safeCreationDate}</span>
->>>>>>> calibration
             </div>
           </div>
           {/* Divider */}
@@ -608,51 +405,7 @@ function ProjectCard({
               safeEquipment.map((item, index) => (
                 <span key={index} className="flex items-center gap-1">
                   {getEquipmentIcon(item.type)}
-<<<<<<< HEAD
-                  {editingEquipment && editingEquipment.type === item.type && editingEquipment.index === index ? (
-                    <>
-                      <input
-                        className="bg-gray-800/80 rounded px-1 py-0.5 text-xs text-white border border-gray-600 focus:ring-2 focus:ring-blue-500"
-                        value={editedEquipmentName}
-                        onChange={e => setEditedEquipmentName(e.target.value)}
-                        disabled={isSavingName}
-                        autoFocus
-                        maxLength={32}
-                        style={{ width: '6em' }}
-                      />
-                      <button
-                        className="ml-1 text-blue-400 hover:text-blue-600 disabled:opacity-50"
-                        onClick={e => { e.stopPropagation(); handleEquipmentSave(item.type, index); }}
-                        disabled={isSavingName || !editedEquipmentName.trim()}
-                        title="Save"
-                      >
-                        {isSavingName ? <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg> : '✓'}
-                      </button>
-                      <button
-                        className="ml-1 text-gray-400 hover:text-gray-600 disabled:opacity-50"
-                        onClick={e => { e.stopPropagation(); handleEquipmentEdit(item.type, index, item.name); }}
-                        disabled={isSavingName}
-                        title="Cancel"
-                      >
-                        ×
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <span>{item.name}</span>
-                      <button
-                        className="ml-1 text-white/60 hover:text-blue-400 p-0.5 rounded-full"
-                        onClick={e => { e.stopPropagation(); handleEquipmentEdit(item.type, index, item.name); }}
-                        disabled={isSavingName}
-                        title={`Edit ${item.type}`}
-                      >
-                        <Edit3 className="h-4 w-4" />
-                      </button>
-                    </>
-                  )}
-=======
                   <span>{item.name}</span>
->>>>>>> calibration
                   {index < safeEquipment.length - 1 && <span className="mx-1 text-white/40">&bull;</span>}
                 </span>
               ))
@@ -660,10 +413,15 @@ function ProjectCard({
           </div>
           {/* Stats & Actions */}
           <div className="flex items-center justify-between mt-0.5 flex-wrap gap-1">
-<<<<<<< HEAD
-            <div className="flex flex-row gap-2 text-xs">
-              <span>Frames: <span className="font-mono">{safeFrameCount}</span></span>
-              <span>Size: <span className="font-mono">{safeFileSize}</span></span>
+            <div className="flex flex-row gap-3 text-xs items-center">
+              <span className="flex items-center gap-1">
+                <FileText className="w-4 h-4 text-blue-300" />
+                <span className="font-mono">{safeFrameCount}</span>
+              </span>
+              <span className="flex items-center gap-1">
+                <FileText className="w-4 h-4 text-blue-300" />
+                <span className="font-mono">{safeFileSize}</span>
+              </span>
             </div>
             <div className="flex gap-2 justify-center w-full">
               <Dialog>
@@ -678,31 +436,6 @@ function ProjectCard({
                     </TooltipTrigger>
                     <TooltipContent>Project Info</TooltipContent>
                   </Tooltip>
-=======
-            <div className="flex flex-row gap-3 text-xs items-center">
-              <span className="flex items-center gap-1">
-                <FileText className="w-4 h-4 text-blue-300" />
-                <span className="font-mono">{safeFrameCount}</span>
-              </span>
-              <span className="flex items-center gap-1">
-                <FileText className="w-4 h-4 text-blue-300" />
-                <span className="font-mono">{safeFileSize}</span>
-              </span>
-        </div>
-            <div className="flex gap-2 justify-center w-full">
-              <Dialog>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                      <DialogTrigger asChild>
-                        <Button size="icon" variant="secondary" className="bg-gray-800/80 hover:bg-primary text-white shadow-lg" aria-label="Project Info" onClick={e => { e.stopPropagation(); }}>
-                  <Info className="h-4 w-4" />
-                </Button>
-                      </DialogTrigger>
-              </TooltipTrigger>
-              <TooltipContent>Project Info</TooltipContent>
-            </Tooltip>
->>>>>>> calibration
                 </TooltipProvider>
                 <DialogContent className="bg-gray-900 border border-gray-800 shadow-2xl">
                   <DialogHeader>
@@ -796,7 +529,6 @@ function ProjectCard({
                 </DialogContent>
               </Dialog>
               <Button size="icon" variant="ghost" className="hover:bg-primary/80 text-white border-none" onClick={e => { e.stopPropagation(); onExport && onExport(id); }} aria-label="Export Project">
-<<<<<<< HEAD
                 <Download className="h-4 w-4" />
               </Button>
               <Button size="icon" variant="ghost" className="hover:bg-primary/80 text-white border-none" onClick={e => { e.stopPropagation(); onShare && onShare(id); }} aria-label="Share Project">
@@ -805,16 +537,6 @@ function ProjectCard({
               <Button size="icon" variant="ghost" className="hover:bg-red-600 hover:text-white text-white border-none" onClick={e => { e.stopPropagation(); console.log('[ProjectCard] Delete button clicked for project:', id); setShowDeleteConfirm(true); }} aria-label="Delete Project">
                 <Trash2 className="h-4 w-4" />
               </Button>
-=======
-                  <Download className="h-4 w-4" />
-                </Button>
-              <Button size="icon" variant="ghost" className="hover:bg-primary/80 text-white border-none" onClick={e => { e.stopPropagation(); onShare && onShare(id); }} aria-label="Share Project">
-                  <Share2 className="h-4 w-4" />
-                </Button>
-              <Button size="icon" variant="ghost" className="hover:bg-red-600 hover:text-white text-white border-none" onClick={e => { e.stopPropagation(); console.log('[ProjectCard] Delete button clicked for project:', id); setShowDeleteConfirm(true); }} aria-label="Delete Project">
-                  <Trash2 className="h-4 w-4" />
-                </Button>
->>>>>>> calibration
             </div>
           </div>
         </div>

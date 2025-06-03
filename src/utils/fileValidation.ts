@@ -1,58 +1,36 @@
-<<<<<<< HEAD
-import { FITSParser } from 'jsfitsio';
-
-=======
->>>>>>> calibration
 export interface FITSValidationResult {
   isValid: boolean;
-  warnings: string[];
-  metadata: {
-    exposureTime?: number;
-    gain?: number;
-    temperature?: number;
-    filter?: string;
-    observationDate?: string;
-    frameType?: string;
-  };
+  error?: string;
+  warnings?: string[];
+  metadata?: Record<string, unknown>;
 }
 
+// Calls the API endpoint to validate a FITS file and extract metadata
 export async function validateFITSFile(file: File, projectId: string, userId: string): Promise<FITSValidationResult> {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('project_id', projectId);
   formData.append('user_id', userId);
-
   try {
-    const response = await fetch('/api/validate-fits', {
+    const response = await fetch('http://localhost:8000/validate-fits', {
       method: 'POST',
       body: formData,
+      headers: {
+        'Accept': 'application/json',
+      },
     });
-
     if (!response.ok) {
-      const error = await response.json();
-      let warning = error.error || 'Failed to validate file';
-      if (typeof warning !== 'string') warning = JSON.stringify(warning);
-      return {
-        isValid: false,
-        warnings: [warning],
-        metadata: {}
-      };
+      const errorData = await response.json();
+      return { isValid: false, error: errorData.message || 'Validation failed' };
     }
-
     const data = await response.json();
     return {
-      isValid: data.valid,
+      isValid: data.valid ?? true,
       warnings: data.warnings || [],
       metadata: data.metadata || {},
-      // Optionally pass through other fields if needed
     };
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : JSON.stringify(error);
-    return {
-      isValid: false,
-      warnings: ['Error validating file: ' + msg],
-      metadata: {}
-    };
+  } catch (e) {
+    return { isValid: false, error: 'API validation failed' };
   }
 }
 
@@ -63,12 +41,4 @@ export function getFrameTypeFromFilename(filename: string): string {
   if (filename.includes('flat')) return 'flat';
   if (filename.includes('bias')) return 'bias';
   return 'unknown';
-}
-
-export async function validateFileBatch(files: File[], projectId: string, userId: string): Promise<Map<string, FITSValidationResult>> {
-  const results = new Map<string, FITSValidationResult>();
-  for (const file of files) {
-    results.set(file.name, await validateFITSFile(file, projectId, userId));
-  }
-  return results;
 } 

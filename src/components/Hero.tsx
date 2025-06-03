@@ -1,8 +1,5 @@
-import Link from "next/link";
-<<<<<<< HEAD
-=======
 import Image from 'next/image';
->>>>>>> calibration
+import Link from "next/link";
 
 export default function Hero() {
   return (
@@ -10,25 +7,25 @@ export default function Hero() {
       {/* Gradient background (behind image) */}
       <div className="absolute inset-0 bg-gradient-to-br from-blue-900 via-purple-900 to-black z-0" />
       {/* Nebula image (on top of gradient) */}
-      <div className="absolute inset-0 z-10">
-<<<<<<< HEAD
-        <img src="/nebula-hero.jpg" alt="Nebula Hero" className="w-full h-full object-cover opacity-90" />
-=======
-        <Image src="/nebula-hero.jpg" alt="Nebula Hero" width={1920} height={600} className="w-full h-full object-cover opacity-90" />
->>>>>>> calibration
+      <div className="absolute inset-0 z-10 pointer-events-none">
+        <Image
+          src="/images/nebula-hero.jpg"
+          alt="Nebula"
+          fill
+          className="object-cover opacity-90"
+          priority
+        />
       </div>
-      {/* Content */}
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-24 text-center z-20">
-        <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold mb-8 drop-shadow-lg bg-gradient-to-r from-white via-white to-purple-400 bg-clip-text text-transparent">
-          Process Your Astrophotography Online
+      <div className="relative z-20 text-center">
+        <h1 className="text-5xl md:text-7xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-300 via-purple-300 to-pink-400 drop-shadow-lg mb-6">
+          Stellar Astro
         </h1>
-        <p className="text-xl md:text-2xl text-white mb-12 max-w-3xl mx-auto">
-          Manage, Calibrate, Stack and Process your Astrophotography in the Cosmos
+        <p className="text-xl md:text-2xl text-blue-100 mb-8 max-w-2xl mx-auto drop-shadow">
+          Cloud-based astrophotography calibration, stacking, and processing. Upload your FITS files, create master frames, and process your data with ease.
         </p>
-        <div className="flex flex-col sm:flex-row justify-center gap-4">
-          <Link href="/signup" className="inline-flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 md:text-lg transition-colors">Get Started</Link>
-          <Link href="/learn-more" className="inline-flex items-center justify-center px-8 py-3 border-2 border-gray-300 text-base font-medium rounded-md text-white hover:bg-white/10 md:text-lg transition-colors">Learn More</Link>
-        </div>
+        <Link href="/dashboard" className="inline-block px-8 py-4 bg-gradient-to-r from-blue-700 via-purple-700 to-pink-700 text-white font-bold rounded-xl shadow-lg hover:scale-105 transition-transform text-lg">
+          Get Started
+        </Link>
       </div>
     </section>
   );

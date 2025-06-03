@@ -1,13 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-<<<<<<< HEAD
-import type { Project, ProjectMetadata } from '@/types/store';
-import { supabase } from '@/src/lib/supabaseClient';
-import { PostgrestError } from '@supabase/supabase-js';
-=======
 import type { Project } from '@/types/store';
 import { supabase } from '@/src/lib/supabaseClient';
->>>>>>> calibration
 
 interface ProjectStore {
   currentProject: Project | null;

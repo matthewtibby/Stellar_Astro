@@ -1,14 +1,8 @@
 import { useState } from 'react';
-<<<<<<< HEAD
 import { motion } from 'framer-motion';
 import { Plus, ChevronRight } from 'lucide-react';
 import OnboardingTour from './OnboardingTour';
 import { projectTemplates, getTemplatesByCategory } from '@/src/utils/projectTemplates';
-=======
-import { ChevronRight } from 'lucide-react';
-import OnboardingTour from './OnboardingTour';
-import { getTemplatesByCategory } from '@/src/utils/projectTemplates';
->>>>>>> calibration
 
 interface WelcomeDashboardProps {
   userName?: string;
@@ -18,11 +12,7 @@ interface WelcomeDashboardProps {
 const SHOW_DEMO_TOUR = false;
 
 export default function WelcomeDashboard({ userName = "Astronomer", onCreateProject }: WelcomeDashboardProps) {
-<<<<<<< HEAD
-  const [showTour, setShowTour] = useState(true);
-=======
   const [showTour] = useState(true);
->>>>>>> calibration
   const templates = getTemplatesByCategory('deep-sky');
 
   return (
@@ -51,11 +41,7 @@ export default function WelcomeDashboard({ userName = "Astronomer", onCreateProj
           <h2 className="text-xl font-semibold mb-4">Project Templates</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {templates.map((template) => (
-<<<<<<< HEAD
-              <div className="bg-white bg-opacity-10 backdrop-blur-md rounded-2xl p-6 shadow-lg">
-=======
               <div className="bg-white bg-opacity-10 backdrop-blur-md rounded-2xl p-6 shadow-lg" key={template.id}>
->>>>>>> calibration
                 <h3 className="text-lg font-semibold mb-2">{template.name}</h3>
                 <p className="text-gray-300 text-sm mb-4">{template.description}</p>
                 <div className="space-y-2 text-sm">
