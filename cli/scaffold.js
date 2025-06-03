@@ -556,14 +556,12 @@ program
   .option('-s, --setup', 'Set up testing environment')
   .action(async (options) => {
     const spinner = ora('Preparing tests...').start();
-    
     try {
       // Check if we're in a Next.js project
       if (!fs.existsSync('package.json')) {
         spinner.fail('Not a Next.js project. Please run this command in a Stellar Astro project directory.');
         process.exit(1);
       }
-      
       if (options.setup) {
         // Set up testing environment
         spinner.text = 'Setting up testing environment...';
@@ -779,9 +777,22 @@ test('homepage has title', async ({ page }) => {
           spinner.succeed('Playwright setup completed successfully!');
         }
       } else {
-        // Run tests
+        // Run tests using the actual test runner, not npm test
         spinner.text = 'Running tests...';
-        execSync('npm test', { stdio: 'inherit' });
+        const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+        let runner = null;
+        if ((pkg.devDependencies && pkg.devDependencies.jest) || (pkg.dependencies && pkg.dependencies.jest)) {
+          runner = 'npx jest';
+        } else if ((pkg.devDependencies && pkg.devDependencies.vitest) || (pkg.dependencies && pkg.dependencies.vitest)) {
+          runner = 'npx vitest';
+        } else if ((pkg.devDependencies && pkg.devDependencies['@playwright/test']) || (pkg.dependencies && pkg.dependencies['@playwright/test'])) {
+          runner = 'npx playwright test';
+        }
+        if (!runner) {
+          spinner.fail('No supported test runner found (Jest, Vitest, or Playwright). Please set up a test runner first.');
+          process.exit(1);
+        }
+        execSync(runner, { stdio: 'inherit' });
         spinner.succeed('Tests completed successfully!');
       }
     } catch (error) {

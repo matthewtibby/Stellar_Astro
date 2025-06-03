@@ -43,7 +43,11 @@ export interface ProjectMetadata {
 }
 
 export interface Project {
+<<<<<<< HEAD
   [x: string]: any;
+=======
+  [x: string]: unknown;
+>>>>>>> calibration
   id: string;
   userId: string;
   title: string;
@@ -117,5 +121,9 @@ export interface StorageFile {
   created_at: string;
   type: FileType;
   url?: string;
+<<<<<<< HEAD
   metadata?: Record<string, any>;
+=======
+  metadata?: Record<string, unknown>;
+>>>>>>> calibration
 } 

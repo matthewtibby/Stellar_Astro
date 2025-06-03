@@ -8,10 +8,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     // Parse job submission fields
     const {
-      input_light_ids,
-      master_bias_id,
-      master_dark_id,
-      master_flat_id,
+      input_bucket,
+      input_paths,
+      output_bucket,
+      output_base,
       advanced_settings,
       metadata,
       projectId,
@@ -19,28 +19,53 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       test_name
     } = req.body;
 
-    // Construct payload for Python worker
+    // Construct payload for Python worker (Supabase-aware)
     const payload = {
-      input_files: input_light_ids,
+      input_bucket,
+      input_paths,
+      output_bucket,
+      output_base,
       settings: advanced_settings || {},
       project_id: projectId || req.query.projectId,
       user_id: userId || 'test-user',
       metadata,
-      master_bias_id,
-      master_dark_id,
-      master_flat_id,
       test_name
     };
 
+    console.log('[API] Submitting calibration job to Python worker:', payload);
     // Forward to Python worker
     const response = await fetch('http://localhost:8000/jobs/submit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
+    console.log('[API] Python worker response status:', response.status);
     const data = await response.json();
-    res.status(response.status).json(data);
+    console.log('[API] Python worker response data:', data);
+
+    // Parse expected output from Python worker
+    // Expecting: { preview_url, fits_path, analysis, recommendation, userChoiceIsOptimal, jobId, ... }
+    const {
+      preview_url,
+      fits_path,
+      analysis,
+      recommendation,
+      userChoiceIsOptimal,
+      jobId,
+      ...rest
+    } = data;
+
+    res.status(response.status).json({
+      preview_url,
+      fits_path,
+      analysis,
+      recommendation,
+      userChoiceIsOptimal,
+      jobId,
+      ...rest
+    });
   } catch (error) {
+    console.error('[API] Error submitting calibration job:', error);
     res.status(500).json({ error: 'Failed to submit calibration job', details: String(error) });
   }
 } 

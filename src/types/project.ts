@@ -2,10 +2,17 @@ export interface Project {
   id: string;
   name: string;
   title?: string;
+<<<<<<< HEAD
   target: any; // Use a more specific type if available
   telescope?: any;
   camera?: any;
   filters?: any[];
+=======
+  target: unknown; // Use a more specific type if available
+  telescope?: unknown;
+  camera?: unknown;
+  filters?: unknown[];
+>>>>>>> calibration
   createdAt: Date;
   updatedAt: Date;
   status: 'draft' | 'in_progress' | 'completed' | 'archived' | 'deleted';

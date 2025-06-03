@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Image from 'next/image';
-import { Heart, MessageCircle, Share2, Star } from 'lucide-react';
+import { Heart, MessageCircle } from 'lucide-react';
 
 interface Post {
   id: string;

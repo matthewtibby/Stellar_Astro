@@ -1,4 +1,8 @@
 import Link from "next/link";
+<<<<<<< HEAD
+=======
+import Image from 'next/image';
+>>>>>>> calibration
 
 export default function Hero() {
   return (
@@ -7,7 +11,11 @@ export default function Hero() {
       <div className="absolute inset-0 bg-gradient-to-br from-blue-900 via-purple-900 to-black z-0" />
       {/* Nebula image (on top of gradient) */}
       <div className="absolute inset-0 z-10">
+<<<<<<< HEAD
         <img src="/nebula-hero.jpg" alt="Nebula Hero" className="w-full h-full object-cover opacity-90" />
+=======
+        <Image src="/nebula-hero.jpg" alt="Nebula Hero" width={1920} height={600} className="w-full h-full object-cover opacity-90" />
+>>>>>>> calibration
       </div>
       {/* Content */}
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-24 text-center z-20">

@@ -1,7 +1,11 @@
 // Utility to extract tags from FITS header metadata
 // Example fields: OBJECT, TELESCOP, FILTER, DATE-OBS, INSTRUME, NGC, M, etc.
 
+<<<<<<< HEAD
 export function extractTagsFromFitsHeader(header: Record<string, any>): string[] {
+=======
+export function extractTagsFromFitsHeader(header: Record<string, unknown>): string[] {
+>>>>>>> calibration
   const tags: string[] = [];
   if (!header) return tags;
 

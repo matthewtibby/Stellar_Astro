@@ -9,11 +9,19 @@ export async function sendNotification({
   message,
   data = {},
 }: {
+<<<<<<< HEAD
   req: any, // NextApiRequest or similar
   eventType: keyof typeof notificationEvents,
   type: 'success' | 'error' | 'info' | 'warning',
   message: string,
   data?: any,
+=======
+  req: unknown, // NextApiRequest or similar
+  eventType: keyof typeof notificationEvents,
+  type: 'success' | 'error' | 'info' | 'warning',
+  message: string,
+  data?: unknown,
+>>>>>>> calibration
 }) {
   if (!shouldNotify(eventType)) return;
   await fetch(`${req.headers.origin || ''}/api/notifications`, {

@@ -16,7 +16,11 @@ export async function validateFitsFile(
   }
 
   try {
+<<<<<<< HEAD
     const response = await fetch('http://localhost:8000/validate-fits', {
+=======
+    const response = await fetch('http://localhost:8001/validate-fits', {
+>>>>>>> calibration
       method: 'POST',
       body: formData,
       headers: {

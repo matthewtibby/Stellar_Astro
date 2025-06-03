@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 import { FITSValidationResult, validateFITSFile } from './fileValidation';
+=======
+import { validateFITSFile } from './fileValidation';
+>>>>>>> calibration
 
 export interface FileMetadata {
   exposure?: number;

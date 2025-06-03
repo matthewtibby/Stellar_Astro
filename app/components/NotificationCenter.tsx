@@ -59,8 +59,8 @@ export default function NotificationCenter() {
       if (!res.ok) throw new Error('Failed to fetch notifications');
       const { notifications } = await res.json();
       setNotifications(notifications);
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'An error occurred');
     } finally {
       setLoading(false);
     }

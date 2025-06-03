@@ -1,6 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Info, Loader2, CheckCircle2, XCircle, RefreshCw, Star, Moon, Sun, Zap } from 'lucide-react';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './ui/tooltip';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from './ui/dialog';
+import { supabase } from '../lib/supabaseClient';
+import Image from 'next/image';
 
 const FRAME_TYPES = [
   { key: 'dark', label: 'Master Dark' },
@@ -55,6 +65,7 @@ const PIXEL_REJECTION_ALGORITHMS = [
   { value: 'winsorized', label: 'Winsorized Sigma Clipping' },
   { value: 'linear_fit', label: 'Linear Fit Clipping' },
 ];
+
 const COSMETIC_METHODS = [
   { value: 'hot_pixel_map', label: 'Hot Pixel Map' },
   { value: 'la_cosmic', label: 'L.A.Cosmic' },
@@ -99,7 +110,11 @@ const Confetti = () => (
   </div>
 );
 
-const CalibrationScaffoldUI: React.FC<{ projectId: string }> = ({ projectId }) => {
+// Example bucket and path logic (replace with real project/user logic as needed)
+const SUPABASE_INPUT_BUCKET = 'raw-frames';
+const SUPABASE_OUTPUT_BUCKET = 'calibrated-frames';
+
+const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = ({ projectId, userId }) => {
   const [selectedType, setSelectedType] = useState<MasterType>('dark');
   const [tabState, setTabState] = useState({
     dark: {
@@ -147,6 +162,42 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string }> = ({ projectId }) =
   const [fileSearch, setFileSearch] = useState('');
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(true);
   const modalRef = useRef<HTMLDivElement>(null);
+  const [recommendationDialog, setRecommendationDialog] = useState<null | {
+    recommendation: { method: string; sigma?: number; reason: string };
+    userMethod: string;
+    userSigma?: number;
+    onAccept: () => void;
+    onDecline: () => void;
+  }>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [realFiles, setRealFiles] = useState<string[]>([]);
+
+  // Add a warning if userId is undefined
+  useEffect(() => {
+    if (!userId) {
+      console.warn('CalibrationScaffoldUI: userId is undefined! The parent component must pass a valid userId prop.');
+    }
+  }, [userId]);
+
+  // Fetch real files from Supabase when selectedType or projectId or userId changes
+  useEffect(() => {
+    const fetchFiles = async () => {
+      const folderPath = `${userId}/${projectId}/${selectedType}/`;
+      console.log('Supabase list:', folderPath);
+      if (!userId) {
+        setRealFiles([]);
+        return;
+      }
+      const { data, error } = await supabase.storage.from('raw-frames').list(folderPath);
+      console.log('Supabase list result:', data, error);
+      if (error) {
+        setRealFiles([]);
+        return;
+      }
+      setRealFiles((data || []).filter(f => !f.name.endsWith('/')).map(f => f.name));
+    };
+    fetchFiles();
+  }, [selectedType, projectId, userId]);
 
   // Keyboard accessibility for modal
   useEffect(() => {
@@ -159,7 +210,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string }> = ({ projectId }) =
   }, [showFileModal]);
 
   // Filtered files for modal
-  const filteredFiles = PLACEHOLDER_FILES[selectedType].filter(f => f.toLowerCase().includes(fileSearch.toLowerCase()));
+  const filteredFiles = realFiles.filter(f => f.toLowerCase().includes(fileSearch.toLowerCase()));
 
   // Helper to get/set current tab state
   const currentTab = tabState[selectedType];
@@ -230,17 +281,81 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string }> = ({ projectId }) =
     alert('Preset saved! (UI only, not persisted)');
   };
 
-  // Simulate job creation
-  const handleCreateMaster = () => {
+  // Helper to submit calibration job
+  const submitCalibrationJob = async (settings: any) => {
     setJobStatus('queued');
-    setTimeout(() => {
-      setJobStatus('running');
-      setTimeout(() => {
-        setJobStatus('success');
-        setShowSuccess(true);
-        setTimeout(() => setShowSuccess(false), 2500);
-      }, 2000);
-    }, 1000);
+    try {
+      // Use real files if available, else fallback to placeholder
+      const input_paths = realFiles.map(f => `${userId}/${projectId}/${selectedType}/${f}`);
+      const output_base = `${userId}/${projectId}/${selectedType}/master_${selectedType}`;
+      const reqBody = {
+        input_bucket: SUPABASE_INPUT_BUCKET,
+        input_paths,
+        output_bucket: SUPABASE_OUTPUT_BUCKET,
+        output_base,
+        advanced_settings: settings.advanced_settings,
+        projectId,
+        userId,
+        // ...add other required fields
+      };
+      const res = await fetch(`/api/projects/${projectId}/calibration-jobs/submit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(reqBody),
+      });
+      const data = await res.json();
+      if (data.userChoiceIsOptimal === false && data.recommendation) {
+        setRecommendationDialog({
+          recommendation: data.recommendation,
+          userMethod: settings.advanced_settings?.stackingMethod || settings.stackingMethod,
+          userSigma: settings.advanced_settings?.sigmaThreshold || settings.sigmaThreshold,
+          onAccept: () => {
+            setRecommendationDialog(null);
+            // Re-submit with recommended settings
+            submitCalibrationJob({ ...settings, advanced_settings: { ...settings.advanced_settings, stackingMethod: data.recommendation.method, sigmaThreshold: data.recommendation.sigma } });
+          },
+          onDecline: () => {
+            setRecommendationDialog(null);
+            setJobStatus('running');
+            setTimeout(() => {
+              setJobStatus('success');
+              setShowSuccess(true);
+              setTimeout(() => setShowSuccess(false), 2500);
+            }, 2000);
+          },
+        });
+      } else {
+        setJobStatus('running');
+        // Use preview_url from API response
+        if (data.preview_url) {
+          setPreviewUrl(data.preview_url);
+        }
+        setTimeout(() => {
+          setJobStatus('success');
+          setShowSuccess(true);
+          setTimeout(() => setShowSuccess(false), 2500);
+        }, 2000);
+      }
+    } catch (e) {
+      setJobStatus('failed');
+    }
+  };
+
+  // Update handleCreateMaster to use the new API logic
+  const handleCreateMaster = () => {
+    // Gather settings for API
+    const settings = {
+      input_light_ids: PLACEHOLDER_FILES[selectedType],
+      advanced_settings: {
+        stackingMethod: currentTab.stackingMethod,
+        sigmaThreshold: currentTab.sigmaThreshold,
+        // ...add other advanced settings as needed
+      },
+      projectId,
+      userId,
+      // ...add other required fields
+    };
+    submitCalibrationJob(settings);
   };
 
   // Ripple effect for primary action button
@@ -381,7 +496,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string }> = ({ projectId }) =
             {/* Files for selected type */}
             <div className="mb-8">
               <div className="flex items-center mb-2">
-                <span className="font-medium text-blue-200 mr-2">{PLACEHOLDER_FILES[selectedType].length} files</span>
+                <span className="font-medium text-blue-200 mr-2">{realFiles.length} files</span>
                 <button
                   className="ml-auto text-xs text-blue-400 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
                   onClick={() => setShowFileModal(true)}
@@ -390,7 +505,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string }> = ({ projectId }) =
                   View All
                 </button>
               </div>
-              {PLACEHOLDER_FILES[selectedType].length === 0 ? (
+              {realFiles.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-8">
                   <EmptyFilesSVG />
                   <div className="text-blue-200 mt-4 mb-2 font-semibold text-lg">No {FRAME_TYPES.find(f => f.key === selectedType)?.label} files yet!</div>
@@ -404,7 +519,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string }> = ({ projectId }) =
                 </div>
               ) : (
                 <div className="flex flex-row gap-2 flex-wrap mb-1">
-                  {PLACEHOLDER_FILES[selectedType].slice(0, 3).map((file, idx) => (
+                  {realFiles.slice(0, 3).map((file, idx) => (
                     <Tooltip key={file}>
                       <TooltipTrigger asChild>
                         <div
@@ -420,9 +535,9 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string }> = ({ projectId }) =
                       </TooltipContent>
                     </Tooltip>
                   ))}
-                  {PLACEHOLDER_FILES[selectedType].length > 3 && (
+                  {realFiles.length > 3 && (
                     <div className="w-12 h-12 bg-blue-900 rounded-full flex items-center justify-center text-xs text-blue-200 border border-[#232946]/60 shadow">
-                      +{PLACEHOLDER_FILES[selectedType].length - 3}
+                      +{realFiles.length - 3}
                     </div>
                   )}
                 </div>
@@ -737,7 +852,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string }> = ({ projectId }) =
                           value={tabState.dark.cosmeticMethod}
                           onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, cosmeticMethod: e.target.value } }))}
                         >
-                          {COSMETIC_METHODS.map(m => (
+                          {COSMETIC_METHODS.map((m: { value: string; label: string }) => (
                             <option key={m.value} value={m.value}>{m.label}</option>
                           ))}
                         </select>
@@ -804,7 +919,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string }> = ({ projectId }) =
               ref={actionBtnRef}
               className="mt-8 mb-4 px-6 py-3 bg-gradient-to-r from-blue-700 via-blue-600 to-blue-800 text-white rounded-xl shadow-lg hover:from-blue-800 hover:to-blue-900 font-semibold text-lg w-full transition-transform active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 overflow-hidden relative"
               onClick={handleCreateMasterWithRipple}
-              disabled={jobStatus === 'queued' || jobStatus === 'running'}
+              disabled={jobStatus === 'queued' || jobStatus === 'running' || realFiles.length === 0}
               style={{ boxShadow: '0 4px 24px 0 rgba(30, 64, 175, 0.15)' }}
             >
               {jobStatus === 'queued' || jobStatus === 'running' ? (
@@ -868,7 +983,19 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string }> = ({ projectId }) =
           <div className="w-3/5 bg-[#10131a] rounded-2xl p-10 border border-[#232946]/60 flex flex-col items-center shadow-xl">
             <h3 className="text-xl font-bold mb-6 text-white">{FRAME_TYPES.find(f => f.key === selectedType)?.label} Preview</h3>
             <div className="w-72 h-72 bg-[#232946] rounded-2xl flex items-center justify-center text-3xl text-blue-200 border-2 border-[#232946] mb-10 shadow-lg">
-              SA
+              {previewUrl ? (
+                <Image
+                  src={previewUrl}
+                  alt={`${FRAME_TYPES.find(f => f.key === selectedType)?.label} Preview`}
+                  className="w-full h-full object-contain rounded-2xl"
+                  style={{ background: '#232946' }}
+                  width={288}
+                  height={288}
+                  onError={() => setPreviewUrl(null)}
+                />
+              ) : (
+                'SA'
+              )}
             </div>
             <button
               className="px-4 py-2 bg-gray-800 text-blue-200 rounded hover:bg-blue-700 mb-8 flex items-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
@@ -896,6 +1023,36 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string }> = ({ projectId }) =
           <button className="px-6 py-2 bg-[#232946] text-white rounded shadow hover:bg-[#181c23]">Back</button>
           <button className="px-6 py-2 bg-[#183153] text-white rounded shadow-md hover:bg-[#102040]">Save Settings</button>
         </div>
+        {recommendationDialog && (
+          <Dialog open onOpenChange={open => !open && setRecommendationDialog(null)}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Stellar Astro Recommendation</DialogTitle>
+                <DialogDescription>
+                  We analyzed your frames and recommend using <b>{recommendationDialog.recommendation.method}</b>
+                  {recommendationDialog.recommendation.sigma && <> (sigma={recommendationDialog.recommendation.sigma})</>}
+                  instead of your choice (<b>{recommendationDialog.userMethod}</b>
+                  {recommendationDialog.userSigma && <> (sigma={recommendationDialog.userSigma})</>}).<br />
+                  <span className="block mt-2 text-blue-400">{recommendationDialog.recommendation.reason}</span>
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <button
+                  className="px-4 py-2 bg-blue-700 text-white rounded shadow hover:bg-blue-800"
+                  onClick={recommendationDialog.onAccept}
+                >
+                  Use Recommendation
+                </button>
+                <button
+                  className="px-4 py-2 bg-gray-700 text-white rounded shadow hover:bg-gray-800"
+                  onClick={recommendationDialog.onDecline}
+                >
+                  Proceed with My Choice
+                </button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
     </TooltipProvider>
   );

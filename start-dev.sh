@@ -3,6 +3,7 @@
 # Function to cleanup processes on exit
 cleanup() {
     echo "Shutting down servers..."
+<<<<<<< HEAD
     # Kill all Python processes that might be using port 8000
     pkill -f "uvicorn" || true
     pkill -f "python" || true
@@ -10,6 +11,12 @@ cleanup() {
     pkill -f "next dev" || true
     sleep 2
     # Force kill any remaining processes
+=======
+    pkill -f "uvicorn" || true
+    pkill -f "python" || true
+    pkill -f "next dev" || true
+    sleep 2
+>>>>>>> calibration
     pkill -9 -f "uvicorn" || true
     pkill -9 -f "python" || true
     pkill -9 -f "next dev" || true
@@ -56,7 +63,11 @@ fi
 # Start Python worker server first
 echo "Starting Python worker server..."
 cd python-worker
+<<<<<<< HEAD
 source venv/bin/activate
+=======
+source ../.venv/bin/activate
+>>>>>>> calibration
 export PYTHONPATH=$PYTHONPATH:$(pwd)
 
 # Start uvicorn and wait for it to be ready
@@ -104,4 +115,8 @@ echo "Next.js running on http://localhost:3000"
 echo "Python worker running on http://localhost:8000"
 
 # Wait for all background processes
+<<<<<<< HEAD
 wait 
+=======
+wait 
+>>>>>>> calibration

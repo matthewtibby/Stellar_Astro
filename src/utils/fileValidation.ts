@@ -1,5 +1,8 @@
+<<<<<<< HEAD
 import { FITSParser } from 'jsfitsio';
 
+=======
+>>>>>>> calibration
 export interface FITSValidationResult {
   isValid: boolean;
   warnings: string[];

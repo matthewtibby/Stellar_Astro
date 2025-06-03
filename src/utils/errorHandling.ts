@@ -5,7 +5,11 @@ export class AppError extends Error {
     message: string,
     public code: string,
     public status: number = 500,
+<<<<<<< HEAD
     public details?: any
+=======
+    public details?: unknown
+>>>>>>> calibration
   ) {
     super(message);
     this.name = 'AppError';
@@ -13,7 +17,11 @@ export class AppError extends Error {
 }
 
 export class ValidationError extends AppError {
+<<<<<<< HEAD
   constructor(message: string, details?: any) {
+=======
+  constructor(message: string, details?: unknown) {
+>>>>>>> calibration
     super(message, 'VALIDATION_ERROR', 400, details);
     this.name = 'ValidationError';
   }
@@ -41,7 +49,11 @@ export class ResourceNotFoundError extends AppError {
 }
 
 export class FileError extends AppError {
+<<<<<<< HEAD
   constructor(message: string, details?: any) {
+=======
+  constructor(message: string, details?: unknown) {
+>>>>>>> calibration
     super(message, 'FILE_ERROR', 400, details);
     this.name = 'FileError';
   }

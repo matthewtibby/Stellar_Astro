@@ -81,13 +81,8 @@ const posts: CommunityPost[] = [
 ]
 
 export default function CommunitySection() {
-  // Find the featured post (Photo of the Day)
-  const [tagFilter, setTagFilter] = useState('');
-  const featuredPost = posts.find(post => post.isPhotoOfTheDay);
-  // Get the remaining posts (limit to 2 for a more compact display)
-  const regularPosts = posts.filter(post => !post.isPhotoOfTheDay).slice(0, 2);
-
   // Filter posts by tag if tagFilter is set
+  const [tagFilter, setTagFilter] = useState('');
   const filteredPosts = tagFilter
     ? posts.filter(post => post.tags.some(tag => tag.toLowerCase() === tagFilter.toLowerCase()))
     : posts;

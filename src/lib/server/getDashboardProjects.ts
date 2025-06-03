@@ -22,7 +22,11 @@ export interface HydratedProject {
   frameCount: number;
   fileSize: number;
   equipment: { type: string; name: string }[];
+<<<<<<< HEAD
   steps: any[];
+=======
+  steps: { status: string }[];
+>>>>>>> calibration
   tags?: string[];
   isFavorite?: boolean;
   target?: {
@@ -30,13 +34,22 @@ export interface HydratedProject {
     coordinates: { ra: string; dec: string };
     category?: string;
     angularSizeArcmin?: number;
+<<<<<<< HEAD
     fitsMetadata?: any;
+=======
+    fitsMetadata?: Record<string, unknown>;
+>>>>>>> calibration
   };
 }
 
 // Helper to recursively list all files under a given path in Supabase Storage
+<<<<<<< HEAD
 async function listAllFilesRecursive(basePath: string): Promise<any[]> {
   let allFiles: any[] = [];
+=======
+async function listAllFilesRecursive(basePath: string): Promise<Array<{ name: string; metadata?: { size?: number }; file_size?: number; file_type?: string; file_path?: string }>> {
+  let allFiles: Array<{ name: string; metadata?: { size?: number }; file_size?: number; file_type?: string; file_path?: string }> = [];
+>>>>>>> calibration
   const { data: items, error } = await supabase.storage.from('raw-frames').list(basePath);
   console.log('[listAllFilesRecursive] Listing:', basePath, 'Items:', items, 'Error:', error);
   if (error) return [];
@@ -58,7 +71,11 @@ async function listAllFilesRecursive(basePath: string): Promise<any[]> {
  */
 export async function getDashboardProjects(userId: string): Promise<HydratedProject[]> {
   const hydrated: HydratedProject[] = [];
+<<<<<<< HEAD
   let projects: any[] = [];
+=======
+  let projects: Array<Record<string, unknown>> = [];
+>>>>>>> calibration
   try {
     const { data, error } = await supabase
       .from('projects')
@@ -73,6 +90,7 @@ export async function getDashboardProjects(userId: string): Promise<HydratedProj
   }
 
   for (const project of projects) {
+<<<<<<< HEAD
     // Fix: Prefer astronomical object name for targetName, fallback to project.title
     let target: HydratedProject['target'] = undefined;
     let targetName = '';
@@ -92,6 +110,24 @@ export async function getDashboardProjects(userId: string): Promise<HydratedProj
       if (!fitsMetaError && fitsMetaRows && fitsMetaRows.length > 0) {
         // Find the first non-empty object name
         const metaWithObject = fitsMetaRows.find(row => row.metadata && row.metadata.object);
+=======
+    let target: HydratedProject['target'] = undefined;
+    let targetName = '';
+    if (project.target && typeof project.target === 'object' && Object.keys(project.target as object).length > 0) {
+      const t = project.target as { name?: string; object?: string; target?: string };
+      target = project.target as HydratedProject['target'];
+      targetName = t.name || t.object || t.target || '';
+    } else if (typeof project === 'object' && project !== null && 'object' in project && typeof (project as Record<string, unknown>).object === 'string') {
+      targetName = (project as Record<string, unknown>).object as string;
+    }
+    if (!targetName) {
+      const { data: fitsMetaRows, error: fitsMetaError } = await supabase
+        .from('fits_metadata')
+        .select('metadata')
+        .eq('project_id', project.id as string);
+      if (!fitsMetaError && fitsMetaRows && fitsMetaRows.length > 0) {
+        const metaWithObject = fitsMetaRows.find((row: { metadata?: { object?: string } }) => row.metadata && row.metadata.object);
+>>>>>>> calibration
         if (metaWithObject) {
           targetName = metaWithObject.metadata.object;
           target = {
@@ -102,26 +138,44 @@ export async function getDashboardProjects(userId: string): Promise<HydratedProj
             },
             category: metaWithObject.metadata.category || undefined,
           };
+<<<<<<< HEAD
           // Optionally update the project record if target is missing
           if (!project.target || Object.keys(project.target).length === 0) {
             await supabase
               .from('projects')
               .update({ target })
               .eq('id', project.id);
+=======
+          if (!project.target || Object.keys(project.target as object).length === 0) {
+            await supabase
+              .from('projects')
+              .update({ target })
+              .eq('id', project.id as string);
+>>>>>>> calibration
           }
         }
       }
     }
     if (!targetName) {
+<<<<<<< HEAD
       targetName = project.title || project.name || '—';
     }
 
     // Aggregate FITS files from Supabase Storage (recursive)
+=======
+      const p = project as Record<string, unknown>;
+      targetName = (typeof p.title === 'string' && p.title) || (typeof p.name === 'string' && p.name) || '—';
+    }
+
+>>>>>>> calibration
     let frameCount = 0;
     let fileSize = 0;
     let userImageUrl = undefined;
     try {
+<<<<<<< HEAD
       // List all files recursively under 'raw-frames/{user_id}/{project_id}/'
+=======
+>>>>>>> calibration
       const storageBase = `${userId}/${project.id}/`;
       const files = await listAllFilesRecursive(storageBase);
       frameCount = files.length;
@@ -129,13 +183,21 @@ export async function getDashboardProjects(userId: string): Promise<HydratedProj
       userImageUrl = files.length > 0 ? supabase.storage.from('raw-frames').getPublicUrl(storageBase + files[0].name).data.publicUrl : undefined;
     } catch (err) {
       console.warn(`Failed to fetch storage files for project ${project.id}:`, err);
+<<<<<<< HEAD
       // Fallback to fits_files table if storage fails
       let fitsFiles: any[] = [];
+=======
+      let fitsFiles: Array<{ file_size?: number; file_type?: string; file_path?: string; metadata?: Record<string, unknown> }> = [];
+>>>>>>> calibration
       try {
         const { data, error } = await supabase
           .from('fits_files')
           .select('file_size, file_type, file_path, metadata')
+<<<<<<< HEAD
           .eq('project_id', project.id);
+=======
+          .eq('project_id', project.id as string);
+>>>>>>> calibration
         if (error) throw error;
         fitsFiles = data || [];
       } catch (err) {
@@ -148,16 +210,26 @@ export async function getDashboardProjects(userId: string): Promise<HydratedProj
       userImageUrl = final ? final.file_path : undefined;
     }
 
+<<<<<<< HEAD
     // Steps/status from processing_steps
     let steps: any[] = [];
+=======
+    let steps: { status: string }[] = [];
+>>>>>>> calibration
     let status: 'new' | 'in_progress' | 'completed' = 'new';
     try {
       const { data, error } = await supabase
         .from('processing_steps')
         .select('*')
+<<<<<<< HEAD
         .eq('project_id', project.id);
       if (error) throw error;
       steps = data || [];
+=======
+        .eq('project_id', project.id as string);
+      if (error) throw error;
+      steps = (data || []).map((s: Record<string, unknown>) => ({ status: typeof s.status === 'string' ? s.status : '' }));
+>>>>>>> calibration
       if (frameCount > 0) {
         const allStepsDone = steps.length > 0 && steps.every(s => s.status === 'done' || s.status === 'completed');
         status = allStepsDone ? 'completed' : 'in_progress';
@@ -170,18 +242,26 @@ export async function getDashboardProjects(userId: string): Promise<HydratedProj
       status = frameCount > 0 ? 'in_progress' : 'new';
     }
 
+<<<<<<< HEAD
     // Equipment: aggregate from project_files metadata (not storage)
+=======
+>>>>>>> calibration
     let equipment: { type: string; name: string }[] = [];
     try {
       const { data: files, error } = await supabase
         .from('project_files')
         .select('metadata')
+<<<<<<< HEAD
         .eq('project_id', project.id);
+=======
+        .eq('project_id', project.id as string);
+>>>>>>> calibration
       if (error) throw error;
       const eqSet = new Set<string>();
       const eqArr: { type: string; name: string }[] = [];
       for (const file of files || []) {
         const meta = file.metadata || {};
+<<<<<<< HEAD
         if (meta.telescope) {
           const key = `telescope:${meta.telescope}`;
           if (!eqSet.has(key)) {
@@ -201,6 +281,29 @@ export async function getDashboardProjects(userId: string): Promise<HydratedProj
           const key = `filter:${meta.filter}`;
           if (!eqSet.has(key)) {
             eqArr.push({ type: 'filter', name: meta.filter });
+=======
+        if (typeof meta === 'object' && meta !== null && 'telescope' in meta && typeof (meta as Record<string, unknown>).telescope === 'string') {
+          const key = `telescope:${(meta as Record<string, unknown>).telescope}`;
+          if (!eqSet.has(key)) {
+            eqArr.push({ type: 'telescope', name: (meta as Record<string, unknown>).telescope as string });
+            eqSet.add(key);
+          }
+        }
+        if (typeof meta === 'object' && meta !== null && ('camera' in meta || 'instrument' in meta)) {
+          const cameraName = (meta as Record<string, unknown>).camera || (meta as Record<string, unknown>).instrument;
+          if (typeof cameraName === 'string') {
+            const key = `camera:${cameraName}`;
+            if (!eqSet.has(key)) {
+              eqArr.push({ type: 'camera', name: cameraName });
+              eqSet.add(key);
+            }
+          }
+        }
+        if (typeof meta === 'object' && meta !== null && 'filter' in meta && typeof (meta as Record<string, unknown>).filter === 'string') {
+          const key = `filter:${(meta as Record<string, unknown>).filter}`;
+          if (!eqSet.has(key)) {
+            eqArr.push({ type: 'filter', name: (meta as Record<string, unknown>).filter as string });
+>>>>>>> calibration
             eqSet.add(key);
           }
         }
@@ -212,6 +315,7 @@ export async function getDashboardProjects(userId: string): Promise<HydratedProj
       equipment = [];
     }
 
+<<<<<<< HEAD
     // Tags (if present)
     const tags = project.tags || [];
     // isFavorite (placeholder)
@@ -224,11 +328,22 @@ export async function getDashboardProjects(userId: string): Promise<HydratedProj
       thumbnailUrl = userImageUrl || '';
     } else if (userImageUrl && typeof userImageUrl === 'string' && userImageUrl.startsWith('raw-frames/')) {
       // If userImageUrl is a file path, convert to public URL
+=======
+    const p = project as Record<string, unknown>;
+    const tags = Array.isArray(p.tags) ? p.tags as string[] : [];
+    const isFavorite = false;
+
+    let thumbnailUrl = '';
+    if (target && target.coordinates && target.coordinates.ra && target.coordinates.dec) {
+      thumbnailUrl = userImageUrl || '';
+    } else if (userImageUrl && typeof userImageUrl === 'string' && userImageUrl.startsWith('raw-frames/')) {
+>>>>>>> calibration
       thumbnailUrl = supabase.storage.from('raw-frames').getPublicUrl(userImageUrl).data.publicUrl || '';
     } else {
       thumbnailUrl = userImageUrl || '';
     }
 
+<<<<<<< HEAD
     // Attach full FITS metadata from the main file (if available)
     let fitsMetadata = undefined;
     try {
@@ -240,6 +355,16 @@ export async function getDashboardProjects(userId: string): Promise<HydratedProj
       if (!metaError && filesWithMeta && filesWithMeta.length > 0) {
         // Use the first file with metadata
         const firstWithMeta = filesWithMeta.find(f => f.metadata && Object.keys(f.metadata).length > 0);
+=======
+    let fitsMetadata: Record<string, unknown> | undefined = undefined;
+    try {
+      const { data: filesWithMeta, error: metaError } = await supabase
+        .from('project_files')
+        .select('metadata')
+        .eq('project_id', project.id as string);
+      if (!metaError && filesWithMeta && filesWithMeta.length > 0) {
+        const firstWithMeta = filesWithMeta.find((f: { metadata?: Record<string, unknown> }) => f.metadata && Object.keys(f.metadata).length > 0);
+>>>>>>> calibration
         if (firstWithMeta) {
           fitsMetadata = firstWithMeta.metadata;
         }
@@ -247,20 +372,33 @@ export async function getDashboardProjects(userId: string): Promise<HydratedProj
     } catch (err) {
       console.warn(`Failed to fetch fitsMetadata for project ${project.id}:`, err);
     }
+<<<<<<< HEAD
     // Attach fitsMetadata to target
+=======
+>>>>>>> calibration
     if (target) {
       target.fitsMetadata = fitsMetadata || {};
     }
 
     hydrated.push({
+<<<<<<< HEAD
       id: project.id,
       title: project.title,
+=======
+      id: project.id as string,
+      title: typeof p.title === 'string' ? p.title : '',
+>>>>>>> calibration
       targetName,
       status,
       thumbnailUrl,
       userImageUrl,
+<<<<<<< HEAD
       creationDate: project.created_at,
       updatedAt: project.updated_at,
+=======
+      creationDate: typeof p.created_at === 'string' ? p.created_at : '',
+      updatedAt: typeof p.updated_at === 'string' ? p.updated_at : '',
+>>>>>>> calibration
       frameCount,
       fileSize,
       equipment,

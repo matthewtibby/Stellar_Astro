@@ -1,6 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { useRouter } from 'next/navigation';
-import { Folder, Image as ImageIcon, Clock, Zap, Star, HardDrive, Users, Share2 } from 'lucide-react';
+import { Folder, Image as ImageIcon, Clock, Zap, Star, HardDrive } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
 
 const statIcons = {
@@ -48,14 +47,13 @@ export default function DashboardStats({ user }: { user: { id: string; email: st
       // Fetch all the stats in parallel
       // First, fetch the user's projects to get their IDs
       const { data: userProjects } = await supabase.from('projects').select('id').eq('user_id', userId);
-      const userProjectIds = (userProjects || []).map((p: any) => p.id);
+      const userProjectIds = (userProjects || []).map((p: unknown) => (p as { id: string }).id);
       const [
         { count: totalProjects },
         { count: totalImages },
         { count: totalProcessingSteps },
         { count: recentActivity },
         { data: activity },
-        { data: files }
       ] = await Promise.all([
         supabase.from('projects').select('id', { count: 'exact', head: true }).eq('user_id', userId),
         supabase.from('project_files').select('id', { count: 'exact', head: true }).eq('user_id', userId),
@@ -64,16 +62,15 @@ export default function DashboardStats({ user }: { user: { id: string; email: st
           : Promise.resolve({ count: 0 }),
         supabase.from('activity_log').select('id', { count: 'exact', head: true }).eq('user_id', userId).gte('timestamp', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()),
         supabase.from('activity_log').select('project_id').eq('user_id', userId),
-        supabase.from('project_files').select('id').eq('user_id', userId),
       ]);
 
       // Calculate stats
       const totalProcessingHours = 0; // Not available
       let mostActiveProject = null;
-      if (activity && activity.length > 0) {
+      if (Array.isArray(activity) && activity.length > 0) {
         const counts: Record<string, number> = {};
         for (const a of activity) {
-          if (a.project_id) counts[a.project_id] = (counts[a.project_id] || 0) + 1;
+          if ((a as { project_id?: string }).project_id) counts[(a as { project_id: string }).project_id] = (counts[(a as { project_id: string }).project_id] || 0) + 1;
         }
         const topProjectId = Object.entries(counts).sort(([, acount], [, bcount]) => bcount - acount)[0]?.[0];
         if (topProjectId) {
@@ -92,8 +89,8 @@ export default function DashboardStats({ user }: { user: { id: string; email: st
         mostActiveProject,
         storageUsed,
       });
-    } catch (e: any) {
-      setError(e.message || 'Error loading stats');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Error loading stats');
     } finally {
       setLoading(false);
     }
@@ -108,7 +105,7 @@ export default function DashboardStats({ user }: { user: { id: string; email: st
       if (intervalRef.current) clearInterval(intervalRef.current);
       window.removeEventListener('focus', handleFocus);
     };
-  }, [user]);
+  }, [user, fetchStats]);
 
   if (loading) return <div className="text-white py-8">Loading stats...</div>;
   if (error) return <div className="text-red-400 py-8">{error}</div>;

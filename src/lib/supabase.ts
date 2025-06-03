@@ -11,4 +11,8 @@ export { createBrowserClient, createServerClient, createClient, supabaseUrl, sup
 // Admin: use for service role actions (server only)
 export function getSupabaseAdminClient() {
   return createClient(supabaseUrl, supabaseServiceRoleKey);
+<<<<<<< HEAD
 } 
+=======
+}
+>>>>>>> calibration

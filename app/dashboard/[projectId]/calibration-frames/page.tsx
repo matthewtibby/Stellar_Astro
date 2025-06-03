@@ -1,10 +1,19 @@
-import React from 'react';
+import CalibrationClient from '@/src/components/CalibrationClient';
+import { createSupabaseServerClient } from '@/src/lib/supabaseServer';
+import { getDashboardProjects } from '@/src/lib/server/getDashboardProjects';
 
-const DeprecatedCalibrationFrameUploadPage = () => (
-  <div className="max-w-xl mx-auto p-8">
-    <h1 className="text-2xl font-bold mb-4">Calibration Frame Upload (Deprecated)</h1>
-    <p>This page is deprecated. Please use the project dashboard to upload calibration frames.</p>
-  </div>
-);
-
-export default DeprecatedCalibrationFrameUploadPage; 
+export default async function CalibrationStepPage({ params }: { params: { projectId: string } }) {
+  const supabase = createSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  const projectId = params?.projectId;
+  if (!user || !projectId) return <div className="text-white p-8">Project or user not found.</div>;
+  const projects = await getDashboardProjects(user.id);
+  const project = projects.find(p => p.id === projectId);
+  return (
+    <CalibrationClient
+      projectId={projectId}
+      userId={user.id}
+      projectName={project?.title || 'Calibration & Processing'}
+    />
+  );
+}
