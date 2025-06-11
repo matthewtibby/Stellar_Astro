@@ -58,31 +58,9 @@ const STATUS_LABELS: Record<MasterStatus, string> = {
   not_started: 'Not Started',
 };
 
-// Add new state for pixel rejection algorithm and cosmetic correction method/threshold
-type PixelRejectionAlgorithm = 'sigma' | 'winsorized' | 'linear_fit';
-const PIXEL_REJECTION_ALGORITHMS = [
-  { value: 'sigma', label: 'Sigma Clipping' },
-  { value: 'winsorized', label: 'Winsorized Sigma Clipping' },
-  { value: 'linear_fit', label: 'Linear Fit Clipping' },
-];
-
 const COSMETIC_METHODS = [
   { value: 'hot_pixel_map', label: 'Hot Pixel Map' },
   { value: 'la_cosmic', label: 'L.A.Cosmic' },
-];
-
-// Add Master Flat stacking methods and tooltips
-const FLAT_BEGINNER_METHODS = [
-  { value: 'mean', label: 'Mean (Average)', info: 'Adds all pixel values and divides by number of frames. Simple, fast, but sensitive to outliers.' },
-  { value: 'median', label: 'Median', info: 'Selects the median value per pixel. More robust to dust/defects or minor variations between frames.' },
-  { value: 'minmax', label: 'Min/Max Rejection', info: 'Drops highest and lowest before averaging. Helps remove outliers.' },
-];
-const FLAT_ADVANCED_METHODS = [
-  { value: 'sigma', label: 'Sigma Clipping', info: 'Removes outlier pixel values based on a standard deviation threshold.' },
-  { value: 'winsorized', label: 'Winsorized Sigma Clipping', info: 'Similar to sigma clipping, but replaces outliers instead of discarding them.' },
-  { value: 'linear_fit', label: 'Linear Fit Clipping', info: 'Compares pixel values across frames and fits a line to reject inconsistent ones.' },
-  { value: 'adaptive_weighted', label: 'Adaptive Weighted Average', info: 'Assigns weights to each frame/pixel based on quality.' },
-  { value: 'entropy_weighted', label: 'Entropy Weighted Average', info: 'Prioritizes frames with lowest noise/entropy.' },
 ];
 
 // SVG illustration for empty state
@@ -432,62 +410,31 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
           </div>
         )}
         {/* Master Tabs with Color Indicators */}
-        <div className="flex gap-4 mb-8">
+        <div className="flex gap-2 mb-4 flex-wrap">
           {FRAME_TYPES.map(ft => (
             <button
               key={ft.key}
               onClick={() => setSelectedType(ft.key as MasterType)}
-              className={`flex items-center gap-2 px-6 py-3 rounded-full font-semibold text-lg transition-all border-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0d13] shadow-sm ${selectedType === ft.key ? 'bg-gradient-to-r from-blue-900 via-blue-700 to-blue-900 text-white shadow-lg' : 'bg-[#10131a] text-blue-200 hover:bg-[#181c23]'}`}
-              style={{ position: 'relative', transition: 'background 0.3s, color 0.3s, box-shadow 0.3s' }}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-full font-semibold text-base transition-all border-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0d13] shadow-sm ${selectedType === ft.key ? 'bg-gradient-to-r from-blue-900 via-blue-700 to-blue-900 text-white shadow-lg' : 'bg-[#10131a] text-blue-200 hover:bg-[#181c23]'}`}
+              style={{ position: 'relative', minWidth: '120px', transition: 'background 0.3s, color 0.3s, box-shadow 0.3s' }}
             >
-              <span className={`absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full ${STATUS_COLORS[MASTER_STATUS[ft.key as MasterType]]}`}></span>
-              <span className="ml-5 flex items-center gap-2">
+              <span className={`absolute left-2 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full ${STATUS_COLORS[MASTER_STATUS[ft.key as MasterType]]}`}></span>
+              <span className="ml-4 flex items-center gap-1">
                 {FRAME_TYPE_ICONS[ft.key as MasterType]}
-                <span className="drop-shadow font-extrabold text-xl tracking-tight">{ft.label}</span>
+                <span className="drop-shadow font-bold text-base tracking-tight">{ft.label}</span>
               </span>
-              <span className={`ml-2 text-xs ${selectedType === ft.key ? 'text-white' : 'text-blue-300'}`}>{STATUS_LABELS[MASTER_STATUS[ft.key as MasterType]]}</span>
+              <span className={`ml-1 text-xs ${selectedType === ft.key ? 'text-white' : 'text-blue-300'}`}>{STATUS_LABELS[MASTER_STATUS[ft.key as MasterType]]}</span>
             </button>
           ))}
         </div>
-        <div className="flex flex-row gap-8 w-full transition-all duration-500 animate-fade-in">
+        <div className="flex flex-row gap-6 w-full transition-all duration-500 animate-fade-in">
           {/* Center: Files and Settings for Selected Type */}
-          <div className="w-2/5 bg-[#10131a]/90 rounded-2xl p-10 border border-[#232946]/60 flex flex-col shadow-xl relative">
-            {/* Icon Button Group (top right, outside header) */}
-            <div className="absolute top-6 right-6 flex gap-2 bg-[#181c23] rounded-full px-2 py-1 shadow border border-[#232946]/60 z-10">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    className="p-2 rounded-full hover:bg-blue-900 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
-                    onClick={handleResetCurrent}
-                    aria-label={`Reset ${FRAME_TYPES.find(f => f.key === selectedType)?.label} to defaults`}
-                  >
-                    <RefreshCw className="w-5 h-5 text-blue-200" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="animate-fade-in">
-                  Reset to defaults
-                </TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    className="p-2 rounded-full hover:bg-blue-900 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
-                    onClick={handleSavePreset}
-                    aria-label="Save current settings as preset"
-                  >
-                    <Star className="w-5 h-5 text-blue-200" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="animate-fade-in">
-                  Save current settings as preset
-                </TooltipContent>
-              </Tooltip>
-            </div>
+          <div className="w-2/5 bg-[#10131a]/90 rounded-2xl p-6 border border-[#232946]/60 flex flex-col shadow-xl relative">
             {/* Header row: title left, status chip right */}
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
                 {FRAME_TYPE_ICONS[selectedType]}
-                <h3 className="text-2xl font-extrabold text-white tracking-tight drop-shadow">{FRAME_TYPES.find(f => f.key === selectedType)?.label} Calibration</h3>
+                <h3 className="text-lg font-bold text-white tracking-tight drop-shadow">{FRAME_TYPES.find(f => f.key === selectedType)?.label} Calibration</h3>
                 <span className="ml-2 px-2 py-1 rounded-full bg-green-900 text-green-300 text-xs font-semibold flex items-center gap-1 shadow">
                   <CheckCircle2 className="w-3 h-3" /> {STATUS_LABELS[MASTER_STATUS[selectedType]]}
                 </span>
@@ -546,13 +493,16 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
             {/* Divider */}
             <div className="h-px bg-[#232946]/40 mb-8" />
             {/* Calibration Settings */}
-            <div className="flex flex-col gap-8">
+            <div className="flex flex-col gap-6">
               {/* Beginner/Advanced toggle with labels */}
-              <div className="flex items-center mb-6 gap-6">
+              <div className="flex items-center mb-4 gap-4">
                 <span className="font-medium text-blue-200">Beginner</span>
                 <label className="inline-flex relative items-center cursor-pointer">
                   <input type="checkbox" className="sr-only peer" checked={tabState.dark.advanced} onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, advanced: e.target.checked } }))} />
-                  <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:bg-blue-600 transition-all"></div>
+                  <div className="w-10 h-5 bg-gray-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:bg-blue-600 transition-all flex items-center justify-start peer-checked:justify-end">
+                    {!tabState.dark.advanced && <span className="w-3 h-3 bg-white rounded-full ml-1" />}
+                    {tabState.dark.advanced && <span className="w-3 h-3 bg-blue-300 rounded-full mr-1" />}
+                  </div>
                 </label>
                 <span className="font-medium text-blue-200">Advanced</span>
               </div>
@@ -930,8 +880,13 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                 `Create ${FRAME_TYPES.find(f => f.key === selectedType)?.label}`
               )}
             </button>
+            {realFiles.length === 0 && (
+              <div className="text-red-400 mt-2 text-center">
+                No files found in <code>{`raw-frames/${userId}/${projectId}/${selectedType}/`}</code>. Please upload files to proceed.
+              </div>
+            )}
             {/* Icon Button Group (below primary action) */}
-            <div className="flex gap-2 justify-center mt-4 mb-8 bg-[#181c23] rounded-full px-2 py-1 shadow border border-[#232946]/60">
+            <div className="flex gap-2 justify-center mt-4 mb-4 bg-[#181c23] rounded-full px-2 py-1 shadow border border-[#232946]/60">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button

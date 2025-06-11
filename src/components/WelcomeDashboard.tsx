@@ -1,8 +1,7 @@
 import { useState } from 'react';
-import { motion } from 'framer-motion';
-import { Plus, ChevronRight } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import OnboardingTour from './OnboardingTour';
-import { projectTemplates, getTemplatesByCategory } from '@/src/utils/projectTemplates';
+import { getTemplatesByCategory } from '@/src/utils/projectTemplates';
 
 interface WelcomeDashboardProps {
   userName?: string;

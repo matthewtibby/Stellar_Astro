@@ -89,12 +89,12 @@ export function useProjects(userId?: string, isAuthenticated?: boolean, initialP
       }
 
       // Normalize createdAt, updatedAt, and steps[].completedAt to Date objects
-      const normalized = (data || []).map((p: any) => ({
+      const normalized = (data || []).map((p: unknown) => ({
         ...p,
         createdAt: p.created_at ? new Date(p.created_at) : new Date(),
         updatedAt: p.updated_at ? new Date(p.updated_at) : new Date(),
         steps: Array.isArray(p.steps)
-          ? p.steps.map((s: any) => ({
+          ? p.steps.map((s: unknown) => ({
               ...s,
               completedAt: s.completedAt ? new Date(s.completedAt) : undefined,
             }))

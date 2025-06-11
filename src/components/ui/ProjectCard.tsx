@@ -76,15 +76,6 @@ interface ProjectCardProps {
   onProjectDeleted?: () => void;
 }
 
-// Helper for timeout
-function useTimeout(callback: () => void, delay: number | null) {
-  useEffect(() => {
-    if (delay === null) return;
-    const id = setTimeout(callback, delay);
-    return () => clearTimeout(id);
-  }, [callback, delay]);
-}
-
 function ProjectCard({
   id,
   targetName,
@@ -230,18 +221,8 @@ function ProjectCard({
   if (!updatedAt) dataFallbacks.push('updatedAt');
   const safeEquipment = Array.isArray(equipment) ? equipment : [];
   if (!Array.isArray(equipment) || equipment.length === 0) dataFallbacks.push('equipment');
-  const safeStatus = ['new', 'in_progress', 'completed'].includes(status) ? status : 'new';
-  if (!['new', 'in_progress', 'completed'].includes(status)) dataFallbacks.push('status');
   const safeDisplayImage = displayImage || '/images/placeholder.jpg';
   if (!displayImage) dataFallbacks.push('displayImage');
-
-  // Determine if critical fields are missing
-  const criticalMissing = [
-    !safeTargetName || safeTargetName === '—',
-    safeFrameCount === 0,
-    safeFileSize === '—',
-    !safeDisplayImage || safeDisplayImage === '/images/placeholder.jpg',
-  ].some(Boolean);
 
   // Log when the delete confirmation dialog renders and relevant state/props
   useEffect(() => {
@@ -385,7 +366,7 @@ function ProjectCard({
                 ' text-xs px-3 py-1 shadow rounded-full whitespace-nowrap min-w-[90px] text-center'
               }
             >
-              {getStatusLabel()}
+                {getStatusLabel()}
             </Badge>
           </div>
           {/* Metadata Block */}
@@ -422,20 +403,20 @@ function ProjectCard({
                 <FileText className="w-4 h-4 text-blue-300" />
                 <span className="font-mono">{safeFileSize}</span>
               </span>
-            </div>
+        </div>
             <div className="flex gap-2 justify-center w-full">
               <Dialog>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
                       <DialogTrigger asChild>
                         <Button size="icon" variant="secondary" className="bg-gray-800/80 hover:bg-primary text-white shadow-lg" aria-label="Project Info" onClick={e => { e.stopPropagation(); }}>
-                          <Info className="h-4 w-4" />
-                        </Button>
+                  <Info className="h-4 w-4" />
+                </Button>
                       </DialogTrigger>
-                    </TooltipTrigger>
-                    <TooltipContent>Project Info</TooltipContent>
-                  </Tooltip>
+              </TooltipTrigger>
+              <TooltipContent>Project Info</TooltipContent>
+            </Tooltip>
                 </TooltipProvider>
                 <DialogContent className="bg-gray-900 border border-gray-800 shadow-2xl">
                   <DialogHeader>
@@ -529,14 +510,14 @@ function ProjectCard({
                 </DialogContent>
               </Dialog>
               <Button size="icon" variant="ghost" className="hover:bg-primary/80 text-white border-none" onClick={e => { e.stopPropagation(); onExport && onExport(id); }} aria-label="Export Project">
-                <Download className="h-4 w-4" />
-              </Button>
+                  <Download className="h-4 w-4" />
+                </Button>
               <Button size="icon" variant="ghost" className="hover:bg-primary/80 text-white border-none" onClick={e => { e.stopPropagation(); onShare && onShare(id); }} aria-label="Share Project">
-                <Share2 className="h-4 w-4" />
-              </Button>
+                  <Share2 className="h-4 w-4" />
+                </Button>
               <Button size="icon" variant="ghost" className="hover:bg-red-600 hover:text-white text-white border-none" onClick={e => { e.stopPropagation(); console.log('[ProjectCard] Delete button clicked for project:', id); setShowDeleteConfirm(true); }} aria-label="Delete Project">
-                <Trash2 className="h-4 w-4" />
-              </Button>
+                  <Trash2 className="h-4 w-4" />
+                </Button>
             </div>
           </div>
         </div>

@@ -1,14 +1,13 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { validateFITSFile } from '@/src/utils/fileValidation';
+import { validateFITSFile, validateFileBatch } from '@/src/utils/fileValidation';
 import { uploadRawFrame, type StorageFile, getFitsFileUrl, getFilesByType } from '@/src/utils/storage';
-import { File, AlertCircle, Info, Upload, X, Trash2, Eye, ChevronDown, ChevronUp } from 'lucide-react';
+import { File, AlertCircle, Upload, X, Trash2, Eye, ChevronDown, ChevronUp } from 'lucide-react';
 import { type FileType } from '@/src/types/store';
 import { spaceFacts } from '@/src/utils/spaceFacts';
 import { handleError, ValidationError } from '@/src/utils/errorHandling';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './ui/tooltip';
 import Image from 'next/image';
-import { useToast } from '../hooks/useToast';
 
 type StorageFileWithMetadata = StorageFile & { metadata?: Record<string, unknown> };
 
@@ -69,14 +68,12 @@ export function UniversalFileUpload({
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [expandedFiles, setExpandedFiles] = useState<Record<string, boolean>>({});
-  const { addToast } = useToast();
   const [batchStartTime, setBatchStartTime] = useState<number | null>(null);
   const [batchTotalBytes, setBatchTotalBytes] = useState(0);
   const [batchUploadedBytes, setBatchUploadedBytes] = useState(0);
   const [batchSpeed, setBatchSpeed] = useState(0); // bytes/sec
   const [batchETA, setBatchETA] = useState<number | null>(null);
   const previewCache = useRef<Record<string, string>>({});
-  const [renamingFile, setRenamingFile] = useState<string | null>(null);
 
   // Move closePreview definition here
   const closePreview = useCallback(() => {
@@ -161,19 +158,19 @@ export function UniversalFileUpload({
 
     try {
       // Validate all files in batch
-      const validationResults = await Promise.all(acceptedFiles.map(file => validateFITSFile(file, projectId, userId)));
+      const validationResults = await validateFileBatch(acceptedFiles, projectId, userId);
       let uploadedBytes = 0;
       
       // Process each file based on validation results
       for (let i = 0; i < acceptedFiles.length; i++) {
         const file = acceptedFiles[i];
-        const validationResult = validationResults[i];
+        const validationResult = validationResults.get(file.name);
         if (!validationResult || !validationResult.isValid) {
           throw new ValidationError(
             validationResult && validationResult.warnings ? validationResult.warnings.join(', ') : 'File validation failed.'
           );
         }
-        const fileType = (validationResult.metadata && typeof validationResult.metadata.frameType === 'string') ? validationResult.metadata.frameType as FileType : activeTab;
+        const fileType = validationResult.metadata.frameType as FileType || activeTab;
         setUploadStatuses(prev => prev.map(status =>
           status.file === file
             ? { ...status, warnings: validationResult.warnings }
@@ -347,7 +344,9 @@ export function UniversalFileUpload({
 
   // Add retry logic
   const retryUpload = async (file: File, fileType: FileType) => {
-    setUploadStatuses(prev => prev.map(status => status.file === file ? { ...status, status: 'uploading', progress: 0, error: undefined } : status));
+    setUploadStatuses(prev => prev.map(status =>
+      status.file === file ? { ...status, status: 'uploading', progress: 0, error: undefined } : status
+    ));
     try {
       // Validate file
       const validationResult = await validateFITSFile(file, projectId, userId);
@@ -360,7 +359,9 @@ export function UniversalFileUpload({
         projectId,
         fileType
       );
-      setUploadStatuses(prev => prev.map(status => status.file === file ? { ...status, status: 'completed', progress: 1 } : status));
+      setUploadStatuses(prev => prev.map(status =>
+        status.file === file ? { ...status, status: 'completed', progress: 1 } : status
+      ));
       // Update filesByType
       setFilesByType(prevFilesByType => {
         const newFilesByType = { ...prevFilesByType };
@@ -371,14 +372,16 @@ export function UniversalFileUpload({
           type: fileType,
           created_at: new Date().toISOString(),
           size: file.size,
-          metadata: validationResult.metadata as Record<string, string | number | boolean>
+          metadata: validationResult.metadata
         };
         newFilesByType[fileType] = [...files, newFile];
         return newFilesByType;
       });
     } catch (error) {
       const appError = handleError(error);
-      setUploadStatuses(prev => prev.map(status => status.file === file ? { ...status, status: 'error', error: appError.message } : status));
+      setUploadStatuses(prev => prev.map(status =>
+        status.file === file ? { ...status, status: 'error', error: appError.message } : status
+      ));
       onValidationError?.(appError.message);
     }
   };
@@ -387,27 +390,6 @@ export function UniversalFileUpload({
     uploadStatuses.filter(s => s.status === 'error').forEach(status => {
       retryUpload(status.file, status.type || activeTab);
     });
-  };
-
-  // Add rename handler
-  const handleRename = async (file: StorageFileWithMetadata, newName: string) => {
-    try {
-      // Update in filesByType (local only for now)
-      setFilesByType(prev => {
-        const newFilesByType = { ...prev };
-        const files = newFilesByType[file.type] || [];
-        const updatedFiles = files.map(f =>
-          f.path === file.path ? { ...f, name: newName, path: f.path.replace(file.name, newName) } : f
-        );
-        newFilesByType[file.type] = updatedFiles;
-        return newFilesByType;
-      });
-      setRenamingFile(null);
-      addToast('success', 'File renamed locally');
-      // TODO: Update in backend if supported
-    } catch (error) {
-      addToast('error', 'Failed to rename file');
-    }
   };
 
   return (
