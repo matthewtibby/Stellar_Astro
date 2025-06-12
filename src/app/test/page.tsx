@@ -1,22 +1,23 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase'
+import { createBrowserClient, supabaseUrl, supabaseAnonKey } from '@/src/lib/supabase'
 
 export default function TestPage() {
   const [message, setMessage] = useState('Testing connection...')
-  const [data, setData] = useState<any>(null)
+  const [data, setData] = useState<string | null>(null)
 
   useEffect(() => {
     async function testConnection() {
       try {
+        const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
         const { data, error } = await supabase.from('_prisma_migrations').select('*').limit(1)
         
         if (error) {
           setMessage(`Error: ${error.message}`)
         } else {
           setMessage('Successfully connected to Supabase!')
-          setData(data)
+          setData(typeof data === 'string' ? data : JSON.stringify(data, null, 2))
         }
       } catch (error) {
         setMessage(`Error: ${error}`)
@@ -36,7 +37,7 @@ export default function TestPage() {
             <div className="mt-4">
               <h2 className="text-xl font-semibold mb-2 text-black">Data:</h2>
               <pre className="bg-gray-100 p-4 rounded overflow-auto">
-                {JSON.stringify(data, null, 2)}
+                {data}
               </pre>
             </div>
           )}

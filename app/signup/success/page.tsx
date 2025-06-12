@@ -126,14 +126,14 @@ function SuccessPageContent() {
           </div>
 
           <div className="mb-8">
-            <h3 className="text-lg font-medium text-white mb-4">What's Next?</h3>
+            <h3 className="text-lg font-medium text-white mb-4">What&apos;s Next?</h3>
             <ul className="space-y-4">
               {!isFreePlan && (
                 <>
                   <li className="flex items-start">
                     <CheckCircle className="h-5 w-5 text-green-500 shrink-0 mt-0.5" />
                     <span className="ml-3 text-gray-300">
-                      We've sent a confirmation email with your receipt and subscription details.
+                      We&apos;ve sent a confirmation email with your receipt and subscription details.
                     </span>
                   </li>
                   <li className="flex items-start">

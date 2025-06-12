@@ -28,75 +28,82 @@ function formatStorage(bytes: number) {
 }
 
 export default function DashboardStats({ user }: { user: { id: string; email: string } | null }) {
-  const [stats, setStats] = useState<any>(null);
+  const [stats, setStats] = useState<{
+    totalProjects: number;
+    totalImages: number;
+    totalProcessingSteps: number;
+    totalProcessingHours: number;
+    recentActivity: number;
+    mostActiveProject: string | null;
+    storageUsed: number;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const supabase = createClient();
 
-  const fetchStats = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      if (!user?.id) {
-        setError('You must be logged in to view dashboard stats.');
-        setLoading(false);
-        return;
-      }
-      const userId = user.id;
-      // Fetch all the stats in parallel
-      // First, fetch the user's projects to get their IDs
-      const { data: userProjects } = await supabase.from('projects').select('id').eq('user_id', userId);
-      const userProjectIds = (userProjects || []).map((p: unknown) => (p as { id: string }).id);
-      const [
-        { count: totalProjects },
-        { count: totalImages },
-        { count: totalProcessingSteps },
-        { count: recentActivity },
-        { data: activity },
-      ] = await Promise.all([
-        supabase.from('projects').select('id', { count: 'exact', head: true }).eq('user_id', userId),
-        supabase.from('project_files').select('id', { count: 'exact', head: true }).eq('user_id', userId),
-        userProjectIds.length > 0
-          ? supabase.from('processing_steps').select('id', { count: 'exact', head: true }).in('project_id', userProjectIds)
-          : Promise.resolve({ count: 0 }),
-        supabase.from('activity_log').select('id', { count: 'exact', head: true }).eq('user_id', userId).gte('timestamp', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()),
-        supabase.from('activity_log').select('project_id').eq('user_id', userId),
-      ]);
-
-      // Calculate stats
-      const totalProcessingHours = 0; // Not available
-      let mostActiveProject = null;
-      if (Array.isArray(activity) && activity.length > 0) {
-        const counts: Record<string, number> = {};
-        for (const a of activity) {
-          if ((a as { project_id?: string }).project_id) counts[(a as { project_id: string }).project_id] = (counts[(a as { project_id: string }).project_id] || 0) + 1;
-        }
-        const topProjectId = Object.entries(counts).sort(([, acount], [, bcount]) => bcount - acount)[0]?.[0];
-        if (topProjectId) {
-          const { data: project } = await supabase.from('projects').select('title').eq('id', topProjectId).single();
-          mostActiveProject = project?.title || null;
-        }
-      }
-      const storageUsed = 0; // No size info available
-
-      setStats({
-        totalProjects: totalProjects || 0,
-        totalImages: totalImages || 0,
-        totalProcessingSteps: totalProcessingSteps || 0,
-        totalProcessingHours: Math.round(totalProcessingHours * 10) / 10,
-        recentActivity: recentActivity || 0,
-        mostActiveProject,
-        storageUsed,
-      });
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Error loading stats');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
+    async function fetchStats() {
+      setLoading(true);
+      setError(null);
+      try {
+        if (!user?.id) {
+          setError('You must be logged in to view dashboard stats.');
+          setLoading(false);
+          return;
+        }
+        const userId = user.id;
+        // Fetch all the stats in parallel
+        // First, fetch the user's projects to get their IDs
+        const { data: userProjects } = await supabase.from('projects').select('id').eq('user_id', userId);
+        const userProjectIds = (userProjects || []).map((p: unknown) => (p as { id: string }).id);
+        const [
+          { count: totalProjects },
+          { count: totalImages },
+          { count: totalProcessingSteps },
+          { count: recentActivity },
+          { data: activity },
+        ] = await Promise.all([
+          supabase.from('projects').select('id', { count: 'exact', head: true }).eq('user_id', userId),
+          supabase.from('project_files').select('id', { count: 'exact', head: true }).eq('user_id', userId),
+          userProjectIds.length > 0
+            ? supabase.from('processing_steps').select('id', { count: 'exact', head: true }).in('project_id', userProjectIds)
+            : Promise.resolve({ count: 0 }),
+          supabase.from('activity_log').select('id', { count: 'exact', head: true }).eq('user_id', userId).gte('timestamp', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()),
+          supabase.from('activity_log').select('project_id').eq('user_id', userId),
+        ]);
+
+        // Calculate stats
+        const totalProcessingHours = 0; // Not available
+        let mostActiveProject = null;
+        if (Array.isArray(activity) && activity.length > 0) {
+          const counts: Record<string, number> = {};
+          for (const a of activity) {
+            if ((a as { project_id?: string }).project_id) counts[(a as { project_id: string }).project_id] = (counts[(a as { project_id: string }).project_id] || 0) + 1;
+          }
+          const topProjectId = Object.entries(counts).sort(([, acount], [, bcount]) => bcount - acount)[0]?.[0];
+          if (topProjectId) {
+            const { data: project } = await supabase.from('projects').select('title').eq('id', topProjectId).single();
+            mostActiveProject = project?.title || null;
+          }
+        }
+        const storageUsed = 0; // No size info available
+
+        setStats({
+          totalProjects: totalProjects || 0,
+          totalImages: totalImages || 0,
+          totalProcessingSteps: totalProcessingSteps || 0,
+          totalProcessingHours: Math.round(totalProcessingHours * 10) / 10,
+          recentActivity: recentActivity || 0,
+          mostActiveProject,
+          storageUsed,
+        });
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : 'Error loading stats');
+      } finally {
+        setLoading(false);
+      }
+    }
     fetchStats();
     intervalRef.current = setInterval(fetchStats, 30000); // 30 seconds
     const handleFocus = () => fetchStats();
@@ -105,7 +112,7 @@ export default function DashboardStats({ user }: { user: { id: string; email: st
       if (intervalRef.current) clearInterval(intervalRef.current);
       window.removeEventListener('focus', handleFocus);
     };
-  }, [user, fetchStats]);
+  }, [user, supabase]);
 
   if (loading) return <div className="text-white py-8">Loading stats...</div>;
   if (error) return <div className="text-red-400 py-8">{error}</div>;

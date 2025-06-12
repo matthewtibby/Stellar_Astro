@@ -7,14 +7,10 @@ const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
 
 export async function GET() {
   try {
-    const { data, error } = await supabase.from('_prisma_migrations').select('*').limit(1)
-    
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
+    const { data } = await supabase.from('_prisma_migrations').select('*').limit(1)
     
     return NextResponse.json({ success: true, data })
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 } 

@@ -6,7 +6,7 @@ import { UserState } from '@/src/types/store';
 import { useCurrency } from '@/components/CurrencyProvider';
 import { formatPrice } from '@/lib/currency';
 import { Check, AlertTriangle, CreditCard, Calendar, Pause, Play } from 'lucide-react';
-import { User } from '@supabase/supabase-js';
+import type { User } from '@/src/lib/supabase';
 import { sendNotification } from '@/src/utils/sendNotification';
 
 interface SubscriptionTabProps {
@@ -14,7 +14,9 @@ interface SubscriptionTabProps {
 }
 
 export default function SubscriptionTab({ user }: SubscriptionTabProps) {
-  const { setUser, user: supabaseUser, subscriptionLoading } = useUserStore();
+  const setUser = useUserStore(state => state.setUser);
+  const supabaseUser = useUserStore(state => state.user);
+  const subscriptionLoading = useUserStore(state => state.subscriptionLoading);
   const { currency } = useCurrency();
   const [isPaused, setIsPaused] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
@@ -24,50 +26,11 @@ export default function SubscriptionTab({ user }: SubscriptionTabProps) {
   const subscription = user?.subscription || { type: 'FREE', projectLimit: 3 };
   const isFree = subscription.type === 'FREE';
   const isSuper = subscription.type === 'Super';
-  const isPro = subscription.type === 'Monthly' || subscription.type === 'Annual';
 
   // Subscription pricing
   const pricing = {
     'pro-monthly': 15,
     'pro-annual': 120
-  };
-
-  const handleUpgrade = async (plan: 'pro-monthly' | 'pro-annual') => {
-    try {
-      // Here you would typically redirect to a payment page or open a payment modal
-      console.log(`Upgrading to ${plan}`);
-      
-      // For demo purposes, we'll just update the local state
-      const updatedUser = {
-        ...supabaseUser,
-        id: supabaseUser?.id || '',
-        user_metadata: {
-          ...supabaseUser?.user_metadata,
-          subscription: {
-            type: 'pro',
-            projectLimit: 50
-          }
-        }
-      } as User;
-      
-      setUser(updatedUser);
-      setMessage({ type: 'success', text: `Successfully upgraded to ${plan}` });
-      await sendNotification({
-        req: { headers: { origin: window.location.origin, authorization: '' } },
-        eventType: 'subscription_changed',
-        type: 'success',
-        message: `Subscription upgraded to ${plan}`,
-      });
-    } catch (error) {
-      setMessage({ type: 'error', text: 'Failed to upgrade subscription' });
-      await sendNotification({
-        req: { headers: { origin: window.location.origin, authorization: '' } },
-        eventType: 'subscription_changed',
-        type: 'error',
-        message: 'Failed to upgrade subscription',
-      });
-      console.error('Error upgrading subscription:', error);
-    }
   };
 
   const handlePauseSubscription = async () => {

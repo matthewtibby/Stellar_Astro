@@ -5,13 +5,13 @@ import { createBrowserClient, supabaseUrl, supabaseAnonKey } from '@/src/lib/sup
 
 export default function TestPage() {
   const [message, setMessage] = useState('Testing connection...')
-  const [data, setData] = useState<any>(null)
+  const [data, setData] = useState<unknown>(null)
 
   useEffect(() => {
     async function testConnection() {
       try {
         const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
-        const { data, error } = await supabase.from('_prisma_migrations').select('*').limit(1)
+        const { data, error }: { data: unknown; error: { message: string } | null } = await supabase.from('_prisma_migrations').select('*').limit(1)
         
         if (error) {
           setMessage(`Error: ${error.message}`)

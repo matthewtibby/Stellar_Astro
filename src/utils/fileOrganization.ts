@@ -111,7 +111,7 @@ export function validateFileGroups(groups: ReturnType<typeof groupFilesByMetadat
   // Check for matching dark frames
   Object.entries(groups).forEach(([key, group]) => {
     const { exposure, gain, temperature } = group.metadata;
-    const matchingDarks = group.files.filter(file => {
+    const matchingDarks = group.files.filter(() => {
       const metadata = groups[key].metadata;
       return metadata.exposure === exposure && 
              metadata.gain === gain && 

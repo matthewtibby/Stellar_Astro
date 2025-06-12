@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 
 interface NewProjectModalProps {
   onClose: () => void;
-  onProjectCreated: (project: any) => void;
+  onProjectCreated: (project: unknown) => void;
 }
 
 const NewProjectModal: React.FC<NewProjectModalProps> = ({ onClose, onProjectCreated }) => {
@@ -24,8 +24,8 @@ const NewProjectModal: React.FC<NewProjectModalProps> = ({ onClose, onProjectCre
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Failed to create project');
       onProjectCreated(data);
-    } catch (err: any) {
-      setError(err.message || 'Failed to create project');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to create project');
     } finally {
       setLoading(false);
     }

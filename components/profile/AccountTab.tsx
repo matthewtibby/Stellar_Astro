@@ -5,7 +5,7 @@ import { useUserStore } from '@/src/store/user';
 import { UserState } from '@/src/types/store';
 import { Camera, Check, X } from 'lucide-react';
 import Image from 'next/image';
-import { User } from '@supabase/supabase-js';
+import type { User } from '@/src/lib/supabase';
 import { createBrowserClient, supabaseUrl, supabaseAnonKey } from '@/src/lib/supabase';
 import { uploadProfilePicture } from '@/src/utils/storage';
 import { sendNotification } from '@/src/utils/sendNotification';
@@ -15,7 +15,8 @@ interface AccountTabProps {
 }
 
 export default function AccountTab({ user }: AccountTabProps) {
-  const { setUser, user: supabaseUser } = useUserStore();
+  const setUser = useUserStore(state => state.setUser);
+  const supabaseUser = useUserStore(state => state.user);
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
     username: user?.username || '',
@@ -144,8 +145,8 @@ export default function AccountTab({ user }: AccountTabProps) {
         type: 'success',
         message: 'Profile updated successfully',
       });
-    } catch (error: any) {
-      setMessage({ type: 'error', text: 'Failed to update profile: ' + (error?.message || error) });
+    } catch (error: unknown) {
+      setMessage({ type: 'error', text: 'Failed to update profile: ' + (error instanceof Error ? error.message : 'Unknown error') });
       await sendNotification({
         req: { headers: { origin: window.location.origin, authorization: '' } },
         eventType: 'account_changed',

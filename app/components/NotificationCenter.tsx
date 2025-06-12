@@ -5,7 +5,7 @@ interface Notification {
   user_id: string;
   type: string;
   message: string;
-  data?: any;
+  data?: unknown;
   read: boolean;
   created_at: string;
 }
@@ -40,7 +40,7 @@ export default function NotificationCenter() {
         const supabase = createClient(url, anonKey);
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.access_token) setJwt(session.access_token);
-      } catch (e) {
+      } catch {
         setError('Could not get authentication token.');
       }
     }
@@ -59,16 +59,16 @@ export default function NotificationCenter() {
       if (!res.ok) throw new Error('Failed to fetch notifications');
       const { notifications } = await res.json();
       setNotifications(notifications);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'An error occurred');
+    } catch {
+      setError('An error occurred');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (open) fetchNotifications();
-  }, [open, jwt]);
+    fetchNotifications();
+  }, [fetchNotifications]);
 
   // Mark notification as read
   const markAsRead = async (id: string) => {

@@ -16,7 +16,7 @@ export default function VerifyEmailPage() {
     setResent(false);
     setIsLoading(true);
     try {
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      const { data: { user } } = await supabase.auth.getUser();
       if (user && user.email) {
         const { error } = await supabase.auth.resend({
           type: 'signup',
@@ -27,7 +27,7 @@ export default function VerifyEmailPage() {
       } else {
         setError('You must be logged in to resend the verification email.');
       }
-    } catch (e) {
+    } catch {
       setError('Failed to resend verification email.');
     } finally {
       setIsLoading(false);
@@ -39,7 +39,7 @@ export default function VerifyEmailPage() {
       <div className="bg-gray-900/50 p-8 rounded-lg shadow-lg">
         <h1 className="text-2xl font-bold mb-4 text-white">Check your email</h1>
         <p className="mb-4 text-gray-300">
-          We've sent a confirmation link to your email address.<br />
+          We&apos;ve sent a confirmation link to your email address.<br />
           <span className="font-semibold text-yellow-400">You must verify your email before you can log in or access your dashboard.</span>
         </p>
         <button

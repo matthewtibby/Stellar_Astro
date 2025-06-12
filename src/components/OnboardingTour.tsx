@@ -14,7 +14,6 @@ import {
 } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 
-import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 // Constants
@@ -58,10 +57,6 @@ interface DashboardTourProviderProps {
 
 const DashboardTourContext = React.createContext<DashboardTourContextType | null>(null)
 
-const PADDING = 16
-const CONTENT_WIDTH = 320
-const CONTENT_HEIGHT = 200
-
 function getElementPosition(id: string) {
   const element = document.getElementById(id)
   if (!element) return null
@@ -74,53 +69,9 @@ function getElementPosition(id: string) {
   }
 }
 
-function calculateContentPosition(
-  elementPos: { top: number; left: number; width: number; height: number },
-  position: "top" | "bottom" | "left" | "right" = "bottom",
-) {
-  let left = elementPos.left
-  let top = elementPos.top
-
-  switch (position) {
-    case "top":
-      top = elementPos.top - CONTENT_HEIGHT - PADDING
-      left = elementPos.left + elementPos.width / 2 - CONTENT_WIDTH / 2
-      break
-    case "bottom":
-      top = elementPos.top + elementPos.height + PADDING
-      left = elementPos.left + elementPos.width / 2 - CONTENT_WIDTH / 2
-      break
-    case "left":
-      left = elementPos.left - CONTENT_WIDTH - PADDING
-      top = elementPos.top + elementPos.height / 2 - CONTENT_HEIGHT / 2
-      break
-    case "right":
-      left = elementPos.left + elementPos.width + PADDING
-      top = elementPos.top + elementPos.height / 2 - CONTENT_HEIGHT / 2
-      break
-  }
-
-  // Ensure content stays within viewport
-  const viewportWidth = window.innerWidth
-  const viewportHeight = window.innerHeight
-
-  if (left < 20) left = 20
-  if (left + CONTENT_WIDTH > viewportWidth - 20) left = viewportWidth - CONTENT_WIDTH - 20
-  if (top < 20) top = 20
-  if (top + CONTENT_HEIGHT > viewportHeight - 20) top = viewportHeight - CONTENT_HEIGHT - 20
-
-  return {
-    top,
-    left,
-    width: CONTENT_WIDTH,
-    height: CONTENT_HEIGHT,
-  }
-}
-
 export function DashboardTourProvider({
   children,
   onComplete,
-  className,
   isTourCompleted = false,
 }: DashboardTourProviderProps) {
   const [steps, setSteps] = useState<DashboardTourStep[]>([])
@@ -350,13 +301,7 @@ export function useDashboardTour() {
   return context
 }
 
-export function DashboardTourWelcomeDialog({
-  isOpen,
-  setIsOpen,
-}: {
-  isOpen: boolean
-  setIsOpen: (isOpen: boolean) => void
-}) {
+export function DashboardTourWelcomeDialog({ setIsOpen }: { setIsOpen: (isOpen: boolean) => void }) {
   const { startTour, steps, isTourCompleted } = useDashboardTour()
 
   if (isTourCompleted || steps.length === 0) {
@@ -427,7 +372,7 @@ export function DashboardTourWelcomeDialog({
               <div className="text-center">
                 <h2 className="text-2xl font-medium mb-4">Welcome to Your Dashboard</h2>
                 <p className="text-muted-foreground mb-6">
-                  Let's take a quick tour to help you get familiar with all the features and make the most of your experience.
+                  Let&apos;s take a quick tour to help you get familiar with all the features and make the most of your experience.
                 </p>
                 <div className="space-x-2">
                   <button
@@ -455,7 +400,6 @@ export function DashboardTourWelcomeDialog({
 
 // Example usage component with sample dashboard tour steps
 export function DashboardTourExample() {
-  const [showTourDialog, setShowTourDialog] = useState(true)
   const { setSteps } = useDashboardTour()
 
   useEffect(() => {
@@ -531,7 +475,7 @@ export function DashboardTourExample() {
         <div className="space-y-2">
           <h1 className="text-3xl font-bold">Dashboard</h1>
           <p className="text-muted-foreground">
-            Welcome to your dashboard. Here's an overview of your account.
+            Welcome to your dashboard. Here&apos;s an overview of your account.
           </p>
         </div>
 
@@ -558,7 +502,7 @@ export function DashboardTourExample() {
         </div>
       </div>
 
-      <DashboardTourWelcomeDialog isOpen={showTourDialog} setIsOpen={setShowTourDialog} />
+      <DashboardTourWelcomeDialog setIsOpen={() => {}} />
     </div>
   )
 }

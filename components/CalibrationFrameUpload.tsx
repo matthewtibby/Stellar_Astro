@@ -36,7 +36,7 @@ const CalibrationFrameUpload: React.FC<CalibrationFrameUploadProps> = ({ project
     if (!file) {
       setError('Please select a file.');
       setUploading(false);
-      onError && onError('Please select a file.');
+      if (onError) onError('Please select a file.');
       return;
     }
     const formData = new FormData();
@@ -54,10 +54,11 @@ const CalibrationFrameUpload: React.FC<CalibrationFrameUploadProps> = ({ project
       const data = await res.json();
       setSuccess(`Upload successful! Frame ID: ${data.id}`);
       setFile(null);
-      onSuccess && onSuccess(data.id);
-    } catch (err: any) {
-      setError(err.message || 'Upload failed');
-      onError && onError(err.message || 'Upload failed');
+      if (onSuccess) onSuccess(data.id);
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : 'Upload failed';
+      setError(errorMsg);
+      if (onError) onError(errorMsg);
     } finally {
       setUploading(false);
     }

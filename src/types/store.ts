@@ -1,4 +1,4 @@
-import { User } from '@supabase/supabase-js';
+import type { User } from '@/src/lib/supabase';
 
 export type ProcessingStatus = 'pending' | 'processing' | 'completed' | 'failed';
 export type FileType = 'light' | 'dark' | 'bias' | 'flat' | 'master-dark' | 'master-bias' | 'master-flat' | 'calibrated' | 'stacked' | 'aligned' | 'pre-processed' | 'post-processed';
@@ -43,11 +43,7 @@ export interface ProjectMetadata {
 }
 
 export interface Project {
-<<<<<<< HEAD
-  [x: string]: any;
-=======
   [x: string]: unknown;
->>>>>>> calibration
   id: string;
   userId: string;
   title: string;
@@ -121,9 +117,5 @@ export interface StorageFile {
   created_at: string;
   type: FileType;
   url?: string;
-<<<<<<< HEAD
-  metadata?: Record<string, any>;
-=======
   metadata?: Record<string, unknown>;
->>>>>>> calibration
 } 

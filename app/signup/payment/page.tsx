@@ -130,7 +130,7 @@ function PaymentPageContent() {
             Complete your payment
           </h1>
           <p className="mt-4 text-lg text-gray-300">
-            You're just one step away from accessing Stellar Astro
+            You&apos;re just one step away from accessing Stellar Astro
           </p>
         </div>
 

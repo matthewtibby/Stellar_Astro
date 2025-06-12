@@ -29,7 +29,7 @@ export async function validateFITSFile(file: File, projectId: string, userId: st
       warnings: data.warnings || [],
       metadata: data.metadata || {},
     };
-  } catch (e) {
+  } catch {
     return { isValid: false, error: 'API validation failed' };
   }
 }

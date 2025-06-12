@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useUserStore } from '@/src/store/user';
 import { supabase } from '@/src/lib/supabaseClient';
 
 interface PermissionError {
@@ -25,7 +24,6 @@ export default function PermissionsDashboard() {
   const [errors, setErrors] = useState<PermissionError[]>([]);
   const [stats, setStats] = useState<ErrorStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const { user } = useUserStore();
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {

@@ -1,13 +1,15 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { validateFITSFile, validateFileBatch } from '@/src/utils/fileValidation';
-import { uploadRawFrame, type StorageFile, getFitsFileUrl, getFilesByType } from '@/src/utils/storage';
+import { validateFITSFile } from '@/src/utils/fileValidation';
+import { uploadRawFrame, getFitsFileUrl, getFilesByType } from '@/src/utils/storage';
+import type { StorageFile } from '@/src/types/store';
 import { File, AlertCircle, Upload, X, Trash2, Eye, ChevronDown, ChevronUp } from 'lucide-react';
-import { type FileType } from '@/src/types/store';
+import type { FileType } from '@/src/types/store';
 import { spaceFacts } from '@/src/utils/spaceFacts';
 import { handleError, ValidationError } from '@/src/utils/errorHandling';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './ui/tooltip';
 import Image from 'next/image';
+import { useToast } from '../hooks/useToast';
 
 type StorageFileWithMetadata = StorageFile & { metadata?: Record<string, unknown> };
 
@@ -68,7 +70,7 @@ export function UniversalFileUpload({
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [expandedFiles, setExpandedFiles] = useState<Record<string, boolean>>({});
-  const [batchStartTime, setBatchStartTime] = useState<number | null>(null);
+  const { } = useToast();
   const [batchTotalBytes, setBatchTotalBytes] = useState(0);
   const [batchUploadedBytes, setBatchUploadedBytes] = useState(0);
   const [batchSpeed, setBatchSpeed] = useState(0); // bytes/sec
@@ -140,9 +142,7 @@ export function UniversalFileUpload({
     if (acceptedFiles.length === 0) return;
 
     setIsUploading(true);
-    setBatchStartTime(Date.now());
-    const totalBytes = acceptedFiles.reduce((sum, file) => sum + file.size, 0);
-    setBatchTotalBytes(totalBytes);
+    setBatchTotalBytes(acceptedFiles.reduce((sum, file) => sum + file.size, 0));
     setBatchUploadedBytes(0);
     setBatchSpeed(0);
     setBatchETA(null);
@@ -158,19 +158,19 @@ export function UniversalFileUpload({
 
     try {
       // Validate all files in batch
-      const validationResults = await validateFileBatch(acceptedFiles, projectId, userId);
+      const validationResults = await Promise.all(acceptedFiles.map(file => validateFITSFile(file, projectId, userId)));
       let uploadedBytes = 0;
       
       // Process each file based on validation results
       for (let i = 0; i < acceptedFiles.length; i++) {
         const file = acceptedFiles[i];
-        const validationResult = validationResults.get(file.name);
+        const validationResult = validationResults[i];
         if (!validationResult || !validationResult.isValid) {
           throw new ValidationError(
             validationResult && validationResult.warnings ? validationResult.warnings.join(', ') : 'File validation failed.'
           );
         }
-        const fileType = validationResult.metadata.frameType as FileType || activeTab;
+        const fileType = (validationResult.metadata && typeof validationResult.metadata.frameType === 'string') ? validationResult.metadata.frameType as FileType : activeTab;
         setUploadStatuses(prev => prev.map(status =>
           status.file === file
             ? { ...status, warnings: validationResult.warnings }
@@ -315,7 +315,7 @@ export function UniversalFileUpload({
     }
   }
 
-  function handleDelete(file: StorageFile) {
+  function handleDelete() {
     // Implement delete logic here
   }
 
@@ -344,9 +344,7 @@ export function UniversalFileUpload({
 
   // Add retry logic
   const retryUpload = async (file: File, fileType: FileType) => {
-    setUploadStatuses(prev => prev.map(status =>
-      status.file === file ? { ...status, status: 'uploading', progress: 0, error: undefined } : status
-    ));
+    setUploadStatuses(prev => prev.map(status => status.file === file ? { ...status, status: 'uploading', progress: 0, error: undefined } : status));
     try {
       // Validate file
       const validationResult = await validateFITSFile(file, projectId, userId);
@@ -359,9 +357,7 @@ export function UniversalFileUpload({
         projectId,
         fileType
       );
-      setUploadStatuses(prev => prev.map(status =>
-        status.file === file ? { ...status, status: 'completed', progress: 1 } : status
-      ));
+      setUploadStatuses(prev => prev.map(status => status.file === file ? { ...status, status: 'completed', progress: 1 } : status));
       // Update filesByType
       setFilesByType(prevFilesByType => {
         const newFilesByType = { ...prevFilesByType };
@@ -372,16 +368,14 @@ export function UniversalFileUpload({
           type: fileType,
           created_at: new Date().toISOString(),
           size: file.size,
-          metadata: validationResult.metadata
+          metadata: validationResult.metadata as Record<string, string | number | boolean>
         };
         newFilesByType[fileType] = [...files, newFile];
         return newFilesByType;
       });
     } catch (error) {
       const appError = handleError(error);
-      setUploadStatuses(prev => prev.map(status =>
-        status.file === file ? { ...status, status: 'error', error: appError.message } : status
-      ));
+      setUploadStatuses(prev => prev.map(status => status.file === file ? { ...status, status: 'error', error: appError.message } : status));
       onValidationError?.(appError.message);
     }
   };
@@ -513,7 +507,7 @@ export function UniversalFileUpload({
                           <TooltipTrigger asChild>
                             <button
                               className="text-blue-300 hover:text-red-500"
-                              onClick={() => handleDelete(file)}
+                              onClick={() => handleDelete()}
                               aria-label="Delete file"
                             >
                               <Trash2 className="h-4 w-4" />

@@ -1,7 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { IncomingForm } from 'formidable';
-import fs from 'fs';
-import path from 'path';
+import type { File as FormidableFile } from 'formidable';
 
 export const config = {
   api: {
@@ -23,21 +22,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'File upload error' });
     }
     // Handle both File and File[]
-    let file: any = files.file;
+    let file = files.file as FormidableFile | FormidableFile[];
     if (Array.isArray(file)) file = file[0];
     if (!file) {
       console.error('No file received:', files);
       return res.status(400).json({ error: 'No file uploaded' });
     }
-    const frameId = `${file?.originalFilename || 'frame'}_${Date.now()}`;
+    const frameId = `${file.originalFilename || 'frame'}_${Date.now()}`;
     const type = fields.type
       ? Array.isArray(fields.type) ? fields.type[0] : fields.type
       : 'bias'; // default for test
-    const file_url = `/mock/path/${frameId}`;
     const metadataField = fields.metadata;
-    let metadata: any = { mock: true };
+    let metadata: unknown = { mock: true };
     if (metadataField) {
-      let metadataStr = Array.isArray(metadataField) ? metadataField[0] : metadataField;
+      const metadataStr = Array.isArray(metadataField) ? metadataField[0] : metadataField;
       try {
         metadata = JSON.parse(metadataStr as string);
       } catch (e) {

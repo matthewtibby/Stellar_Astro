@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { File, X, CheckCircle, AlertCircle, ChevronDown, ChevronRight } from 'lucide-react';
-import { useToast } from '../hooks/useToast';
+import { File, CheckCircle, AlertCircle, ChevronDown, ChevronRight } from 'lucide-react';
+import { useToast, type ToastType } from '../hooks/useToast';
 import { createBrowserClient, supabaseUrl, supabaseAnonKey } from '@/src/lib/supabase';
 
 interface FileComparisonPanelProps {
@@ -16,7 +16,7 @@ interface FileMetadata {
   gain: number;
   temperature: number;
   filter: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 interface ComparisonResult {
@@ -25,10 +25,38 @@ interface ComparisonResult {
   similarity: number;
   differences: {
     field: string;
-    value1: any;
-    value2: any;
+    value1: unknown;
+    value2: unknown;
   }[];
 }
+
+const loadFiles = async (projectId: string, setFiles: React.Dispatch<React.SetStateAction<FileMetadata[]>>, addToast: (type: ToastType, message: string, duration?: number) => string) => {
+  if (!projectId) return;
+  try {
+    const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
+    const { data, error } = await supabase.from('project_files')
+      .select('*')
+      .eq('project_id', projectId);
+
+    if (error) throw error;
+
+    const filesWithMetadata = data.map((file: Record<string, unknown>) => ({
+      filename: file.filename as string,
+      size: file.size as number,
+      created_at: file.created_at as string,
+      exposure: file.exposure as number,
+      gain: file.gain as number,
+      temperature: file.temperature as number,
+      filter: file.filter as string,
+      metadata: file.metadata || {}
+    }));
+
+    setFiles(filesWithMetadata);
+  } catch (error) {
+    console.error('Error loading files:', error);
+    addToast('error', 'Failed to load files');
+  }
+};
 
 export default function FileComparisonPanel({ projectId }: FileComparisonPanelProps) {
   const [files, setFiles] = useState<FileMetadata[]>([]);
@@ -37,31 +65,12 @@ export default function FileComparisonPanel({ projectId }: FileComparisonPanelPr
   const [isLoading, setIsLoading] = useState(false);
   const [expandedResults, setExpandedResults] = useState<Record<string, boolean>>({});
   const { addToast } = useToast();
-  const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
 
   useEffect(() => {
-    loadFiles();
-  }, [projectId]);
-
-  const loadFiles = async () => {
-    try {
-      const { data, error } = await supabase.from('project_files')
-        .select('*')
-        .eq('project_id', projectId);
-
-      if (error) throw error;
-
-      const filesWithMetadata = data.map((file: any) => ({
-        ...file,
-        metadata: file.metadata || {}
-      }));
-
-      setFiles(filesWithMetadata);
-    } catch (error) {
-      console.error('Error loading files:', error);
-      addToast('error', 'Failed to load files');
+    if (projectId) {
+      loadFiles(projectId, setFiles, addToast);
     }
-  };
+  }, [projectId, loadFiles, addToast]);
 
   const handleFileSelect = (filename: string) => {
     setSelectedFiles(prev => {
@@ -93,11 +102,13 @@ export default function FileComparisonPanel({ projectId }: FileComparisonPanelPr
       const fieldsToCompare = ['exposure', 'gain', 'temperature', 'filter'];
       fieldsToCompare.forEach(field => {
         totalFields++;
-        if (file1.metadata[field] !== file2.metadata[field]) {
+        const meta1 = file1.metadata as Record<string, unknown>;
+        const meta2 = file2.metadata as Record<string, unknown>;
+        if (meta1[field] !== meta2[field]) {
           differences.push({
             field,
-            value1: file1.metadata[field],
-            value2: file2.metadata[field]
+            value1: meta1[field],
+            value2: meta2[field]
           });
         } else {
           similarity++;
@@ -237,9 +248,9 @@ export default function FileComparisonPanel({ projectId }: FileComparisonPanelPr
                       <div className="flex items-center space-x-2">
                         <AlertCircle className="h-4 w-4 text-yellow-500" />
                         <span className="text-gray-300">{diff.field}:</span>
-                        <span className="text-red-400">{diff.value1}</span>
+                        <span className="text-red-400">{typeof diff.value1 === 'object' ? JSON.stringify(diff.value1) : String(diff.value1 ?? '')}</span>
                         <span className="text-gray-400">→</span>
-                        <span className="text-green-400">{diff.value2}</span>
+                        <span className="text-green-400">{typeof diff.value2 === 'object' ? JSON.stringify(diff.value2) : String(diff.value2 ?? '')}</span>
                       </div>
                     </div>
                   ))}

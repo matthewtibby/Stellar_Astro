@@ -44,22 +44,21 @@ const ProjectUploadStep: React.FC<ProjectUploadStepProps> = ({ projectId, userId
         <StepsIndicator currentStep={0} steps={steps} />
       </div>
       {/* Frame Type Tabs */}
-      <div className="flex gap-2 mb-8">
+      <div className="flex gap-1 mb-8">
         {frameTypes.map((type) => (
           <button
             key={type}
             onClick={() => { setActiveTab(type); setViewAll(false); }}
-            className={`flex items-center gap-2 px-4 py-2 rounded-full font-semibold text-base transition-all border-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 shadow-sm ${activeTab === type && !viewAll ? 'bg-gradient-to-r from-blue-900 via-blue-700 to-blue-900 text-white shadow-lg' : 'bg-[#10131a] text-blue-200 hover:bg-[#181c23]'}`}
-            style={{ minWidth: '120px' }}
+            className={`flex items-center gap-1 px-2 py-1 rounded-md font-medium text-sm transition-all border-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${activeTab === type && !viewAll ? 'bg-blue-800 text-white border-b-2 border-blue-400 shadow' : 'bg-[#181c23] text-blue-200 hover:bg-[#232946]'}`}
             aria-label={`${type.charAt(0).toUpperCase() + type.slice(1)} Frames Tab`}
           >
             <span className="flex items-center gap-1">{FRAME_TYPE_ICONS[type]}</span>
-            <span className="drop-shadow font-bold text-base tracking-tight">{type.charAt(0).toUpperCase() + type.slice(1)}</span>
+            <span className="font-semibold text-sm tracking-tight">{type.charAt(0).toUpperCase() + type.slice(1)}</span>
           </button>
         ))}
         <button
           onClick={() => setViewAll(true)}
-          className={`px-4 py-2 rounded-full font-semibold text-base transition-all border-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 shadow-sm ${viewAll ? 'bg-gradient-to-r from-blue-900 via-blue-700 to-blue-900 text-white shadow-lg' : 'bg-[#10131a] text-blue-200 hover:bg-[#181c23]'}`}
+          className={`px-2 py-1 rounded-md font-medium text-sm transition-all border-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${viewAll ? 'bg-blue-800 text-white border-b-2 border-blue-400 shadow' : 'bg-[#181c23] text-blue-200 hover:bg-[#232946]'}`}
           aria-label="View All Frames Tab"
         >
           View All
@@ -74,7 +73,6 @@ const ProjectUploadStep: React.FC<ProjectUploadStepProps> = ({ projectId, userId
             onUploadComplete={() => {}}
             onValidationError={() => {}}
             isSavingStep={isSaving}
-            onSaveAndExit={onBack}
             activeTab={activeTab}
             viewAll={viewAll}
             layout="upload-only"
@@ -88,7 +86,6 @@ const ProjectUploadStep: React.FC<ProjectUploadStepProps> = ({ projectId, userId
             onUploadComplete={() => {}}
             onValidationError={() => {}}
             isSavingStep={isSaving}
-            onSaveAndExit={onBack}
             activeTab={activeTab}
             viewAll={viewAll}
             layout="file-list-only"

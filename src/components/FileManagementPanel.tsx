@@ -1,106 +1,21 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
-import { getFilesByType, getFitsFileUrl, deleteFitsFile } from '@/src/utils/storage';
-import { File, Trash2, Download, Eye, RefreshCw, ChevronDown, ChevronUp, X, Info, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { getFilesByType, getFitsFileUrl, deleteFitsFile, uploadRawFrame } from '@/src/utils/storage';
+import { File, Download, Eye, ChevronDown, ChevronUp, X, Info, AlertCircle } from 'lucide-react';
 import { type FileType, type StorageFile } from '@/src/types/store';
-import { type FitsMetadata, type FitsValidationResult, type FitsAnalysisResult } from '@/src/types/fits';
-import { createBrowserClient } from '@supabase/ssr';
+import { type FitsValidationResult } from '@/src/types/fits';
+import { useDropzone } from 'react-dropzone';
+import { validateFITSFile } from '@/src/utils/fileValidation';
 
 // Add constant for initial file types
 const INITIAL_FILE_TYPES: FileType[] = ['light', 'dark', 'bias', 'flat'];
 
 interface FileManagementPanelProps {
   projectId: string;
+  userId: string;
   onRefresh?: () => void;
-}
-
-interface FileMetadataProps {
-  metadata: NonNullable<FitsValidationResult['metadata']>;
-  isExpanded: boolean;
-  onToggle: () => void;
-}
-
-function FileMetadata({ metadata, isExpanded, onToggle }: FileMetadataProps) {
-  return (
-    <div className="mt-2">
-      <button
-        onClick={onToggle}
-        className="w-full flex items-center justify-between p-2 bg-gray-800/50 rounded-md hover:bg-gray-800/70 transition-colors"
-      >
-        <div className="flex items-center space-x-2">
-          <Info className="h-4 w-4 text-gray-400" />
-          <span className="text-sm text-gray-400">File Metadata</span>
-        </div>
-        {isExpanded ? (
-          <ChevronUp className="h-4 w-4 text-gray-400" />
-        ) : (
-          <ChevronDown className="h-4 w-4 text-gray-400" />
-        )}
-      </button>
-      
-      {isExpanded && (
-        <div className="mt-1 p-2 bg-gray-800/50 rounded-md text-sm">
-          <div className="grid grid-cols-2 gap-2">
-            {metadata.exposure_time && (
-              <div>
-                <span className="text-gray-400">Exposure:</span>
-                <span className="ml-2 text-white">{metadata.exposure_time}s</span>
-              </div>
-            )}
-            {metadata.filter && (
-              <div>
-                <span className="text-gray-400">Filter:</span>
-                <span className="ml-2 text-white">{metadata.filter}</span>
-              </div>
-            )}
-            {metadata.object && (
-              <div>
-                <span className="text-gray-400">Object:</span>
-                <span className="ml-2 text-white">{metadata.object}</span>
-              </div>
-            )}
-            {metadata.date_obs && (
-              <div>
-                <span className="text-gray-400">Date:</span>
-                <span className="ml-2 text-white">{metadata.date_obs}</span>
-              </div>
-            )}
-            {metadata.instrument && (
-              <div>
-                <span className="text-gray-400">Instrument:</span>
-                <span className="ml-2 text-white">{metadata.instrument}</span>
-              </div>
-            )}
-            {metadata.telescope && (
-              <div>
-                <span className="text-gray-400">Telescope:</span>
-                <span className="ml-2 text-white">{metadata.telescope}</span>
-              </div>
-            )}
-            {metadata.gain && (
-              <div>
-                <span className="text-gray-400">Gain:</span>
-                <span className="ml-2 text-white">{metadata.gain}</span>
-              </div>
-            )}
-            {metadata.temperature && (
-              <div>
-                <span className="text-gray-400">Temp:</span>
-                <span className="ml-2 text-white">{metadata.temperature}°C</span>
-              </div>
-            )}
-            {metadata.binning && (
-              <div>
-                <span className="text-gray-400">Binning:</span>
-                <span className="ml-2 text-white">{metadata.binning}</span>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
+  onValidationError?: (error: string) => void;
 }
 
 // Add interfaces for state
@@ -151,18 +66,13 @@ const fileTypeLabels: Record<FileType, string> = {
   'post-processed': 'Post-Processed'
 };
 
-export default function FileManagementPanel({ projectId, onRefresh }: FileManagementPanelProps) {
+export default function FileManagementPanel({ projectId, userId, onRefresh, onValidationError }: FileManagementPanelProps) {
   const [moveNotification, setMoveNotification] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<FileType>('light');
   const [searchTerm, setSearchTerm] = useState('');
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [tagFilter, setTagFilter] = useState('');
-
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
 
   const [filesByType, setFilesByType] = useState<FilesByType>({
     'light': [],
@@ -182,20 +92,6 @@ export default function FileManagementPanel({ projectId, onRefresh }: FileManage
   const [showCalibrationWarning, setShowCalibrationWarning] = useState(false);
   const [missingFrameTypes, setMissingFrameTypes] = useState<FileType[]>([]);
   const [hasLoadedFiles, setHasLoadedFiles] = useState(false);
-  const fileInputRefs = useRef<Record<FileType, HTMLInputElement | null>>({
-    light: null,
-    dark: null,
-    bias: null,
-    flat: null,
-    'master-dark': null,
-    'master-bias': null,
-    'master-flat': null,
-    calibrated: null,
-    stacked: null,
-    aligned: null,
-    'pre-processed': null,
-    'post-processed': null
-  });
   const [expandedFiles, setExpandedFiles] = useState<ExpandedFiles>({});
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewCache, setPreviewCache] = useState<Record<string, string>>({});
@@ -237,41 +133,28 @@ export default function FileManagementPanel({ projectId, onRefresh }: FileManage
     if (onRefresh) onRefresh();
   };
 
-<<<<<<< HEAD
-=======
-  const onDrop = useCallback(async (acceptedFiles: File[]) => {
-    console.log('onDrop triggered with files:', acceptedFiles);
-    setUploadError(null);
+  const onDrop = React.useCallback(async (acceptedFiles: File[]) => {
     const validFiles: File[] = [];
     const errors: string[] = [];
 
     for (const file of acceptedFiles) {
       try {
-        console.log('Validating file:', file.name);
-        const validationResult = await validateFitsFile(file, activeTab);
-        console.log('Validation result:', validationResult);
-        
-        if (!validationResult.valid) {
-          errors.push(`${file.name}: ${validationResult.message}`);
+        const validationResult = await validateFITSFile(file, projectId, userId);
+        if (!validationResult.isValid) {
+          errors.push(`${file.name}: ${validationResult.error || 'Validation failed'}`);
         } else {
           validFiles.push(file);
         }
       } catch (error) {
-        console.error('Validation error:', error);
         errors.push(`${file.name}: ${error instanceof Error ? error.message : 'Validation failed'}`);
       }
     }
 
     if (errors.length > 0) {
       const errorMessage = errors.join('\n');
-      console.error('Validation errors:', errorMessage);
-      setUploadError(errorMessage);
-      onValidationError?.(errorMessage);
+      if (typeof onValidationError === 'function') onValidationError(errorMessage);
     }
-
-    console.log('Valid files:', validFiles);
-    setSelectedFiles(validFiles);
-  }, [activeTab, onValidationError]);
+  }, [projectId, userId, onValidationError]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -281,42 +164,6 @@ export default function FileManagementPanel({ projectId, onRefresh }: FileManage
     multiple: true,
   });
 
-  const handleUpload = async () => {
-    console.log('handleUpload called with selectedFiles:', selectedFiles);
-    if (selectedFiles.length === 0) {
-      console.log('No files selected, returning');
-      return;
-    }
-
-    setIsUploading(true);
-    setUploadError(null);
-
-    for (const file of selectedFiles) {
-      setCurrentFile(file.name);
-      try {
-        console.log('Starting upload for file:', file.name);
-        await uploadRawFrame(projectId, activeTab, file, (progress) => {
-          console.log(`Upload progress for ${file.name}:`, progress * 100);
-          setUploadProgress(progress * 100);
-        });
-        console.log('Upload completed for file:', file.name);
-        loadFiles(); // Refresh the file list
-      } catch (error) {
-        console.error('Upload error for file:', file.name, error);
-        const errorMessage = error instanceof Error ? error.message : 'Upload failed';
-        setUploadError(errorMessage);
-        onValidationError?.(errorMessage);
-        break;
-      }
-    }
-
-    setIsUploading(false);
-    setSelectedFiles([]);
-    setUploadProgress(0);
-    setCurrentFile('');
-  };
-
->>>>>>> 04def1e (feat: add FITS file upload functionality and related components)
   const handleDownload = async (file: StorageFile) => {
     try {
       const url = await getFitsFileUrl(file.path);
@@ -469,7 +316,7 @@ export default function FileManagementPanel({ projectId, onRefresh }: FileManage
                 className="p-1 text-gray-400 hover:text-red-500 transition-colors"
                 title="Delete"
               >
-                <Trash2 className="h-4 w-4" />
+                <X className="h-4 w-4" />
               </button>
             </div>
           </div>
@@ -687,7 +534,6 @@ export default function FileManagementPanel({ projectId, onRefresh }: FileManage
               <AlertCircle className="h-6 w-6" />
               <h3 className="text-lg font-semibold">Preview Error</h3>
             </div>
-<<<<<<< HEAD
             <p className="text-gray-300 mb-6">{previewError}</p>
             <div className="flex justify-end">
               <button
@@ -696,73 +542,6 @@ export default function FileManagementPanel({ projectId, onRefresh }: FileManage
               >
                 Close
               </button>
-=======
-
-            {/* Show upload button when files are selected */}
-            {selectedFiles.length > 0 && (
-              <div className="mb-4">
-                <button
-                  onClick={handleUpload}
-                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2"
-                  disabled={isUploading}
-                >
-                  {isUploading ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
-                      <span>Uploading {currentFile}... ({Math.round(uploadProgress)}%)</span>
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="h-4 w-4" />
-                      <span>Upload {selectedFiles.length} file{selectedFiles.length > 1 ? 's' : ''}</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            )}
-
-            {/* Show error if any */}
-            {uploadError && (
-              <div className="mb-4 p-4 bg-red-500/10 border border-red-500 rounded-md">
-                <p className="text-red-500 text-sm">{uploadError}</p>
-              </div>
-            )}
-
-            {/* File list */}
-            <div className="space-y-2">
-              {filteredFiles.map((file, index) => (
-                <div
-                  key={index}
-                  className="flex items-center justify-between p-3 bg-gray-800/50 rounded-lg border border-gray-700 hover:bg-gray-800/70 transition-colors"
-                >
-                  <div className="flex items-center space-x-3">
-                    <File className="h-5 w-5 text-gray-400" />
-                    <div>
-                      <p className="text-sm text-white">{file.name}</p>
-                      <p className="text-xs text-gray-400">
-                        {formatFileSize(file.size)} • {formatDate(file.created_at)}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={() => onFileSelect?.(file)}
-                      className="p-1 text-gray-400 hover:text-white transition-colors"
-                      title="View file"
-                    >
-                      <Eye className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDownload(file)}
-                      className="p-1 text-gray-400 hover:text-white transition-colors"
-                      title="Download file"
-                    >
-                      <Download className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
->>>>>>> 04def1e (feat: add FITS file upload functionality and related components)
             </div>
           </div>
         </div>

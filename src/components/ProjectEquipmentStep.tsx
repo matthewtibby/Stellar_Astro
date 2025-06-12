@@ -29,7 +29,7 @@ export default function ProjectEquipmentStep({
       <div>
         <h2 className="text-2xl font-bold text-white mb-2">Select Your Equipment</h2>
         <p className="text-gray-400">
-          Choose the telescope and camera you'll be using for this project.
+          Choose the telescope and camera you&apos;ll be using for this project.
         </p>
       </div>
 

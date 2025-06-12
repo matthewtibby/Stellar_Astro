@@ -7,9 +7,9 @@ interface ActivityFeedItem {
   project_name?: string;
   type: string;
   action: string;
-  details: any;
+  details: unknown;
   created_at: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 interface ActivityFeedGroup {
@@ -100,7 +100,7 @@ export default function ActivityFeed() {
         const supabase = createClient(url, anonKey);
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.access_token) setJwt(session.access_token);
-      } catch (e) {
+      } catch {
         setError('Could not get authentication token.');
       }
     }
@@ -124,7 +124,7 @@ export default function ActivityFeed() {
         });
         setProjectOptions(Array.from(projects));
       })
-      .catch(e => setError(e.message))
+      .catch(err => setError(err.message))
       .finally(() => setLoading(false));
   }, [eventType, project, dateRange, jwt]);
 
@@ -193,7 +193,7 @@ export default function ActivityFeed() {
                 <span style={{ color: '#fff', fontSize: 16 }}>{getEventDescription(item)}</span>
                 {item.details && typeof item.details === 'object' && Object.keys(item.details).length > 0 && (
                   <span style={{ color: '#b0bec5', fontSize: 14, marginLeft: 12 }}>
-                    {Object.entries(item.details).map(([k, v]) => `${k}: ${v}`).join(', ')}
+                    {Object.entries(item.details).map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : String(v ?? '')}`).join(', ')}
                   </span>
                 )}
                 <span style={{ marginLeft: 'auto', color: '#b0bec5', fontSize: 15 }}>{new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>

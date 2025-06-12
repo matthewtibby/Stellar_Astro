@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { UserStore, UserState } from '@/types/store';
-import { User } from '@supabase/supabase-js';
+import type { User } from '@/src/lib/supabase';
 import { createBrowserClient, supabaseUrl, supabaseAnonKey } from '@/src/lib/supabase';
 
 const initialState: UserState = {
@@ -36,6 +36,7 @@ export const useUserStore = create<UserStoreWithSubscription>()(
       setError: (error: string | null) => set({ error }),
       setSubscriptionLoading: (loading: boolean) => set({ subscriptionLoading: loading }),
       setUser: (user: User) => {
+        const prevId = get().id;
         set({
           id: user.id,
           email: user.email || '',
@@ -45,7 +46,9 @@ export const useUserStore = create<UserStoreWithSubscription>()(
           isAuthenticated: true,
           user,
         });
-        get().fetchAndSetSubscriptionAndRole(user.id);
+        if (user.id !== prevId) {
+          get().fetchAndSetSubscriptionAndRole(user.id);
+        }
       },
       fetchAndSetSubscriptionAndRole: async (userId: string) => {
         set({ subscriptionLoading: true });

@@ -5,18 +5,16 @@ import { useDropzone } from 'react-dropzone';
 import { validateFitsFile } from '../utils/fitsValidation';
 import { uploadRawFrame } from '../utils/storage';
 import { FileType } from '../types/fits';
-import { useToast, type ToastType } from '../hooks/useToast';
+import { useToast } from '../hooks/useToast';
 
 interface FitsFileUploadProps {
   projectId: string;
-  userId: string;
   fileType: FileType;
   onUploadComplete?: () => void;
 }
 
 const FitsFileUpload: React.FC<FitsFileUploadProps> = ({
   projectId,
-  userId,
   fileType,
   onUploadComplete,
 }) => {
@@ -62,7 +60,7 @@ const FitsFileUpload: React.FC<FitsFileUploadProps> = ({
       setIsUploading(false);
       setUploadProgress(0);
     }
-  }, [projectId, userId, fileType, onUploadComplete, addToast]);
+  }, [projectId, fileType, onUploadComplete, addToast]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,

@@ -1,6 +1,4 @@
 import Image from 'next/image'
-import Link from 'next/link'
-import { Heart, MessageCircle, Camera, Telescope, Clock } from 'lucide-react'
 import React, { useState } from 'react'
 
 interface CommunityPost {

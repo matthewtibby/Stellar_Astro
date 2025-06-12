@@ -9,18 +9,25 @@ export async function sendNotification({
   message,
   data = {},
 }: {
-  req: any, // NextApiRequest or similar
+  req: unknown, // NextApiRequest or similar
   eventType: keyof typeof notificationEvents,
   type: 'success' | 'error' | 'info' | 'warning',
   message: string,
-  data?: any,
+  data?: unknown,
 }) {
   if (!shouldNotify(eventType)) return;
-  await fetch(`${req.headers.origin || ''}/api/notifications`, {
+  let origin = '';
+  let authorization = '';
+  if (typeof req === 'object' && req !== null && 'headers' in req) {
+    const headers = (req as { headers?: { origin?: string; authorization?: string } }).headers;
+    origin = headers?.origin || '';
+    authorization = headers?.authorization || '';
+  }
+  await fetch(`${origin}/api/notifications`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: req.headers.authorization || '',
+      Authorization: authorization,
     },
     body: JSON.stringify({
       type,

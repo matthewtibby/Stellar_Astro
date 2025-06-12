@@ -2,10 +2,11 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Project } from '@/types/store';
 import { supabase } from '@/src/lib/supabaseClient';
+import type { HydratedProject } from '@/src/lib/server/getDashboardProjects';
 
 interface ProjectStore {
   currentProject: Project | null;
-  projects: Project[];
+  projects: (Project | HydratedProject)[];
   isLoading: boolean;
   error: string | null;
   lastSaved: string | null;
@@ -17,6 +18,7 @@ interface ProjectStore {
   loadProject: (projectId: string) => Promise<void>;
   setCurrentProject: (project: Project | null) => void;
   autoSaveProject: () => Promise<void>;
+  setProjects: (projects: (Project | HydratedProject)[]) => void;
 }
 
 const initialState = {
@@ -39,7 +41,10 @@ export const useProjectStore = create<ProjectStore>()(
           
           if (!user) throw new Error('User not authenticated');
 
-          const safeTitle = projectData.title && projectData.title.trim() ? projectData.title.trim() : 'Untitled Project';
+          const safeTitle =
+            typeof projectData.title === 'string' && projectData.title.trim()
+              ? projectData.title.trim()
+              : 'Untitled Project';
 
           const newProject = {
             ...projectData,
@@ -161,6 +166,10 @@ export const useProjectStore = create<ProjectStore>()(
         set({ currentProject: project });
       },
 
+      setProjects: (projects) => {
+        set({ projects });
+      },
+
       autoSaveProject: async () => {
         const currentProject = get().currentProject;
         if (!currentProject) return;
@@ -180,28 +189,4 @@ export const useProjectStore = create<ProjectStore>()(
       }),
     }
   )
-);
-
-export const setProjectName = (name: string) => {
-  // Implementation to set project name
-};
-
-export const setProjectDescription = (description: string) => {
-  // Implementation to set project description
-};
-
-export const setSelectedTarget = (target: string) => {
-  // Implementation to set selected target
-};
-
-export const setSelectedTelescope = (telescope: string) => {
-  // Implementation to set selected telescope
-};
-
-export const setSelectedCamera = (camera: string) => {
-  // Implementation to set selected camera
-};
-
-export const setSelectedFilters = (filters: string[]) => {
-  // Implementation to set selected filters
-}; 
+); 

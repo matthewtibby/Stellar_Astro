@@ -12,3 +12,5 @@ export { createBrowserClient, createServerClient, createClient, supabaseUrl, sup
 export function getSupabaseAdminClient() {
   return createClient(supabaseUrl, supabaseServiceRoleKey);
 }
+
+export type { User } from '@supabase/supabase-js'; 

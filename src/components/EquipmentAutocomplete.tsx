@@ -21,7 +21,6 @@ export default function EquipmentAutocomplete({
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<(Telescope | Camera | Filter)[]>([]);
   const [isOpen, setIsOpen] = useState(false);
-  const [selectedItem, setSelectedItem] = useState<Telescope | Camera | Filter | null>(null);
   const [showCustomForm, setShowCustomForm] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
@@ -66,11 +65,9 @@ export default function EquipmentAutocomplete({
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setQuery(e.target.value);
-    setSelectedItem(null);
   };
 
   const handleSelectItem = (item: Telescope | Camera | Filter) => {
-    setSelectedItem(item);
     setQuery(`${item.brand} ${item.model}`);
     setIsOpen(false);
     onSelect(item);
@@ -78,7 +75,6 @@ export default function EquipmentAutocomplete({
 
   const handleClear = () => {
     setQuery('');
-    setSelectedItem(null);
     setResults([]);
     setIsOpen(false);
   };
@@ -89,7 +85,6 @@ export default function EquipmentAutocomplete({
   };
 
   const handleSaveCustom = (item: Telescope | Camera) => {
-    setSelectedItem(item);
     setQuery(`${item.brand} ${item.model}`);
     setShowCustomForm(false);
     onSelect(item);

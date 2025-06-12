@@ -23,7 +23,7 @@ interface Profile {
 }
 
 export default function ProfilePage({ params }: { params: { userId: string } }) {
-  const [profile, setProfile] = useState<Profile>({
+  const [profile] = useState<Profile>({
     id: params.userId,
     name: params.userId.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' '),
     avatar: `https://images.unsplash.com/profile-${params.userId}?ixlib=rb-4.0.3&auto=format&fit=crop&w=150&h=150&q=80`,

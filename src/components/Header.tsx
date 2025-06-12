@@ -7,7 +7,10 @@ import { useUserStore } from "@/src/store/user";
 
 export default function Header() {
   const router = useRouter();
-  const { user, isAuthenticated, isLoading, fullName, logout } = useUserStore();
+  const isAuthenticated = useUserStore(state => state.isAuthenticated);
+  const isLoading = useUserStore(state => state.isLoading);
+  const fullName = useUserStore(state => state.fullName);
+  const logout = useUserStore(state => state.logout);
 
   const handleLogout = () => {
     logout();

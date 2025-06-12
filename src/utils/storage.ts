@@ -1,5 +1,5 @@
 import { createBrowserClient, supabaseUrl, supabaseAnonKey } from '@/src/lib/supabase';
-import { FileType } from '@/src/types/store';
+import { FileType, StorageFile } from '@/src/types/store';
 import { extractTagsFromFitsHeader } from './fileTagging';
 
 // Storage bucket names
@@ -37,8 +37,6 @@ const checkSupabase = () => {
     throw new Error('Storage service is currently unavailable. Please try again later.');
   }
 };
-
-const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
 
 // Profile picture functions
 export const uploadProfilePicture = async (userId: string, file: File): Promise<string> => {
@@ -542,15 +540,6 @@ export async function getFitsFileUrl(filePath: string): Promise<string> {
   }
 }
 
-export interface StorageFile {
-  name: string;
-  path: string;
-  size: number;
-  created_at: string;
-  type: FileType;
-  metadata?: Record<string, string | number | boolean> | null;
-}
-
 export async function getFilesByType(projectId: string): Promise<Record<FileType, StorageFile[]>> {
   try {
     console.log('[getFilesByType] Starting for project:', projectId);
@@ -617,3 +606,5 @@ export async function getFilesByType(projectId: string): Promise<Record<FileType
     throw error;
   }
 }
+
+export type { StorageFile } from '@/src/types/store';

@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { EquipmentItem } from '@/src/utils/equipment';
 import EquipmentSelector from '@/src/components/EquipmentSelector';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export default function EquipmentPage() {
   const [selectedTelescope, setSelectedTelescope] = useState<EquipmentItem | undefined>();

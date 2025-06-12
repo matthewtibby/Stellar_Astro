@@ -28,6 +28,7 @@ from src.lib.server.calibration_worker import create_master_frame, save_master_f
 from src.lib.server.supabase_io import download_file, upload_file
 from pydantic import BaseModel
 import traceback
+import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -335,8 +336,40 @@ class CalibrationJobRequest(BaseModel):
     metadata: dict = None
     test_name: str = None
 
+# --- JOB STATUS/RESULTS DB HELPERS ---
+async def insert_job(job_id, status, error=None, result=None, diagnostics=None, warnings=None):
+    conn = await get_db()
+    try:
+        await conn.execute(
+            """
+            insert into jobs (job_id, status, error, result, diagnostics, warnings)
+            values ($1, $2, $3, $4, $5, $6)
+            on conflict (job_id) do update set
+                status = excluded.status,
+                error = excluded.error,
+                result = excluded.result,
+                diagnostics = excluded.diagnostics,
+                warnings = excluded.warnings
+            """,
+            job_id, status, error, json.dumps(result) if result else None,
+            json.dumps(diagnostics) if diagnostics else None,
+            json.dumps(warnings) if warnings else None
+        )
+    finally:
+        await conn.close()
+
+async def get_job(job_id):
+    conn = await get_db()
+    try:
+        row = await conn.fetchrow("select * from jobs where job_id = $1", job_id)
+        return dict(row) if row else None
+    finally:
+        await conn.close()
+
 @app.post("/jobs/submit")
 async def submit_job(job: CalibrationJobRequest, request: Request):
+    job_id = f"job-{uuid.uuid4().hex[:8]}"
+    await insert_job(job_id, status="pending")
     print(f"[API] Received calibration job: {job.dict()}")
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -395,7 +428,10 @@ async def submit_job(job: CalibrationJobRequest, request: Request):
             print(f"[API] Master FITS uploaded to: {fits_storage_path}")
             print(f"[API] Preview PNG uploaded to: {png_storage_path}")
             print(f"[API] Preview public URL: {preview_url}")
+            # Mark job as complete in DB
+            await insert_job(job_id, status="complete", result={"preview_url": preview_url, "fits_path": fits_storage_path}, diagnostics=stats, warnings=[], error=None)
             return JSONResponse({
+                "jobId": job_id,
                 "preview_url": preview_url,
                 "fits_path": fits_storage_path,
                 "analysis": stats,
@@ -404,21 +440,17 @@ async def submit_job(job: CalibrationJobRequest, request: Request):
                     "sigma": rec_sigma,
                     "reason": reason
                 },
-                "userChoiceIsOptimal": rec_method == method and rec_sigma == sigma,
-                "jobId": f"job-{os.urandom(4).hex()}"
+                "userChoiceIsOptimal": rec_method == method and rec_sigma == sigma
             })
     except Exception as e:
         print(f"[API] Error during calibration: {e}", file=sys.stderr)
         traceback.print_exc()
+        await insert_job(job_id, status="error", error=str(e))
         return JSONResponse({"error": str(e), "trace": traceback.format_exc()}, status_code=500)
 
 @app.get("/jobs/status")
 async def get_job_status(job_id: str):
-    """
-    Get the status of a calibration job.
-    Returns: job_id, status, progress info, error message, timestamps
-    """
-    job = job_store.get(job_id)
+    job = await get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return {
@@ -430,11 +462,7 @@ async def get_job_status(job_id: str):
 
 @app.get("/jobs/results")
 async def get_job_results(job_id: str):
-    """
-    Get the results of a completed calibration job.
-    Returns: job_id, output file URLs/paths, diagnostics JSON, warnings/errors, summary stats
-    """
-    job = job_store.get(job_id)
+    job = await get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     if job["status"] != "complete":
