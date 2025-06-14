@@ -3,6 +3,7 @@ import { UniversalFileUpload } from './UniversalFileUpload';
 import StepsIndicator from './StepsIndicator';
 import { Upload, Folder, Sun, Moon, Zap } from 'lucide-react';
 import { type FileType, type StorageFile } from '../types/store';
+import { useRouter } from 'next/navigation';
 
 interface ProjectUploadStepProps {
   projectId: string;
@@ -41,6 +42,7 @@ const ProjectUploadStep: React.FC<ProjectUploadStepProps> = ({ projectId, userId
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const router = useRouter();
 
   if (previewUrl) {
     // eslint-disable-next-line no-console
@@ -54,7 +56,7 @@ const ProjectUploadStep: React.FC<ProjectUploadStepProps> = ({ projectId, userId
         <StepsIndicator currentStep={0} steps={steps} />
       </div>
       {/* Left column */}
-      <div className="z-20 h-full w-full flex flex-col bg-[#10131a]/80 p-4 rounded-2xl shadow-xl">
+      <div className="z-20 h-full w-full flex flex-col bg-[#151a28]/90 p-4 rounded-2xl shadow-2xl border-2 border-blue-500/40 hover:border-blue-400 hover:shadow-blue-500/30 transition-all duration-200 backdrop-blur-xl">
         <h1 className="text-2xl font-bold text-white mb-2">Upload & Organise</h1>
         {/* Frame Type Tabs */}
         <div className="flex gap-1 mb-4 flex-wrap">
@@ -89,7 +91,7 @@ const ProjectUploadStep: React.FC<ProjectUploadStepProps> = ({ projectId, userId
         />
       </div>
       {/* Center column */}
-      <div className="z-20 h-full w-full flex flex-col bg-[#181c23]/80 p-6 rounded-2xl shadow-xl">
+      <div className="z-20 h-full w-full flex flex-col bg-[#181c23]/90 p-6 rounded-2xl shadow-2xl border-2 border-blue-500/30 hover:border-blue-400 hover:shadow-blue-500/30 transition-all duration-200 backdrop-blur-xl">
         <UniversalFileUpload
           projectId={projectId}
           userId={userId}
@@ -108,7 +110,7 @@ const ProjectUploadStep: React.FC<ProjectUploadStepProps> = ({ projectId, userId
         />
       </div>
       {/* Right column: Preview Panel */}
-      <div className="z-20 h-full w-full flex flex-col bg-[#10131a]/90 p-6 rounded-2xl shadow-xl border border-[#232946]/60">
+      <div className="z-20 h-full w-full flex flex-col bg-[#151a28]/95 p-6 rounded-2xl shadow-2xl border-2 border-blue-500/50 hover:border-blue-400 hover:shadow-blue-500/40 transition-all duration-200 backdrop-blur-2xl">
         {previewLoading ? (
           <div className="flex flex-col items-center justify-center h-full text-blue-200/70">
             <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent mb-4" />
@@ -140,7 +142,7 @@ const ProjectUploadStep: React.FC<ProjectUploadStepProps> = ({ projectId, userId
         )}
       </div>
       {/* Bottom Buttons (span all columns) */}
-      <div className="z-30 col-span-3 flex justify-between items-center gap-4 mt-10 px-8">
+      <div className="z-30 col-span-3 flex justify-between items-center gap-4 mt-20 mb-24 px-8">
         <button
           className="px-5 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 shadow-lg text-base"
           onClick={async () => {
@@ -153,6 +155,7 @@ const ProjectUploadStep: React.FC<ProjectUploadStepProps> = ({ projectId, userId
         </button>
         <button
           className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-lg text-base"
+          onClick={() => router.push(`/dashboard/${projectId}/calibration-frames`)}
         >
           Next: Calibration
         </button>

@@ -548,11 +548,17 @@ export async function getFilesByType(projectId: string): Promise<Record<FileType
     if (authError || !user) {
       throw new Error('User must be authenticated to fetch files');
     }
-
     const userId = user.id;
-    console.log('[getFilesByType] User authenticated:', userId);
-
-    // Initialize the result object with empty arrays for each type
+    // Query the project_files table for all files in this project
+    const { data: dbFiles, error: dbError } = await client
+      .from('project_files')
+      .select('*')
+      .eq('project_id', projectId)
+      .eq('user_id', userId);
+    if (dbError) {
+      throw new Error('Failed to fetch files from project_files: ' + dbError.message);
+    }
+    // Group files by type
     const result: Record<FileType, StorageFile[]> = {
       'light': [],
       'dark': [],
@@ -567,43 +573,19 @@ export async function getFilesByType(projectId: string): Promise<Record<FileType
       'pre-processed': [],
       'post-processed': []
     };
-
-    // For each type, list files in the corresponding subfolder
-    for (const type of Object.keys(result) as FileType[]) {
-      const folderPath = `${userId}/${projectId}/${type}`;
-      const { data: files, error } = await client.storage
-        .from(STORAGE_BUCKETS.RAW_FRAMES)
-        .list(folderPath);
-      if (error) {
-        // Only log error if folder doesn't exist, not a fatal error
-        if (error.message && error.message.includes('The resource was not found')) {
-          continue;
-        }
-        console.error(`[getFilesByType] Error listing files for type ${type}:`, error);
-        continue;
-      }
-      if (files && Array.isArray(files)) {
-        for (const file of files) {
-          // Only include FITS files, not folders or PNG previews
-          if (
-            file.name &&
-            !file.name.endsWith('/') &&
-            (file.name.toLowerCase().endsWith('.fits') || file.name.toLowerCase().endsWith('.fit'))
-          ) {
-            result[type].push({
-              name: file.name,
-              path: `${folderPath}/${file.name}`,
-              size: file.metadata?.size || 0,
-              created_at: file.created_at,
-              type: type,
-              metadata: file.metadata
-            });
-          }
-        }
+    for (const file of dbFiles || []) {
+      const type = (file.file_type || 'light') as FileType;
+      if (result[type]) {
+        result[type].push({
+          name: file.filename,
+          path: file.file_path,
+          size: file.file_size,
+          created_at: file.created_at,
+          type: type,
+          metadata: file.metadata || {},
+        });
       }
     }
-
-    console.log('[getFilesByType] Final sorted files:', result);
     return result;
   } catch (error) {
     console.error('[getFilesByType] Error:', error);

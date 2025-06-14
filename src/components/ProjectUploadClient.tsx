@@ -2,7 +2,7 @@
 import { useRouter } from 'next/navigation';
 import ProjectUploadStep from './ProjectUploadStep';
 import { useState } from 'react';
-import { Pencil, X, Check } from 'lucide-react';
+import { Pencil, X, Check, ChevronRight } from 'lucide-react';
 import { useProjectStore } from '@/src/store/project';
 
 interface ProjectUploadClientProps {
@@ -38,6 +38,14 @@ export default function ProjectUploadClient({ projectId, userId, projectName, on
     <div className="relative min-h-screen w-full">
       <img src="/images/hamish-Y61qTmRLcho-unsplash (1).jpg" alt="Starry background" className="absolute inset-0 w-full h-full object-cover opacity-60 z-[-1] pointer-events-none select-none" aria-hidden="true" />
       <div className="relative z-10 min-h-screen bg-transparent text-white w-full">
+        {/* Breadcrumb */}
+        <div className="flex items-center gap-2 text-sm text-blue-200/80 mb-2 px-4 pt-4">
+          <button className="hover:underline cursor-pointer" onClick={() => router.push('/dashboard')}>Dashboard</button>
+          <ChevronRight size={16} className="text-blue-300/60" />
+          <button className="hover:underline cursor-pointer" onClick={() => router.push(`/dashboard/${projectId}`)}>{title}</button>
+          <ChevronRight size={16} className="text-blue-300/60" />
+          <span className="text-white font-semibold">Upload</span>
+        </div>
         {editing ? (
           <form className="flex items-center gap-2 w-full p-4" onSubmit={handleSave}>
             <input
@@ -57,7 +65,7 @@ export default function ProjectUploadClient({ projectId, userId, projectName, on
           </form>
         ) : (
           <div className="flex items-center gap-2 p-4">
-            <h1 className="text-xl font-bold text-white mb-0" title={title}>{title}</h1>
+            <h1 className="text-lg font-bold text-white mb-0 truncate max-w-full" title={title}>{title}</h1>
             <button className="ml-2 text-blue-300 hover:text-blue-500" onClick={() => setEditing(true)} title="Edit project name">
               <Pencil className="w-4 h-4" />
             </button>

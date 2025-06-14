@@ -3,7 +3,7 @@ import { useDropzone } from 'react-dropzone';
 import { validateFITSFile } from '@/src/utils/fileValidation';
 import { uploadRawFrame, getFitsFileUrl, getFilesByType, getFitsPreviewUrl } from '@/src/utils/storage';
 import type { StorageFile } from '@/src/types/store';
-import { File, AlertCircle, Upload, X, Trash2, Eye, ChevronDown, ChevronUp } from 'lucide-react';
+import { File, AlertCircle, Upload, X, Trash2, Eye, ChevronDown, ChevronUp, Info } from 'lucide-react';
 import type { FileType } from '@/src/types/store';
 import { spaceFacts } from '@/src/utils/spaceFacts';
 import { handleError, ValidationError } from '@/src/utils/errorHandling';
@@ -93,6 +93,7 @@ export function UniversalFileUpload({
   const fileRowRefs = useRef<(HTMLDivElement | null)[]>([]);
   const [filesLoading, setFilesLoading] = useState(true);
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
+  const [metadataModalFile, setMetadataModalFile] = useState<StorageFileWithMetadata | null>(null);
 
   // Move closePreview definition here
   const closePreview = useCallback(() => {
@@ -565,13 +566,25 @@ export function UniversalFileUpload({
                           aria-label={`Select file ${file.name}`}
                           tabIndex={0}
                         />
-                        <span className="text-sm text-blue-100 font-mono" title={`${file.name} (${formatFileSize(file.size)})`}>{file.name}</span>
+                        <span className="text-xs text-blue-100 font-mono truncate overflow-hidden whitespace-nowrap max-w-[12rem]" title={`${file.name} (${formatFileSize(file.size)})`}>{file.name}</span>
                         {viewAll && (
                           <span className="ml-2 px-2 py-0.5 rounded bg-blue-900 text-xs text-blue-300 border border-blue-700">
                             {file.type}
                           </span>
                         )}
                         <div className="flex items-center space-x-2 ml-auto">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button
+                                className="text-blue-300 hover:text-blue-500"
+                                onClick={e => { e.stopPropagation(); setMetadataModalFile(file); }}
+                                aria-label="Show file metadata"
+                              >
+                                <Info className="h-4 w-4" />
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent>Show metadata</TooltipContent>
+                          </Tooltip>
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <button
@@ -749,6 +762,86 @@ export function UniversalFileUpload({
                   Close
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+        {/* Metadata Modal */}
+        {metadataModalFile && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+            <div className="bg-[#181c23] rounded-2xl shadow-2xl p-8 max-w-lg w-full relative border border-blue-500/40">
+              <button
+                className="absolute top-3 right-3 text-gray-400 hover:text-red-500"
+                onClick={() => setMetadataModalFile(null)}
+                aria-label="Close metadata modal"
+              >
+                <X className="h-5 w-5" />
+              </button>
+              <h2 className="text-lg font-bold text-white mb-4">File Metadata</h2>
+              <div className="mb-2 text-blue-200 font-mono text-xs break-all">{metadataModalFile.name}</div>
+              {/* Astrophotography-relevant fields */}
+              {(() => {
+                const meta = metadataModalFile.metadata || {};
+                const astroFields = [
+                  { key: 'camera', label: 'Camera' },
+                  { key: 'telescope', label: 'Telescope' },
+                  { key: 'exposure', label: 'Exposure (s)' },
+                  { key: 'exposure_time', label: 'Exposure (s)' },
+                  { key: 'binning', label: 'Binning' },
+                  { key: 'filter', label: 'Filter' },
+                  { key: 'gain', label: 'Gain' },
+                  { key: 'iso', label: 'ISO' },
+                  { key: 'temperature', label: 'Temperature (°C)' },
+                  { key: 'date', label: 'Date' },
+                  { key: 'object', label: 'Object' },
+                  { key: 'observer', label: 'Observer' },
+                  { key: 'site', label: 'Site' },
+                  { key: 'focal_length', label: 'Focal Length (mm)' },
+                  { key: 'pixel_size', label: 'Pixel Size (μm)' },
+                  { key: 'aperture', label: 'Aperture (mm)' },
+                  { key: 'ra', label: 'RA' },
+                  { key: 'dec', label: 'DEC' },
+                  { key: 'image_type', label: 'Image Type' },
+                  { key: 'observation_type', label: 'Observation Type' },
+                ];
+                const shownKeys = new Set();
+                const rows = astroFields
+                  .map(({ key, label }) => meta[key] !== undefined && meta[key] !== '' ? (
+                    shownKeys.add(key),
+                    <tr key={key}>
+                      <td className="font-semibold pr-2 text-blue-300 text-right align-top whitespace-nowrap">{label}</td>
+                      <td className="pl-2 text-blue-100 break-all">{String(meta[key])}</td>
+                    </tr>
+                  ) : null)
+                  .filter(Boolean);
+                return rows.length > 0 ? (
+                  <table className="w-full text-xs text-blue-100 mb-4">
+                    <tbody>{rows}</tbody>
+                  </table>
+                ) : null;
+              })()}
+              {/* Other metadata */}
+              {(() => {
+                const meta = metadataModalFile.metadata || {};
+                const astroKeys = [
+                  'camera','telescope','exposure','exposure_time','binning','filter','gain','iso','temperature','date','object','observer','site','focal_length','pixel_size','aperture','ra','dec','image_type','observation_type'
+                ];
+                const otherEntries = Object.entries(meta).filter(([key]) => !astroKeys.includes(key) && meta[key] !== undefined && meta[key] !== '');
+                return otherEntries.length > 0 ? (
+                  <>
+                    <div className="text-blue-300 font-semibold mt-2 mb-1 text-xs">Other Metadata</div>
+                    <table className="w-full text-xs text-blue-100">
+                      <tbody>
+                        {otherEntries.map(([key, value]) => (
+                          <tr key={key}>
+                            <td className="font-semibold pr-2 text-blue-300 text-right align-top whitespace-nowrap">{key}</td>
+                            <td className="pl-2 text-blue-100 break-all">{String(value)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </>
+                ) : null;
+              })()}
             </div>
           </div>
         )}
