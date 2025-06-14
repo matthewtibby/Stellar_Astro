@@ -11,7 +11,7 @@ interface CalibrationClientProps {
 export default function CalibrationClient({ projectId, userId, projectName }: CalibrationClientProps) {
   const router = useRouter();
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0a192f] via-[#1a223f] to-[#232946] text-white flex flex-col items-center justify-center">
+    <div className="min-h-screen bg-transparent text-white flex flex-col items-center justify-center">
       <div className="w-full max-w-3xl mx-auto py-8 px-4">
         <div className="mb-6 flex items-center justify-between">
           <button

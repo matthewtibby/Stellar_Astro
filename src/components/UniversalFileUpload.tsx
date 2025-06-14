@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { validateFITSFile } from '@/src/utils/fileValidation';
-import { uploadRawFrame, getFitsFileUrl, getFilesByType } from '@/src/utils/storage';
+import { uploadRawFrame, getFitsFileUrl, getFilesByType, getFitsPreviewUrl } from '@/src/utils/storage';
 import type { StorageFile } from '@/src/types/store';
 import { File, AlertCircle, Upload, X, Trash2, Eye, ChevronDown, ChevronUp } from 'lucide-react';
 import type { FileType } from '@/src/types/store';
@@ -23,6 +23,8 @@ interface UniversalFileUploadProps {
   layout?: 'upload-only' | 'file-list-only';
   activeTab?: FileType;
   viewAll?: boolean;
+  onPreviewFile?: (file: StorageFile, previewUrl: string | null, loading: boolean, error?: string) => void;
+  selectedFilePath?: string;
 }
 
 interface UploadStatus {
@@ -37,6 +39,14 @@ interface UploadStatus {
   total: number;
 }
 
+// Utility to format file size
+const formatFileSize = (bytes: number) => {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+};
+
 export function UniversalFileUpload({ 
   projectId, 
   userId,
@@ -46,7 +56,9 @@ export function UniversalFileUpload({
   isSavingStep,
   layout,
   activeTab = 'light',
-  viewAll = false
+  viewAll = false,
+  onPreviewFile,
+  selectedFilePath,
 }: UniversalFileUploadProps) {
   console.log('UniversalFileUpload rendered with userId:', userId, 'projectId:', projectId);
   const [uploadStatuses, setUploadStatuses] = useState<UploadStatus[]>([]);
@@ -66,22 +78,27 @@ export function UniversalFileUpload({
     'pre-processed': [],
     'post-processed': []
   });
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [expandedFiles, setExpandedFiles] = useState<Record<string, boolean>>({});
-  const { } = useToast();
+  const { addToast } = useToast();
   const [batchTotalBytes, setBatchTotalBytes] = useState(0);
   const [batchUploadedBytes, setBatchUploadedBytes] = useState(0);
   const [batchSpeed, setBatchSpeed] = useState(0); // bytes/sec
   const [batchETA, setBatchETA] = useState<number | null>(null);
   const previewCache = useRef<Record<string, string>>({});
+  const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const fileRowRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const [filesLoading, setFilesLoading] = useState(true);
+  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
 
   // Move closePreview definition here
   const closePreview = useCallback(() => {
     if (previewUrl) {
       URL.revokeObjectURL(previewUrl);
-      setPreviewUrl(null);
+      setPreviewBlob(null);
     }
   }, [previewUrl]);
 
@@ -126,6 +143,8 @@ export function UniversalFileUpload({
       } catch (error) {
         console.error('Error loading files:', error);
         onValidationError?.(error instanceof Error ? error.message : 'Failed to load files');
+      } finally {
+        setFilesLoading(false);
       }
     };
 
@@ -160,6 +179,8 @@ export function UniversalFileUpload({
       // Validate all files in batch
       const validationResults = await Promise.all(acceptedFiles.map(file => validateFITSFile(file, projectId, userId)));
       let uploadedBytes = 0;
+      let successfulUploads = 0;
+      let failedUploads = 0;
       
       // Process each file based on validation results
       for (let i = 0; i < acceptedFiles.length; i++) {
@@ -183,6 +204,11 @@ export function UniversalFileUpload({
         );
         uploadedBytes += file.size;
         setBatchUploadedBytes(uploadedBytes);
+        if (validationResult.isValid) {
+          successfulUploads++;
+        } else {
+          failedUploads++;
+        }
       }
       setIsUploading(false);
       if (onUploadComplete) onUploadComplete();
@@ -199,6 +225,12 @@ export function UniversalFileUpload({
       } catch (fetchError) {
         console.error('Error fetching files after upload:', fetchError);
       }
+      if (successfulUploads > 0) {
+        addToast('success', `${successfulUploads} file${successfulUploads > 1 ? 's' : ''} uploaded successfully`);
+      }
+      if (failedUploads > 0) {
+        addToast('error', `${failedUploads} file${failedUploads > 1 ? 's' : ''} failed to upload`);
+      }
     } catch (error) {
       console.error('Upload error:', error);
       const appError = handleError(error);
@@ -214,7 +246,7 @@ export function UniversalFileUpload({
       onValidationError?.(appError.message);
       setIsUploading(false);
     }
-  }, [projectId, userId, activeTab, onUploadComplete, onValidationError, onStepAutosave]);
+  }, [projectId, userId, activeTab, onUploadComplete, onValidationError, onStepAutosave, addToast]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -243,22 +275,25 @@ export function UniversalFileUpload({
           });
           if (previewResponse.ok) {
             const imageBlob = await previewResponse.blob();
-            const imageUrl = URL.createObjectURL(imageBlob);
-            previewCache.current[file.path] = imageUrl;
+            previewCache.current[file.path] = URL.createObjectURL(imageBlob);
           }
         } catch { }
       }
     });
     // Cleanup: revokeObjectURL on unmount
     return () => {
-      Object.values(previewCache.current).forEach(url => URL.revokeObjectURL(url));
+      Object.values(previewCache.current).forEach(url => {
+        try {
+          URL.revokeObjectURL(url);
+        } catch (e) { /* ignore */ }
+      });
       previewCache.current = {};
     };
   }, [filesByType, activeTab, viewAll]);
 
   // ESC and overlay click to close preview (for both loading and loaded)
   useEffect(() => {
-    if (!(previewUrl || previewLoading)) return;
+    if (!(previewBlob || previewLoading)) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         closePreview();
@@ -267,50 +302,34 @@ export function UniversalFileUpload({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [previewUrl, previewLoading, closePreview]);
+  }, [previewBlob, previewLoading, closePreview]);
 
   // Use cache if available in handlePreview
   async function handlePreview(file: StorageFile) {
+    setSelectedPath(file.path);
     try {
       setPreviewLoading(true);
       setPreviewError(null);
-      setPreviewUrl(null);
-      // Use cache if available
+      setPreviewBlob(null);
+      // Use cache if available (cache preview URL)
       if (previewCache.current[file.path]) {
         setPreviewUrl(previewCache.current[file.path]);
         setPreviewLoading(false);
+        if (onPreviewFile) {
+          onPreviewFile(file, previewCache.current[file.path], false, undefined);
+        }
         return;
       }
-      // Log the file path for debugging
-      console.log('[FITS Preview] Attempting to get signed URL for file path:', file.path);
-
-      // Get the file URL from Supabase
-      const fileUrl = await getFitsFileUrl(file.path);
-      console.log('[FITS Preview] Got signed URL:', fileUrl);
-
-      // Send the URL to your preview endpoint
-      const previewResponse = await fetch('http://localhost:8000/preview-fits', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: fileUrl }),
-      });
-
-      if (!previewResponse.ok) {
-        const errorText = await previewResponse.text();
-        console.error('[FITS Preview] Preview generation failed:', errorText);
-        throw new Error(`Failed to generate preview: ${errorText}`);
+      // Get the PNG preview URL from storage
+      const previewUrl = await getFitsPreviewUrl(file.path);
+      previewCache.current[file.path] = previewUrl;
+      setPreviewUrl(previewUrl);
+      if (onPreviewFile) {
+        onPreviewFile(file, previewUrl, false, undefined);
       }
-
-      // Get the image blob and create a URL
-      const imageBlob = await previewResponse.blob();
-      const imageUrl = URL.createObjectURL(imageBlob);
-      previewCache.current[file.path] = imageUrl;
-      setPreviewUrl(imageUrl);
-      console.log('[FITS Preview] Preview generated successfully');
+      setPreviewLoading(false);
     } catch (error) {
-      console.error('[FITS Preview] Error:', error);
-      setPreviewError(error instanceof Error ? error.message : 'Failed to generate preview');
-    } finally {
+      setPreviewError('Preview not available yet. Please wait a moment.');
       setPreviewLoading(false);
     }
   }
@@ -386,6 +405,63 @@ export function UniversalFileUpload({
     });
   };
 
+  useEffect(() => {
+    if (previewBlob) {
+      const url = URL.createObjectURL(previewBlob);
+      setPreviewUrl(url);
+      if (onPreviewFile && selectedPath) {
+        // Find the file object for selectedPath
+        const allFiles = Object.values(filesByType).flat();
+        const fileObj = allFiles.find(f => f.path === selectedPath);
+        if (fileObj) {
+          onPreviewFile(fileObj, url, false, undefined);
+        }
+      }
+      return () => {
+        URL.revokeObjectURL(url);
+      };
+    } else {
+      setPreviewUrl(null);
+    }
+  }, [previewBlob]);
+
+  // Keyboard navigation handler for file list
+  const handleFileListKeyDown = (e: React.KeyboardEvent<HTMLDivElement>, idx: number, file: StorageFileWithMetadata) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const next = Math.min(fileRowRefs.current.length - 1, idx + 1);
+      fileRowRefs.current[next]?.focus();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const prev = Math.max(0, idx - 1);
+      fileRowRefs.current[prev]?.focus();
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      handlePreview(file);
+    } else if (e.key === 'Delete' || e.key === 'Backspace') {
+      e.preventDefault();
+      handleDelete();
+    }
+  };
+
+  const toggleFileSelection = (filePath: string) => {
+    setSelectedFiles(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(filePath)) {
+        newSet.delete(filePath);
+      } else {
+        newSet.add(filePath);
+      }
+      return newSet;
+    });
+  };
+
+  const handleBulkDelete = () => {
+    // Implement bulk delete logic here (e.g., call handleDelete for each selected file)
+    // For now, just clear selection
+    setSelectedFiles(new Set());
+  };
+
   return (
     <TooltipProvider>
       <div className="space-y-4">
@@ -443,90 +519,84 @@ export function UniversalFileUpload({
                   Viewing all frames across all types
                 </div>
               )}
+              {selectedFiles.size > 0 && (
+                <button
+                  className="mb-2 px-4 py-2 bg-red-700 text-white rounded hover:bg-red-800 text-sm font-semibold shadow"
+                  onClick={handleBulkDelete}
+                  aria-label="Delete selected files"
+                >
+                  Delete Selected ({selectedFiles.size})
+                </button>
+              )}
               <div className="space-y-2">
-                {(viewAll
-                  ? Object.entries(filesByType).flatMap(([type, files]) =>
-                      files.map(file => ({ ...file, type: type as FileType }))
-                    )
-                  .sort((a, b) => {
-                    const typeOrder = ['light', 'dark', 'bias', 'flat'];
-                    const aIndex = typeOrder.indexOf(a.type);
-                    const bIndex = typeOrder.indexOf(b.type);
-                    if (aIndex !== -1 && bIndex !== -1) {
-                      if (aIndex !== bIndex) return aIndex - bIndex;
-                    } else if (aIndex !== -1) {
-                      return -1;
-                    } else if (bIndex !== -1) {
-                      return 1;
-                    }
-                    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-                  })
-                  : filesByType[activeTab] || []
-                )
-                  .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-                  .map((file) => (
-                    <div 
-                      key={file.path} 
-                      className="flex items-center p-2 bg-[#181c23] rounded-lg hover:bg-blue-900/30 group border border-[#232946]/40 shadow"
-                    >
-                      <span className="text-sm text-blue-100 truncate max-w-xs font-mono" title={file.name}>{file.name}</span>
-                      {viewAll && (
-                        <span className="ml-2 px-2 py-0.5 rounded bg-blue-900 text-xs text-blue-300 border border-blue-700">
-                          {file.type}
-                        </span>
-                      )}
-                      <span className="text-xs text-blue-300 ml-2">
-                        {new Date(file.created_at).toLocaleDateString('en-US')}
-                      </span>
-                      <div className="flex items-center space-x-2 ml-auto">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button
-                              className="text-blue-300 hover:text-blue-400 flex items-center px-2 py-1 rounded hover:bg-blue-800 transition"
-                              onClick={() => handlePreview(file)}
-                              aria-label="Preview"
-                            >
-                              <Eye className="h-4 w-4" />
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent>Preview</TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button
-                              className="ml-2 text-blue-300 hover:text-blue-400 flex items-center"
-                              onClick={() => toggleFileExpansion(file.name)}
-                              aria-label="Show metadata"
-                            >
-                              {expandedFiles[file.name] ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent>Show metadata</TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button
-                              className="text-blue-300 hover:text-red-500"
-                              onClick={() => handleDelete()}
-                              aria-label="Delete file"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent>Delete file</TooltipContent>
-                        </Tooltip>
-                      </div>
-                      {expandedFiles[file.name] && (
-                        <div className="bg-[#232946] p-3 rounded mt-2 w-full">
-                          {renderMetadataTable(file)}
+                {filesLoading ? (
+                  <div className="flex flex-col items-center justify-center py-8 text-blue-300/80">
+                    <svg width="48" height="48" fill="none" viewBox="0 0 48 48"><circle cx="24" cy="24" r="20" fill="#232946" /><circle cx="32" cy="18" r="4" fill="#3b82f6" /><circle cx="18" cy="30" r="2" fill="#fbbf24" /><circle cx="28" cy="32" r="1.5" fill="#fff" /><circle cx="14" cy="18" r="1.5" fill="#fff" /></svg>
+                    <div className="mt-4 text-lg font-semibold animate-bounce">Loading files...</div>
+                  </div>
+                ) : (
+                  (viewAll
+                    ? Object.entries(filesByType).flatMap(([type, files]) =>
+                        files.map(file => ({ ...file, type: type as FileType }))
+                      )
+                    : filesByType[activeTab] || []
+                  )
+                    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                    .map((file, idx) => (
+                      <div
+                        key={file.path}
+                        className={`flex items-center p-2 bg-[#181c23] rounded-lg group border border-[#232946]/40 shadow transition-colors cursor-pointer ${
+                          (selectedFilePath ? selectedFilePath === file.path : selectedPath === file.path)
+                            ? 'bg-blue-900/60 border-blue-400 ring-2 ring-blue-400' : 'hover:bg-blue-800/30'
+                        }`}
+                        onClick={() => handlePreview(file)}
+                        onKeyDown={e => handleFileListKeyDown(e, idx, file)}
+                        ref={el => { fileRowRefs.current[idx] = el; }}
+                        role="option"
+                        aria-label={`File ${file.name}`}
+                        aria-selected={selectedFilePath ? selectedFilePath === file.path : selectedPath === file.path}
+                        tabIndex={selectedFilePath ? 0 : -1}
+                      >
+                        <input
+                          type="checkbox"
+                          className="mr-3 accent-blue-500 h-4 w-4 rounded focus:ring-2 focus:ring-blue-400"
+                          checked={selectedFiles.has(file.path)}
+                          onChange={e => { e.stopPropagation(); toggleFileSelection(file.path); }}
+                          aria-label={`Select file ${file.name}`}
+                          tabIndex={0}
+                        />
+                        <span className="text-sm text-blue-100 font-mono" title={`${file.name} (${formatFileSize(file.size)})`}>{file.name}</span>
+                        {viewAll && (
+                          <span className="ml-2 px-2 py-0.5 rounded bg-blue-900 text-xs text-blue-300 border border-blue-700">
+                            {file.type}
+                          </span>
+                        )}
+                        <div className="flex items-center space-x-2 ml-auto">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button
+                                className="text-blue-300 hover:text-red-500"
+                                onClick={() => handleDelete()}
+                                aria-label="Delete file"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent>Delete file</TooltipContent>
+                          </Tooltip>
                         </div>
-                      )}
-                    </div>
-                  ))}
+                        {(selectedFilePath ? selectedFilePath === file.path : selectedPath === file.path) && previewLoading && (
+                          <span className="ml-2 animate-spin rounded-full h-4 w-4 border-2 border-blue-400 border-t-transparent" />
+                        )}
+                      </div>
+                    ))
+                )}
                 {((viewAll && Object.values(filesByType).flat().length === 0) || (!viewAll && (!filesByType[activeTab] || filesByType[activeTab].length === 0))) && (
-                  <p className="text-sm text-blue-300 text-center py-4">
-                    No {viewAll ? 'frames' : activeTab + ' frames'} uploaded yet
-                  </p>
+                  <div className="flex flex-col items-center justify-center py-8 text-blue-300/80 animate-fade-in">
+                    <svg width="48" height="48" fill="none" viewBox="0 0 48 48"><circle cx="24" cy="24" r="20" fill="#232946" /><circle cx="32" cy="18" r="4" fill="#3b82f6" /><circle cx="18" cy="30" r="2" fill="#fbbf24" /><circle cx="28" cy="32" r="1.5" fill="#fff" /><circle cx="14" cy="18" r="1.5" fill="#fff" /></svg>
+                    <div className="mt-4 text-lg font-semibold animate-bounce">No files yet</div>
+                    <div className="text-sm animate-fade-in">Launch your first upload to see your data here!</div>
+                  </div>
                 )}
               </div>
             </div>
@@ -586,7 +656,10 @@ export function UniversalFileUpload({
                     <p className="text-xs text-red-400 flex-1">{status.error}</p>
                     <button
                       className="ml-2 px-2 py-1 bg-blue-700 text-white rounded hover:bg-blue-800 text-xs"
-                      onClick={() => retryUpload(status.file, status.type || activeTab)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        retryUpload(status.file, status.type || activeTab);
+                      }}
                     >
                       Retry
                     </button>
@@ -617,7 +690,7 @@ export function UniversalFileUpload({
           </div>
         )}
         {/* Preview Modal (scaffold) */}
-        {(previewUrl || previewLoading) && (
+        {(!onPreviewFile && (previewUrl || previewLoading)) && (
           <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-70"
             onClick={closePreview}
@@ -639,8 +712,10 @@ export function UniversalFileUpload({
                     <X className="h-5 w-5" />
                   </button>
                   <h2 className="text-lg font-bold text-white mb-4">Preview</h2>
-                  <div className="w-full h-auto rounded-md overflow-hidden">
-                    <Image src={previewUrl} alt="FITS Preview" width={800} height={600} className="w-full h-auto rounded-md" />
+                  <div key={previewUrl || selectedPath} className="transition-opacity duration-500 opacity-100 animate-fade-in">
+                    <div className="w-full h-auto rounded-md overflow-hidden">
+                      <Image src={previewUrl} alt="FITS Preview" width={800} height={600} className="w-full h-auto rounded-md" />
+                    </div>
                   </div>
                 </>
               )}

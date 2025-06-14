@@ -24,7 +24,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${inter.variable} ${plusJakartaSans.variable} h-full`}>
-      <body className={`${inter.className} min-h-full flex flex-col font-sans bg-black`}>
+      <body className={`${inter.className} min-h-full flex flex-col font-sans`}>
         <CurrencyProvider>
           <ClientProviders>
             <ClientLayout>

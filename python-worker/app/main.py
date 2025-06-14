@@ -475,6 +475,33 @@ async def get_job_results(job_id: str):
         "error": job["error"]
     }
 
+def generate_png_preview(fits_path, png_path, downsample_to=512):
+    with fits.open(fits_path) as hdul:
+        data = hdul[0].data.astype(np.float32)
+        # Downsample for preview
+        if data.shape[0] > downsample_to or data.shape[1] > downsample_to:
+            factor = max(data.shape[0] // downsample_to, data.shape[1] // downsample_to)
+            data = data[::factor, ::factor]
+        vmin, vmax = np.percentile(data, [0.1, 99.9])
+        data = np.clip(data, vmin, vmax)
+        norm = (data - vmin) / (vmax - vmin) * 255
+        norm = np.nan_to_num(norm)
+        img = Image.fromarray(norm.astype(np.uint8), mode='L')
+        img.save(png_path, format='PNG')
+
+# Example usage after uploading a FITS file to Supabase:
+#
+# with tempfile.TemporaryDirectory() as tmpdir:
+#     local_fits = os.path.join(tmpdir, "file.fits")
+#     local_png = os.path.join(tmpdir, "preview.png")
+#     # Download the just-uploaded FITS file from Supabase to local_fits
+#     download_file("raw-frames", file_path, local_fits)
+#     # Generate PNG preview
+#     generate_png_preview(local_fits, local_png)
+#     # Upload PNG to Supabase at the same path but with .png extension
+#     preview_path = file_path.rsplit('.', 1)[0] + '.png'
+#     upload_file("raw-frames", preview_path, local_png, public=False)
+
 if __name__ == "__main__":
     # Force port 8000 and prevent port changes
     os.environ['PORT'] = '8000'  # Override any environment variables

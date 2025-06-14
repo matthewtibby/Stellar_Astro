@@ -18,5 +18,10 @@ export default async function DashboardPage() {
     projects = await getDashboardProjects(typedUser.id);
   }
 
-  return <DashboardClient user={typedUser && typedUser.email ? { id: typedUser.id, email: typedUser.email } : null} projects={projects} />;
+  return (
+    <div className="relative min-h-screen w-full">
+      <img src="/images/hamish-Y61qTmRLcho-unsplash (1).jpg" alt="Starry background" className="absolute inset-0 w-full h-full object-cover opacity-60 z-0 pointer-events-none select-none" aria-hidden="true" />
+      <DashboardClient user={typedUser && typedUser.email ? { id: typedUser.id, email: typedUser.email } : null} projects={projects} />
+    </div>
+  );
 } 

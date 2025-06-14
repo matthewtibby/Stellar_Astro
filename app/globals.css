@@ -19,6 +19,12 @@
   body {
     @apply bg-black text-white;
     font-family: var(--font-sans);
+    /* Deep space gradient with stars overlay */
+    background: 
+      url('/stars.svg') repeat,
+      radial-gradient(ellipse at 60% 20%, #232946 0%, #0a192f 60%, #05010a 100%);
+    background-size: auto, cover;
+    background-attachment: fixed;
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -77,4 +83,132 @@
 @keyframes float {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-10px); }
+}
+
+/* Fade-in animation for welcome text */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: none; }
+}
+.animate-fade-in {
+  animation: fadeIn 1s ease;
+}
+
+/* Subscription badge entrance animation */
+.badge-animate {
+  animation: badgeFadeIn 0.8s cubic-bezier(0.4,0,0.2,1);
+}
+@keyframes badgeFadeIn {
+  from { opacity: 0; transform: scale(0.7) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* Premium badge hover effect */
+.badge-premium {
+  transition: box-shadow 0.2s, transform 0.2s;
+}
+.badge-premium:hover, .badge-premium:focus {
+  box-shadow: 0 0 0 4px rgba(255, 215, 0, 0.25), 0 2px 8px rgba(0,0,0,0.12);
+  transform: scale(1.07);
+  outline: none;
+}
+
+/* Controls row animation */
+.controls-row-animate {
+  animation: controlsRowFadeIn 0.7s ease-out;
+}
+@keyframes controlsRowFadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* View toggle active state animation */
+.animate-view-toggle-active {
+  animation: viewToggleActivate 0.3s forwards;
+}
+@keyframes viewToggleActivate {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+/* Plus icon animation in New Project button */
+.new-project-btn:hover .animate-plus-icon {
+  animation: plusIconSpin 0.6s ease-in-out;
+}
+@keyframes plusIconSpin {
+  0% { transform: rotate(0deg); }
+  50% { transform: rotate(90deg); }
+  100% { transform: rotate(0deg); }
+}
+
+/* Project card fade-in/slide-up animation handled by Framer Motion */
+
+/* Project card hover glow */
+.status-badge-animate {
+  transition: box-shadow 0.2s, background 0.2s, transform 0.2s;
+}
+.status-badge-animate:hover, .status-badge-animate:focus {
+  box-shadow: 0 0 0 4px rgba(56,189,248,0.15), 0 2px 8px rgba(0,0,0,0.10);
+  background: linear-gradient(90deg, #38bdf8 0%, #6366f1 100%);
+  color: #fff;
+  outline: none;
+}
+.equipment-pill-animate {
+  transition: box-shadow 0.2s, background 0.2s, transform 0.2s;
+}
+.equipment-pill-animate:hover, .equipment-pill-animate:focus {
+  box-shadow: 0 0 0 3px rgba(255,255,255,0.10), 0 1.5px 6px 0 rgba(56,189,248,0.10);
+  background: linear-gradient(90deg, #334155 0%, #64748b 100%);
+  color: #fff;
+  outline: none;
+}
+
+/* Shimmer animation for skeleton loaders */
+.shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.shimmer::after {
+  content: '';
+  position: absolute;
+  top: 0; left: -150%;
+  width: 200%; height: 100%;
+  background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0) 100%);
+  animation: shimmer-move 1.4s infinite;
+}
+@keyframes shimmer-move {
+  0% { left: -150%; }
+  100% { left: 100%; }
+}
+
+/* Pulse/shimmer for New Project button */
+.pulse-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.pulse-shimmer::after {
+  content: '';
+  position: absolute;
+  top: 0; left: -150%;
+  width: 200%; height: 100%;
+  background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.10) 50%, rgba(255,255,255,0) 100%);
+  animation: shimmer-move 2.2s infinite;
+  pointer-events: none;
+}
+.pulse-shimmer:active::after, .pulse-shimmer:focus::after, .pulse-shimmer:hover::after {
+  opacity: 0.5;
+}
+
+/* Universe Mode toggle placeholder */
+.universe-toggle-btn {
+  opacity: 0.85;
+  cursor: not-allowed;
+  background: linear-gradient(90deg, #1e293b 0%, #312e81 100%);
+}
+.animate-universe-pulse {
+  animation: universePulse 1.6s infinite alternate;
+}
+@keyframes universePulse {
+  0% { box-shadow: 0 0 0 0 rgba(168,85,247,0.4), 0 0 8px 2px rgba(56,189,248,0.15); }
+  100% { box-shadow: 0 0 0 8px rgba(168,85,247,0.12), 0 0 16px 4px rgba(56,189,248,0.18); }
 } 

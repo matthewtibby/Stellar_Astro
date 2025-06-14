@@ -584,8 +584,12 @@ export async function getFilesByType(projectId: string): Promise<Record<FileType
       }
       if (files && Array.isArray(files)) {
         for (const file of files) {
-          // Only include files, not folders
-          if (file.name && !file.name.endsWith('/')) {
+          // Only include FITS files, not folders or PNG previews
+          if (
+            file.name &&
+            !file.name.endsWith('/') &&
+            (file.name.toLowerCase().endsWith('.fits') || file.name.toLowerCase().endsWith('.fit'))
+          ) {
             result[type].push({
               name: file.name,
               path: `${folderPath}/${file.name}`,
@@ -605,6 +609,18 @@ export async function getFilesByType(projectId: string): Promise<Record<FileType
     console.error('[getFilesByType] Error:', error);
     throw error;
   }
+}
+
+// Helper to get the PNG preview URL for a FITS file
+export async function getFitsPreviewUrl(filePath: string): Promise<string> {
+  // filePath: userId/projectId/fileType/fileName.fit or .fits
+  const pngPath = filePath.replace(/\.fits?$/i, '.png').replace(/\.fit$/i, '.png');
+  const client = checkSupabase();
+  const { data, error } = await client.storage
+    .from(STORAGE_BUCKETS.RAW_FRAMES)
+    .createSignedUrl(pngPath, 3600);
+  if (error || !data?.signedUrl) throw new Error('Failed to get preview URL');
+  return data.signedUrl;
 }
 
 export type { StorageFile } from '@/src/types/store';
