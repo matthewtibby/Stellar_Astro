@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Info, Loader2, CheckCircle2, XCircle, RefreshCw, Star, Moon, Sun, Zap } from 'lucide-react';
+import { Info, Loader2, CheckCircle2, XCircle, RefreshCw, Star, Moon, Sun, Zap, BarChart3 } from 'lucide-react';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './ui/tooltip';
 import {
   Dialog,
@@ -92,6 +92,16 @@ const Confetti = () => (
 const SUPABASE_INPUT_BUCKET = 'raw-frames';
 const SUPABASE_OUTPUT_BUCKET = 'calibrated-frames';
 
+function getProgressMessage(progress: number) {
+  if (progress < 20) return "Preparing and downloading frames...";
+  if (progress < 40) return "Reviewing and analyzing frames...";
+  if (progress < 60) return "Calibrating and stacking frames...";
+  if (progress < 75) return "Creating master dark...";
+  if (progress < 95) return "Uploading results to database...";
+  if (progress < 100) return "Loading preview...";
+  return "Calibration complete!";
+}
+
 const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = ({ projectId, userId }) => {
   const [selectedType, setSelectedType] = useState<MasterType>('dark');
   const [tabState, setTabState] = useState({
@@ -100,6 +110,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
       stackingMethod: 'median',
       sigmaThreshold: '3.0',
       darkScaling: false,
+      darkScalingAuto: true,
       darkScalingFactor: 1.0,
       biasSubtraction: false,
       ampGlowSuppression: false,
@@ -149,6 +160,9 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
   }>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [realFiles, setRealFiles] = useState<string[]>([]);
+  const [jobProgress, setJobProgress] = useState<number>(0);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   // Add a warning if userId is undefined
   useEffect(() => {
@@ -214,6 +228,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
       stackingMethod: 'median',
       sigmaThreshold: '3.0',
       darkScaling: false,
+      darkScalingAuto: true,
       darkScalingFactor: 1.0,
       biasSubtraction: false,
       ampGlowSuppression: false,
@@ -261,14 +276,31 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
 
   // Helper to submit calibration job
   const submitCalibrationJob = async (settings: any) => {
+    setJobProgress(0);
     setJobStatus('queued');
     try {
       // Use real files if available, else fallback to placeholder
-      const input_paths = realFiles.map(f => `${userId}/${projectId}/${selectedType}/${f}`);
+      const input_paths = realFiles
+        .filter(f => f.toLowerCase().endsWith('.fit') || f.toLowerCase().endsWith('.fits'))
+        .map(f => `${userId}/${projectId}/${selectedType}/${f}`);
       const output_base = `${userId}/${projectId}/${selectedType}/master_${selectedType}`;
+      // For darks, also gather light frame paths for scaling
+      let light_input_paths: string[] | undefined = undefined;
+      if (selectedType === 'dark') {
+        // Try to list light frames in the same project/user
+        // (Assume the same naming convention as realFiles, but for 'light')
+        const lightFolder = `${userId}/${projectId}/light/`;
+        const { data: lightData, error: lightError } = await supabase.storage.from('raw-frames').list(lightFolder);
+        if (!lightError && lightData) {
+          light_input_paths = lightData
+            .filter(f => f.name.toLowerCase().endsWith('.fit') || f.name.toLowerCase().endsWith('.fits'))
+            .map(f => `${userId}/${projectId}/light/${f.name}`);
+        }
+      }
       const reqBody = {
         input_bucket: SUPABASE_INPUT_BUCKET,
         input_paths,
+        ...(light_input_paths ? { light_input_paths } : {}),
         output_bucket: SUPABASE_OUTPUT_BUCKET,
         output_base,
         advanced_settings: settings.advanced_settings,
@@ -282,38 +314,9 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
         body: JSON.stringify(reqBody),
       });
       const data = await res.json();
-      if (data.userChoiceIsOptimal === false && data.recommendation) {
-        setRecommendationDialog({
-          recommendation: data.recommendation,
-          userMethod: settings.advanced_settings?.stackingMethod || settings.stackingMethod,
-          userSigma: settings.advanced_settings?.sigmaThreshold || settings.sigmaThreshold,
-          onAccept: () => {
-            setRecommendationDialog(null);
-            // Re-submit with recommended settings
-            submitCalibrationJob({ ...settings, advanced_settings: { ...settings.advanced_settings, stackingMethod: data.recommendation.method, sigmaThreshold: data.recommendation.sigma } });
-          },
-          onDecline: () => {
-            setRecommendationDialog(null);
-            setJobStatus('running');
-            setTimeout(() => {
-              setJobStatus('success');
-              setShowSuccess(true);
-              setTimeout(() => setShowSuccess(false), 2500);
-            }, 2000);
-          },
-        });
-      } else {
-        setJobStatus('running');
-        // Use preview_url from API response
-        if (data.preview_url) {
-          setPreviewUrl(data.preview_url);
-        }
-        setTimeout(() => {
-          setJobStatus('success');
-          setShowSuccess(true);
-          setTimeout(() => setShowSuccess(false), 2500);
-        }, 2000);
-      }
+      setJobId(data.jobId || null);
+      setJobStatus('queued');
+      // Do not set previewUrl or jobStatus to 'success' here; let polling handle it
     } catch (e) {
       setJobStatus('failed');
     }
@@ -328,6 +331,13 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
         stackingMethod: currentTab.stackingMethod,
         sigmaThreshold: currentTab.sigmaThreshold,
         // ...add other advanced settings as needed
+        ...(selectedType === 'dark'
+          ? {
+              darkScaling: (currentTab as typeof tabState.dark).darkScaling,
+              darkScalingAuto: (currentTab as typeof tabState.dark).darkScalingAuto,
+              darkScalingFactor: (currentTab as typeof tabState.dark).darkScalingFactor,
+            }
+          : {}),
       },
       projectId,
       userId,
@@ -360,6 +370,80 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
     bias: <Zap className="w-6 h-6 text-pink-400 drop-shadow" />,
   };
 
+  // Poll job progress when running/queued
+  useEffect(() => {
+    if ((jobStatus === 'queued' || jobStatus === 'running') && jobId) {
+      const interval = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/projects/${projectId}/calibration-jobs/progress?jobId=${jobId}`);
+          const data = await res.json();
+          console.log('[Polling] Progress API response:', data);
+          if (typeof data.progress === 'number') {
+            setJobProgress(data.progress);
+          }
+          if (data.status === 'running' && jobStatus !== 'running') {
+            setJobStatus('running');
+          }
+          if (data.status === 'success' || data.status === 'complete') {
+            setJobStatus('success');
+            setShowSuccess(true);
+            setTimeout(() => setShowSuccess(false), 2500);
+            clearInterval(interval);
+          }
+          if (data.status === 'failed') {
+            setJobStatus('failed');
+            clearInterval(interval);
+          }
+        } catch (e) {
+          console.error('[Polling] Error fetching progress:', e);
+        }
+      }, 2000);
+      return () => clearInterval(interval);
+    } else {
+      setJobProgress(0);
+    }
+  }, [jobStatus, jobId, projectId]);
+
+  useEffect(() => {
+    if (jobStatus === 'success' && jobId) {
+      let isMounted = true;
+      setPreviewLoading(true);
+      const fetchResults = async () => {
+        const res = await fetch(`/api/projects/${projectId}/calibration-jobs/results?jobId=${jobId}`);
+        console.log('[Preview] Results API response:', res);
+        if (res.status === 202) {
+          console.log('[Preview] Job not complete, retrying fetchResults in 2s');
+          setTimeout(fetchResults, 2000);
+          return;
+        }
+        if (res.ok) {
+          const data = await res.json();
+          console.log('[Preview] Results data:', data);
+          if (isMounted && data.results?.preview_url) {
+            setPreviewUrl(data.results.preview_url);
+            setPreviewLoading(false);
+            console.log('[Preview] Setting previewUrl:', data.results.preview_url);
+          } else {
+            console.log('[Preview] No preview_url found in results:', data.results);
+          }
+        } else {
+          setPreviewLoading(false);
+          console.error('[Preview] Results API not ok:', res.status);
+        }
+      };
+      fetchResults();
+      return () => { isMounted = false; };
+    }
+  }, [jobStatus, jobId, projectId]);
+
+  useEffect(() => {
+    if (previewUrl) {
+      console.log('[Preview] Preview URL set:', previewUrl);
+    } else {
+      console.log('[Preview] Preview URL is null or empty');
+    }
+  }, [previewUrl]);
+
   return (
     <TooltipProvider>
       <div className="flex flex-col h-full bg-[#0a0d13]/80 rounded-2xl shadow-2xl border border-[#232946]/60 p-6 backdrop-blur-md">
@@ -368,6 +452,13 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
           <div className="fixed top-6 right-6 z-50 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-2 animate-fade-in relative">
             <CheckCircle2 className="w-5 h-5 animate-bounce" /> Master frame created successfully!
             <Confetti />
+          </div>
+        )}
+        {/* Preview Loading Spinner/Message */}
+        {previewLoading && (
+          <div className="flex items-center gap-2 mt-4 text-blue-500">
+            <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>
+            <span>Generating preview...</span>
           </div>
         )}
         {/* File Modal */}
@@ -679,13 +770,33 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                             value={tabState.dark.darkScalingFactor ?? 1.0}
                             onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, darkScalingFactor: Number(e.target.value) } }))}
                             className="border rounded px-2 py-1 w-24 bg-[#181c23] text-white border-[#232946]"
+                            disabled={tabState.dark.darkScalingAuto}
                           />
+                          <label className="inline-flex items-center gap-1 text-blue-300 ml-2">
+                            <input
+                              type="checkbox"
+                              checked={tabState.dark.darkScalingAuto}
+                              onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, darkScalingAuto: e.target.checked } }))}
+                              className="accent-blue-600"
+                            />
+                            Auto
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span tabIndex={0}><Info className="w-4 h-4 text-blue-300 cursor-pointer" /></span>
+                              </TooltipTrigger>
+                              <TooltipContent side="top">
+                                {`Auto: Estimate scaling factor from image statistics. Uncheck to enter a manual value.`}
+                              </TooltipContent>
+                            </Tooltip>
+                          </label>
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <span tabIndex={0}><Info className="w-4 h-4 text-blue-300 cursor-pointer" /></span>
                             </TooltipTrigger>
                             <TooltipContent side="top">
-                              Adjust only if you know the required scaling. Default: 1.0 (no scaling).
+                              {tabState.dark.darkScalingAuto
+                                ? 'Auto-scaling will estimate the best factor based on your data.'
+                                : 'Manual: Enter a scaling factor (default 1.0 = no scaling).'}
                             </TooltipContent>
                           </Tooltip>
                         </div>
@@ -880,6 +991,25 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                 `Create ${FRAME_TYPES.find(f => f.key === selectedType)?.label}`
               )}
             </button>
+            {/* Progress Bar for Calibration Job */}
+            {(jobStatus === 'queued' || jobStatus === 'running') && (
+              <div className="w-full mt-2 mb-4">
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-xs text-blue-200">Calibration Progress</span>
+                  <span className="text-xs text-blue-300">{jobProgress}%</span>
+                </div>
+                {/* Progress status message */}
+                <div className="mb-1">
+                  <span className="text-xs text-blue-400 font-medium">{getProgressMessage(jobProgress)}</span>
+                </div>
+                <div className="w-full bg-gray-700 rounded h-2">
+                  <div
+                    className="h-2 rounded bg-blue-500 transition-all duration-500"
+                    style={{ width: `${jobProgress}%` }}
+                  />
+                </div>
+              </div>
+            )}
             {realFiles.length === 0 && (
               <div className="text-red-400 mt-2 text-center">
                 No files found in <code>{`raw-frames/${userId}/${projectId}/${selectedType}/`}</code>. Please upload files to proceed.
@@ -935,42 +1065,43 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
             `}</style>
           </div>
           {/* Right: Master Preview/Status */}
-          <div className="w-3/5 bg-[#10131a] rounded-2xl p-10 border border-[#232946]/60 flex flex-col items-center shadow-xl">
+          <div className="w-3/5 bg-[#10131a] rounded-2xl p-10 border border-[#232946]/60 flex flex-col items-center shadow-xl h-full">
             <h3 className="text-xl font-bold mb-6 text-white">{FRAME_TYPES.find(f => f.key === selectedType)?.label} Preview</h3>
-            <div className="w-72 h-72 bg-[#232946] rounded-2xl flex items-center justify-center text-3xl text-blue-200 border-2 border-[#232946] mb-10 shadow-lg">
+            <div className="w-full h-96 bg-[#232946] rounded-2xl flex items-center justify-center text-3xl text-blue-200 border-2 border-[#232946] mb-10 shadow-lg">
               {previewUrl ? (
                 <Image
                   src={previewUrl}
                   alt={`${FRAME_TYPES.find(f => f.key === selectedType)?.label} Preview`}
                   className="w-full h-full object-contain rounded-2xl"
                   style={{ background: '#232946' }}
-                  width={288}
-                  height={288}
-                  onError={() => setPreviewUrl(null)}
+                  width={384}
+                  height={384}
+                  onError={e => {
+                    console.error('Image failed to load:', previewUrl, e);
+                    setPreviewUrl(null);
+                  }}
                 />
               ) : (
                 'SA'
               )}
             </div>
-            <button
-              className="px-4 py-2 bg-gray-800 text-blue-200 rounded hover:bg-blue-700 mb-8 flex items-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
-              onClick={() => setShowHistogram(v => !v)}
-            >
-              Show Histogram
+            {/* Remove the Show Histogram button and replace with an icon */}
+            <div className="mb-8 flex items-center justify-center w-full">
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span tabIndex={0}><Info className="w-4 h-4 text-blue-300 cursor-pointer" /></span>
+                  <button
+                    className="p-3 rounded-full bg-gray-800 hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+                    onClick={() => setShowHistogram(v => !v)}
+                    aria-label="Show Histogram"
+                  >
+                    <BarChart3 className="w-7 h-7 text-blue-200" />
+                  </button>
                 </TooltipTrigger>
                 <TooltipContent side="top">
                   {histogramInfo[selectedType]}
                 </TooltipContent>
               </Tooltip>
-            </button>
-            {showHistogram && (
-              <div className="w-72 h-32 bg-gray-700 rounded flex items-center justify-center text-blue-100 border border-[#232946] mb-4">
-                Histogram Placeholder
-              </div>
-            )}
+            </div>
           </div>
         </div>
         {/* Action Buttons */}

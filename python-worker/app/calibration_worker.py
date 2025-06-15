@@ -227,6 +227,27 @@ def save_master_preview(data: np.ndarray, out_path: str):
     vmin, vmax = np.percentile(data, [1, 99])
     plt.imsave(out_path, np.clip((data - vmin) / (vmax - vmin), 0, 1), cmap='gray')
 
+def estimate_dark_scaling_factor(dark_file_list: List[str], light_file_list: Optional[List[str]] = None) -> float:
+    """
+    Estimate a scaling factor for dark frames.
+    If light frames are provided, use the ratio of median(light) / median(dark) as the scaling factor.
+    If not, return 1.0.
+    """
+    if not light_file_list or len(light_file_list) == 0:
+        return 1.0
+    # Load and stack all darks and lights
+    dark_data = load_numpy_list(dark_file_list)
+    light_data = load_numpy_list(light_file_list)
+    # Use median of all pixels as a robust background estimator
+    median_dark = float(np.median(np.stack(dark_data)))
+    median_light = float(np.median(np.stack(light_data)))
+    if median_dark == 0:
+        return 1.0
+    scaling_factor = median_light / median_dark
+    # Clamp scaling factor to a reasonable range (0.5 to 2.0)
+    scaling_factor = max(0.5, min(2.0, scaling_factor))
+    return scaling_factor
+
 def main():
     parser = argparse.ArgumentParser(description="Calibration Worker CLI: Create master calibration frames from FITS files (Supabase Storage).")
     parser.add_argument('--input-bucket', required=True, help='Supabase bucket for input files')

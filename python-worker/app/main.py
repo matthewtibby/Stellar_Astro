@@ -1,6 +1,7 @@
 import sys
 from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parents[2]))
+import logging
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Request, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -23,7 +24,6 @@ from contextlib import asynccontextmanager
 import random
 import string
 from .fits_analysis import analyze_fits_headers
-import logging
 from .calibration_worker import create_master_frame, save_master_frame, save_master_preview, analyze_frames, recommend_stacking, infer_frame_type
 from .supabase_io import download_file, upload_file
 from pydantic import BaseModel
@@ -344,7 +344,7 @@ async def insert_job(job_id, status, error=None, result=None, diagnostics=None, 
         await conn.execute(
             """
             insert into jobs (job_id, status, error, result, diagnostics, warnings, progress)
-            values ($1, $2, $3, $4, $5, $6, $7)
+            values ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, $7)
             on conflict (job_id) do update set
                 status = excluded.status,
                 error = excluded.error,
@@ -353,9 +353,10 @@ async def insert_job(job_id, status, error=None, result=None, diagnostics=None, 
                 warnings = excluded.warnings,
                 progress = excluded.progress
             """,
-            job_id, status, error, json.dumps(result) if result else None,
-            json.dumps(diagnostics) if diagnostics else None,
-            json.dumps(warnings) if warnings else None,
+            job_id, status, error,
+            json.dumps(result) if result is not None else None,
+            json.dumps(diagnostics) if diagnostics is not None else None,
+            json.dumps(warnings) if warnings is not None else None,
             progress
         )
     finally:
@@ -377,31 +378,90 @@ async def run_calibration_job(job: CalibrationJobRequest, job_id: str):
         print(f"[BG] Starting calibration job: {job.dict()} (job_id={job_id})")
         await insert_job(job_id, status="running", progress=0)
         fits_input_paths = [p for p in job.input_paths if p.lower().endswith((".fit", ".fits"))]
+        # Limit number of dark frames for testing
+        fits_input_paths = fits_input_paths[:10]
         print(f"[BG] FITS files to process: {fits_input_paths}")
         timestamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
         output_base_with_ts = f"{job.output_base}_{timestamp}"
         with tempfile.TemporaryDirectory() as tmpdir:
             print(f"[BG] Created tempdir: {tmpdir}")
             local_files = []
-            for i, spath in enumerate(fits_input_paths):
-                local_path = os.path.join(tmpdir, f"input_{i}.fits")
-                print(f"[BG] Downloading {spath} to {local_path}")
-                try:
-                    download_file(job.input_bucket, spath, local_path)
-                except Exception as e:
-                    tb = traceback.format_exc()
-                    print(f"[ERROR] Failed to download {spath}: {e}\n{tb}")
-                    await insert_job(job_id, status="error", error=f"Download failed: {e}", progress=0)
-                    return
-                local_files.append(local_path)
-            print(f"[BG] Downloaded {len(local_files)} files.")
-            await update_job_progress(job_id, 20)
+            local_light_files = []
+            light_input_paths = getattr(job, 'light_input_paths', None)
+            # --- Progress logic depends on settings ---
+            dark_scaling = job.settings.get('darkScaling', False)
+            if dark_scaling:
+                # Fine-grained progress for dark scaling jobs
+                total_files = len(fits_input_paths) + (len(light_input_paths) if light_input_paths else 0)
+                downloaded = 0
+                for i, spath in enumerate(fits_input_paths):
+                    local_path = os.path.join(tmpdir, f"input_{i}.fits")
+                    print(f"[BG] Downloading {spath} to {local_path}")
+                    try:
+                        download_file(job.input_bucket, spath, local_path)
+                    except Exception as e:
+                        tb = traceback.format_exc()
+                        print(f"[ERROR] Failed to download {spath}: {e}\n{tb}")
+                        await insert_job(job_id, status="error", error=f"Download failed: {e}", progress=0)
+                        return
+                    local_files.append(local_path)
+                    downloaded += 1
+                    pct = int(5 + 25 * downloaded / max(1, total_files))  # 5–30% for all downloads
+                    await update_job_progress(job_id, pct)
+                if light_input_paths:
+                    light_input_paths = light_input_paths[:10]
+                    for i, spath in enumerate(light_input_paths):
+                        if not spath.lower().endswith((".fit", ".fits")):
+                            continue
+                        local_path = os.path.join(tmpdir, f"light_{i}.fits")
+                        print(f"[BG] Downloading light {spath} to {local_path}")
+                        try:
+                            download_file(job.input_bucket, spath, local_path)
+                        except Exception as e:
+                            tb = traceback.format_exc()
+                            print(f"[ERROR] Failed to download light {spath}: {e}\n{tb}")
+                            continue
+                        local_light_files.append(local_path)
+                        downloaded += 1
+                        pct = int(5 + 25 * downloaded / max(1, total_files))
+                        await update_job_progress(job_id, pct)
+                await update_job_progress(job_id, 30)
+            else:
+                # Default logic for other algorithms/settings
+                for i, spath in enumerate(fits_input_paths):
+                    local_path = os.path.join(tmpdir, f"input_{i}.fits")
+                    print(f"[BG] Downloading {spath} to {local_path}")
+                    try:
+                        download_file(job.input_bucket, spath, local_path)
+                    except Exception as e:
+                        tb = traceback.format_exc()
+                        print(f"[ERROR] Failed to download {spath}: {e}\n{tb}")
+                        await insert_job(job_id, status="error", error=f"Download failed: {e}", progress=0)
+                        return
+                    local_files.append(local_path)
+                print(f"[BG] Downloaded {len(local_files)} files.")
+                if light_input_paths:
+                    light_input_paths = light_input_paths[:10]
+                    for i, spath in enumerate(light_input_paths):
+                        if not spath.lower().endswith((".fit", ".fits")):
+                            continue
+                        local_path = os.path.join(tmpdir, f"light_{i}.fits")
+                        print(f"[BG] Downloading light {spath} to {local_path}")
+                        try:
+                            download_file(job.input_bucket, spath, local_path)
+                        except Exception as e:
+                            tb = traceback.format_exc()
+                            print(f"[ERROR] Failed to download light {spath}: {e}\n{tb}")
+                            continue
+                        local_light_files.append(local_path)
+                await update_job_progress(job_id, 30)
             try:
                 method = job.settings.get('stackingMethod', 'median')
                 sigma = float(job.settings.get('sigmaThreshold', 3.0))
                 cosmetic = job.settings.get('cosmeticCorrection', False)
                 cosmetic_method = job.settings.get('cosmeticMethod', 'hot_pixel_map')
                 cosmetic_threshold = float(job.settings.get('cosmeticThreshold', 0.5))
+                print(f"[BG] Dark scaling: enabled={dark_scaling}, auto={job.settings.get('darkScalingAuto', True)}, factor={job.settings.get('darkScalingFactor', 1.0)}")
                 print(f"[BG] Starting calibration: method={method}, sigma={sigma}, cosmetic={cosmetic}, cosmetic_method={cosmetic_method}, cosmetic_threshold={cosmetic_threshold}")
                 frame_type = infer_frame_type(local_files)
                 print(f"[BG] Frame type: {frame_type}")
@@ -420,7 +480,27 @@ async def run_calibration_job(job: CalibrationJobRequest, job_id: str):
                     cosmetic_method=cosmetic_method,
                     cosmetic_threshold=cosmetic_threshold
                 )
-                await update_job_progress(job_id, 60)
+                # --- Dark scaling logic ---
+                if frame_type == 'dark' and dark_scaling:
+                    from .calibration_worker import estimate_dark_scaling_factor
+                    try:
+                        print(f"[BG] Calling estimate_dark_scaling_factor with {len(local_files)} darks and {len(local_light_files)} lights...")
+                        if job.settings.get('darkScalingAuto', True):
+                            await update_job_progress(job_id, 50)
+                            scaling_factor = estimate_dark_scaling_factor(local_files, local_light_files if local_light_files else None)
+                            print(f"[BG] Auto-estimated dark scaling factor: {scaling_factor:.4f}")
+                        else:
+                            scaling_factor = float(job.settings.get('darkScalingFactor', 1.0))
+                            print(f"[BG] Manual dark scaling factor: {scaling_factor:.4f}")
+                        master = master * scaling_factor
+                        await update_job_progress(job_id, 60)
+                    except Exception as e:
+                        tb = traceback.format_exc()
+                        print(f"[ERROR] Exception in dark scaling: {e}\n{tb}")
+                        await insert_job(job_id, status="error", error=f"Dark scaling failed: {e}\n{tb}", progress=40)
+                        return
+                else:
+                    await update_job_progress(job_id, 60)
                 fits_path = os.path.join(tmpdir, 'master.fits')
                 png_path = os.path.join(tmpdir, 'master.png')
                 print(f"[BG] Running save_master_frame...")
@@ -496,14 +576,26 @@ async def get_job_results(job_id: str):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     if job["status"] != "complete":
-        raise HTTPException(status_code=400, detail="Job not complete")
+        raise HTTPException(status_code=202, detail="Job not complete")
+    # Parse the stringified JSON fields
+    results = json.loads(job["result"]) if job["result"] else {}
+    diagnostics = json.loads(job["diagnostics"]) if job.get("diagnostics") else {}
+    warnings = json.loads(job["warnings"]) if job.get("warnings") else []
     return {
         "job_id": job_id,
-        "results": job["result"] or {},
-        "diagnostics": job.get("diagnostics", {}),
-        "warnings": job.get("warnings", []),
+        "results": results,
+        "diagnostics": diagnostics,
+        "warnings": warnings,
         "error": job["error"]
     }
+
+@app.get("/jobs/{job_id}/progress")
+async def get_job_progress(job_id: str):
+    job = await get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    print(f"[API] Progress for {job_id}: {job.get('progress', 0)} status={job['status']}")
+    return {"job_id": job_id, "progress": job.get("progress", 0), "status": job["status"]}
 
 def generate_png_preview(fits_path, png_path, downsample_to=512):
     with fits.open(fits_path) as hdul:
