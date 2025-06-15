@@ -24,11 +24,12 @@ import random
 import string
 from .fits_analysis import analyze_fits_headers
 import logging
-from src.lib.server.calibration_worker import create_master_frame, save_master_frame, save_master_preview, analyze_frames, recommend_stacking, infer_frame_type
-from src.lib.server.supabase_io import download_file, upload_file
+from .calibration_worker import create_master_frame, save_master_frame, save_master_preview, analyze_frames, recommend_stacking, infer_frame_type
+from .supabase_io import download_file, upload_file
 from pydantic import BaseModel
 import traceback
 import uuid
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -337,23 +338,25 @@ class CalibrationJobRequest(BaseModel):
     test_name: str = None
 
 # --- JOB STATUS/RESULTS DB HELPERS ---
-async def insert_job(job_id, status, error=None, result=None, diagnostics=None, warnings=None):
+async def insert_job(job_id, status, error=None, result=None, diagnostics=None, warnings=None, progress=None):
     conn = await get_db()
     try:
         await conn.execute(
             """
-            insert into jobs (job_id, status, error, result, diagnostics, warnings)
-            values ($1, $2, $3, $4, $5, $6)
+            insert into jobs (job_id, status, error, result, diagnostics, warnings, progress)
+            values ($1, $2, $3, $4, $5, $6, $7)
             on conflict (job_id) do update set
                 status = excluded.status,
                 error = excluded.error,
                 result = excluded.result,
                 diagnostics = excluded.diagnostics,
-                warnings = excluded.warnings
+                warnings = excluded.warnings,
+                progress = excluded.progress
             """,
             job_id, status, error, json.dumps(result) if result else None,
             json.dumps(diagnostics) if diagnostics else None,
-            json.dumps(warnings) if warnings else None
+            json.dumps(warnings) if warnings else None,
+            progress
         )
     finally:
         await conn.close()
@@ -366,87 +369,113 @@ async def get_job(job_id):
     finally:
         await conn.close()
 
-@app.post("/jobs/submit")
-async def submit_job(job: CalibrationJobRequest, request: Request):
-    job_id = f"job-{uuid.uuid4().hex[:8]}"
-    await insert_job(job_id, status="pending")
-    print(f"[API] Received calibration job: {job.dict()}")
+async def update_job_progress(job_id, progress):
+    await insert_job(job_id, status=None, progress=progress)
+
+async def run_calibration_job(job: CalibrationJobRequest, job_id: str):
     try:
+        print(f"[BG] Starting calibration job: {job.dict()} (job_id={job_id})")
+        await insert_job(job_id, status="running", progress=0)
+        fits_input_paths = [p for p in job.input_paths if p.lower().endswith((".fit", ".fits"))]
+        print(f"[BG] FITS files to process: {fits_input_paths}")
+        timestamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+        output_base_with_ts = f"{job.output_base}_{timestamp}"
         with tempfile.TemporaryDirectory() as tmpdir:
+            print(f"[BG] Created tempdir: {tmpdir}")
             local_files = []
-            for i, spath in enumerate(job.input_paths):
+            for i, spath in enumerate(fits_input_paths):
                 local_path = os.path.join(tmpdir, f"input_{i}.fits")
-                print(f"[API] Downloading {spath} from bucket {job.input_bucket} to {local_path}")
-                download_file(job.input_bucket, spath, local_path)
+                print(f"[BG] Downloading {spath} to {local_path}")
+                try:
+                    download_file(job.input_bucket, spath, local_path)
+                except Exception as e:
+                    tb = traceback.format_exc()
+                    print(f"[ERROR] Failed to download {spath}: {e}\n{tb}")
+                    await insert_job(job_id, status="error", error=f"Download failed: {e}", progress=0)
+                    return
                 local_files.append(local_path)
-            print(f"[API] Downloaded {len(local_files)} files.")
-
-            # Extract settings
-            method = job.settings.get('stackingMethod', 'median')
-            sigma = float(job.settings.get('sigmaThreshold', 3.0))
-            cosmetic = job.settings.get('cosmeticCorrection', False)
-            cosmetic_method = job.settings.get('cosmeticMethod', 'hot_pixel_map')
-            cosmetic_threshold = float(job.settings.get('cosmeticThreshold', 0.5))
-
-            print(f"[API] Starting calibration: method={method}, sigma={sigma}, cosmetic={cosmetic}, cosmetic_method={cosmetic_method}, cosmetic_threshold={cosmetic_threshold}")
-
-            # Frame analysis and recommendation
-            frame_type = infer_frame_type(job.input_paths)
-            stats = analyze_frames(local_files)
-            rec_method, rec_sigma, reason = recommend_stacking(stats, method, sigma)
-            print(f"[API] Frame analysis: {stats}")
-            print(f"[API] Recommendation: {reason}")
-
-            master = create_master_frame(
-                local_files,
-                method=method,
-                sigma_clip=sigma if method in ['sigma', 'winsorized'] else None,
-                cosmetic=cosmetic,
-                cosmetic_method=cosmetic_method,
-                cosmetic_threshold=cosmetic_threshold
-            )
-            fits_path = os.path.join(tmpdir, 'master.fits')
-            png_path = os.path.join(tmpdir, 'master.png')
-            save_master_frame(master, fits_path)
-            save_master_preview(master, png_path)
-            fits_storage_path = job.output_base + '.fits'
-            png_storage_path = job.output_base + '.png'
-            # Extra debug prints and file existence check
-            print(f"[DEBUG] About to check file size for: {fits_path}")
-            if not os.path.exists(fits_path):
-                print(f"[ERROR] FITS file does not exist at: {fits_path}")
-            else:
-                print(f"[DEBUG] FITS file exists at: {fits_path}")
-                file_size_bytes = os.path.getsize(fits_path)
-                file_size_mb = file_size_bytes / (1024 * 1024)
-                print(f"[DEBUG] Output FITS file size: {file_size_mb:.2f} MB ({file_size_bytes} bytes)")
-            print(f"[DEBUG] About to upload file to Supabase: {fits_storage_path}")
-            import sys
-            sys.stdout.flush()
-            upload_file(job.output_bucket, fits_storage_path, fits_path, public=False)
-            preview_url = upload_file(job.output_bucket, png_storage_path, png_path, public=True)
-            print(f"[API] Master FITS uploaded to: {fits_storage_path}")
-            print(f"[API] Preview PNG uploaded to: {png_storage_path}")
-            print(f"[API] Preview public URL: {preview_url}")
-            # Mark job as complete in DB
-            await insert_job(job_id, status="complete", result={"preview_url": preview_url, "fits_path": fits_storage_path}, diagnostics=stats, warnings=[], error=None)
-            return JSONResponse({
-                "jobId": job_id,
-                "preview_url": preview_url,
-                "fits_path": fits_storage_path,
-                "analysis": stats,
-                "recommendation": {
-                    "method": rec_method,
-                    "sigma": rec_sigma,
-                    "reason": reason
-                },
-                "userChoiceIsOptimal": rec_method == method and rec_sigma == sigma
-            })
+            print(f"[BG] Downloaded {len(local_files)} files.")
+            await update_job_progress(job_id, 20)
+            try:
+                method = job.settings.get('stackingMethod', 'median')
+                sigma = float(job.settings.get('sigmaThreshold', 3.0))
+                cosmetic = job.settings.get('cosmeticCorrection', False)
+                cosmetic_method = job.settings.get('cosmeticMethod', 'hot_pixel_map')
+                cosmetic_threshold = float(job.settings.get('cosmeticThreshold', 0.5))
+                print(f"[BG] Starting calibration: method={method}, sigma={sigma}, cosmetic={cosmetic}, cosmetic_method={cosmetic_method}, cosmetic_threshold={cosmetic_threshold}")
+                frame_type = infer_frame_type(local_files)
+                print(f"[BG] Frame type: {frame_type}")
+                print(f"[BG] Running analyze_frames...")
+                stats = analyze_frames(local_files)
+                print(f"[BG] Frame analysis: {stats}")
+                await update_job_progress(job_id, 40)
+                rec_method, rec_sigma, reason = recommend_stacking(stats, method, sigma)
+                print(f"[BG] Recommendation: {reason}")
+                print(f"[BG] Running create_master_frame...")
+                master = create_master_frame(
+                    local_files,
+                    method=method,
+                    sigma_clip=sigma if method in ['sigma', 'winsorized'] else None,
+                    cosmetic=cosmetic,
+                    cosmetic_method=cosmetic_method,
+                    cosmetic_threshold=cosmetic_threshold
+                )
+                await update_job_progress(job_id, 60)
+                fits_path = os.path.join(tmpdir, 'master.fits')
+                png_path = os.path.join(tmpdir, 'master.png')
+                print(f"[BG] Running save_master_frame...")
+                save_master_frame(master, fits_path)
+                print(f"[BG] Running save_master_preview...")
+                save_master_preview(master, png_path)
+                await update_job_progress(job_id, 75)
+                fits_storage_path = output_base_with_ts + '.fits'
+                png_storage_path = output_base_with_ts + '.png'
+                print(f"[BG] About to upload FITS to Supabase: {fits_storage_path}")
+                try:
+                    upload_file(job.output_bucket, fits_storage_path, fits_path, public=False)
+                except Exception as e:
+                    tb = traceback.format_exc()
+                    print(f"[ERROR] Failed to upload FITS: {e}\n{tb}")
+                    await insert_job(job_id, status="error", error=f"FITS upload failed: {e}", progress=75)
+                    return
+                print(f"[BG] FITS file uploaded to Supabase: {fits_storage_path}")
+                print(f"[BG] About to upload PNG to Supabase: {png_storage_path}")
+                try:
+                    preview_url = upload_file(job.output_bucket, png_storage_path, png_path, public=True)
+                except Exception as e:
+                    tb = traceback.format_exc()
+                    print(f"[ERROR] Failed to upload PNG: {e}\n{tb}")
+                    await insert_job(job_id, status="error", error=f"PNG upload failed: {e}", progress=80)
+                    return
+                print(f"[BG] Preview PNG uploaded to: {png_storage_path}")
+                print(f"[BG] Preview public URL: {preview_url}")
+                await update_job_progress(job_id, 95)
+                await insert_job(job_id, status="complete", result={"preview_url": preview_url, "fits_path": fits_storage_path, "preview_png_path": png_storage_path}, diagnostics=stats, warnings=[], error=None, progress=100)
+                print(f"[BG] Calibration job {job_id} completed successfully.")
+            except Exception as e:
+                tb = traceback.format_exc()
+                print(f"[ERROR] Calibration failed: {e}\n{tb}")
+                await insert_job(job_id, status="error", error=f"Calibration failed: {e}\n{tb}", progress=0)
+                return
     except Exception as e:
-        print(f"[API] Error during calibration: {e}", file=sys.stderr)
-        traceback.print_exc()
-        await insert_job(job_id, status="error", error=str(e))
-        return JSONResponse({"error": str(e), "trace": traceback.format_exc()}, status_code=500)
+        tb = traceback.format_exc()
+        print(f"[FATAL ERROR] Unexpected error in run_calibration_job: {e}\n{tb}")
+        await insert_job(job_id, status="error", error=f"Fatal error: {e}\n{tb}", progress=0)
+
+@app.post("/jobs/submit")
+async def submit_job(job: CalibrationJobRequest, request: Request, background_tasks: BackgroundTasks):
+    try:
+        print(f"[API] /jobs/submit called. Raw body: {await request.body()}")
+        print(f"[API] Parsed job: {job.dict()}")
+        job_id = f"job-{uuid.uuid4().hex[:8]}"
+        await insert_job(job_id, status="queued", progress=0)
+        print(f"[API] Queued calibration job: {job_id}")
+        background_tasks.add_task(run_calibration_job, job, job_id)
+        return {"jobId": job_id}
+    except Exception as e:
+        tb = traceback.format_exc()
+        print(f"[API ERROR] Exception in /jobs/submit: {e}\n{tb}")
+        return JSONResponse(status_code=500, content={"error": str(e), "traceback": tb})
 
 @app.get("/jobs/status")
 async def get_job_status(job_id: str):
@@ -457,7 +486,8 @@ async def get_job_status(job_id: str):
         "job_id": job_id,
         "status": job["status"],
         "created_at": job["created_at"],
-        "error": job["error"]
+        "error": job["error"],
+        "progress": job.get("progress", 0)
     }
 
 @app.get("/jobs/results")

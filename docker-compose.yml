@@ -1,0 +1,16 @@
+version: "3.8"
+services:
+  python-worker:
+    build:
+      context: ./python-worker
+    volumes:
+      - ./python-worker:/app
+    ports:
+      - "8000:8000"
+    environment:
+      SUPABASE_URL: https://wxannuklwbocdheqhmbx.supabase.co
+      SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind4YW5udWtsd2JvY2RoZXFobWJ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDUwMTE2OTYsImV4cCI6MjA2MDU4NzY5Nn0.66qZXwyzOsJI5ZMzFcLedRE1o1BXdXMdJDEI9ZnDsRE
+      DATABASE_URL: postgresql://postgres.wxannuklwbocdheqhmbx:hqwn+DSHJtwY*2e@aws-0-eu-west-2.pooler.supabase.com:5432/postgres
+      SUPABASE_SERVICE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind4YW5udWtsd2JvY2RoZXFobWJ4Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NTAxMTY5NiwiZXhwIjoyMDYwNTg3Njk2fQ.EKkWWKvibhQnLxtKLeCqyYj42htf-zItO0nYMlXmxzA
+      SUPABASE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind4YW5udWtsd2JvY2RoZXFobWJ4Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NTAxMTY5NiwiZXhwIjoyMDYwNTg3Njk2fQ.EKkWWKvibhQnLxtKLeCqyYj42htf-zItO0nYMlXmxzA
+    restart: unless-stopped 

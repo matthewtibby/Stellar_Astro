@@ -4,6 +4,7 @@ const nextConfig = {
   images: {
     domains: [
       'skyview.gsfc.nasa.gov',
+      'wxannuklwbocdheqhmbx.supabase.co', // Supabase storage domain for preview images
       // add any other external domains you use for images
     ],
   },

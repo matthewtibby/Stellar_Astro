@@ -11,9 +11,9 @@ interface CalibrationClientProps {
 export default function CalibrationClient({ projectId, userId, projectName }: CalibrationClientProps) {
   const router = useRouter();
   return (
-    <div className="min-h-screen bg-transparent text-white flex flex-col items-center justify-center">
-      <div className="w-full max-w-3xl mx-auto py-8 px-4">
-        <div className="mb-6 flex items-center justify-between">
+    <div className="w-full min-h-screen flex flex-col bg-transparent text-white">
+      <div className="w-full">
+        <div className="mb-6 flex items-center justify-between px-8 pt-8">
           <button
             className="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600 shadow"
             onClick={() => router.push('/dashboard')}
