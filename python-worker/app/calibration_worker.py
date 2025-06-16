@@ -26,6 +26,7 @@ import astropy.units as u
 import matplotlib.pyplot as plt
 import tempfile
 from .supabase_io import download_file, upload_file, get_public_url, list_files
+import astroscrappy
 
 # --- Stacking Methods ---
 def load_ccd_list(file_list):
@@ -42,21 +43,28 @@ def stack_frames(file_list: List[str], method: str = 'median', sigma_clip: Optio
     method: 'mean', 'median', 'sigma', 'winsorized', 'linear_fit', 'minmax', 'adaptive'
     sigma_clip: threshold for sigma clipping (if used)
     """
+    print(f"[LOG] Entered stack_frames with {len(file_list)} files, method={method}, sigma_clip={sigma_clip}", flush=True)
     if method in ['mean', 'median', 'sigma']:
         ccd_list = load_ccd_list(file_list)
+        print(f"[LOG] Loaded CCD list for stacking. Length: {len(ccd_list)}", flush=True)
         comb = Combiner(ccd_list)
         if method == 'mean':
+            print(f"[LOG] Performing mean combine", flush=True)
             return comb.average_combine().data
         elif method == 'median':
+            print(f"[LOG] Performing median combine", flush=True)
             return comb.median_combine().data
         elif method == 'sigma':
             if sigma_clip is None:
                 sigma_clip = 3.0
+            print(f"[LOG] Performing sigma clipping with threshold {sigma_clip}", flush=True)
             comb.sigma_clipping(low_thresh=sigma_clip, high_thresh=sigma_clip)
             return comb.average_combine().data
     # numpy-based methods
     data = load_numpy_list(file_list)
+    print(f"[LOG] Loaded numpy list for stacking. Shape: {[d.shape for d in data]}", flush=True)
     arr = np.stack(data, axis=0)
+    print(f"[LOG] Stacked numpy array shape: {arr.shape}", flush=True)
     if method == 'winsorized':
         if sigma_clip is None:
             sigma_clip = 3.0
@@ -114,11 +122,12 @@ def stack_frames(file_list: List[str], method: str = 'median', sigma_clip: Optio
         raise ValueError(f"Unknown stacking method: {method}")
 
 # --- Cosmetic Correction (Stub) ---
-def cosmetic_correction(data: np.ndarray, method: str = 'hot_pixel_map', threshold: float = 5.0) -> np.ndarray:
+def cosmetic_correction(data: np.ndarray, method: str = 'hot_pixel_map', threshold: float = 5.0, la_cosmic_params: dict = None) -> np.ndarray:
     """
     Remove hot/cold pixels or cosmetic defects.
     method: 'hot_pixel_map', 'la_cosmic', etc.
     threshold: N-sigma for hot/cold pixel detection (default 5.0)
+    la_cosmic_params: dict of extra params for astroscrappy
     """
     if method == 'hot_pixel_map':
         # Compute mean and std of the image
@@ -139,14 +148,37 @@ def cosmetic_correction(data: np.ndarray, method: str = 'hot_pixel_map', thresho
             neighborhood = padded[y:y+3, x:x+3]
             corrected[y, x] = np.median(neighborhood)
         return corrected
-    # TODO: Implement other methods (e.g., la_cosmic)
+    elif method == 'la_cosmic':
+        # Use astroscrappy to remove cosmic rays
+        # threshold is mapped to sigclip
+        params = la_cosmic_params or {}
+        sigclip = params.get('sigclip', threshold)
+        readnoise = params.get('readnoise', 6.5)
+        gain = params.get('gain', 1.0)
+        satlevel = params.get('satlevel', 65535)
+        niter = params.get('niter', 4)
+        mask, cleaned = astroscrappy.detect_cosmics(
+            data,
+            sigclip=sigclip,
+            readnoise=readnoise,
+            gain=gain,
+            satlevel=satlevel,
+            niter=niter
+        )
+        return cleaned
     return data
 
 # --- Main Calibration Worker Entrypoint ---
-def create_master_frame(file_list: List[str], method: str = 'median', sigma_clip: Optional[float] = None, cosmetic: bool = False, cosmetic_method: str = 'hot_pixel_map', cosmetic_threshold: float = 0.5) -> np.ndarray:
+def create_master_frame(file_list: List[str], method: str = 'median', sigma_clip: Optional[float] = None, cosmetic: bool = False, cosmetic_method: str = 'hot_pixel_map', cosmetic_threshold: float = 0.5, **kwargs) -> np.ndarray:
+    print(f"[LOG] Entered create_master_frame with {len(file_list)} files, method={method}, sigma_clip={sigma_clip}, cosmetic={cosmetic}, cosmetic_method={cosmetic_method}", flush=True)
+    print(f"[LOG] File list: {file_list}", flush=True)
     stacked = stack_frames(file_list, method, sigma_clip)
+    print(f"[LOG] Finished stacking frames. Shape: {stacked.shape}, dtype: {stacked.dtype}", flush=True)
     if cosmetic:
+        print(f"[LOG] Starting cosmetic correction: method={cosmetic_method}, threshold={cosmetic_threshold}", flush=True)
         stacked = cosmetic_correction(stacked, cosmetic_method, cosmetic_threshold)
+        print(f"[LOG] Finished cosmetic correction.", flush=True)
+    print(f"[LOG] Returning master frame. Stats: min={np.min(stacked)}, max={np.max(stacked)}, mean={np.mean(stacked):.2f}, median={np.median(stacked):.2f}, std={np.std(stacked):.2f}", flush=True)
     return stacked
 
 # --- Save Master Frame ---

@@ -1,5 +1,6 @@
 from dotenv import load_dotenv
 import os
+import httpx
 # Always load .env.local from the project root
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../'))
 env_path = os.path.join(project_root, '.env.local')
@@ -11,6 +12,8 @@ print("SUPABASE_URL:", SUPABASE_URL)
 print("SUPABASE_SERVICE_KEY:", SUPABASE_KEY)
 from supabase import create_client, Client
 
+# Create an httpx client with a longer timeout for large file uploads
+httpx_client = httpx.Client(timeout=120.0)  # 2 minutes
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def download_file(bucket: str, path: str, local_path: str):

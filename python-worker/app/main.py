@@ -30,6 +30,7 @@ from pydantic import BaseModel
 import traceback
 import uuid
 from datetime import datetime
+import glob
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +97,20 @@ def get_frame_type_from_header(header: fits.header.Header) -> str:
 
 def extract_metadata(header: fits.header.Header) -> dict:
     """Extract comprehensive metadata from FITS header."""
+    # Prefer GAIN, fallback to EGAIN if present
+    gain = header.get('GAIN')
+    if gain is None:
+        gain = header.get('EGAIN')
+    # Prefer READNOIS, fallback to RDNOISE if present
+    readnoise = header.get('READNOIS')
+    if readnoise is None:
+        readnoise = header.get('RDNOISE')
+    # Prefer SATLEVEL, fallback to SATURATE, fallback to 65535
+    satlevel = header.get('SATLEVEL')
+    if satlevel is None:
+        satlevel = header.get('SATURATE')
+    if satlevel is None:
+        satlevel = 65535
     return {
         'exposure_time': header.get('EXPTIME'),
         'filter': header.get('FILTER'),
@@ -103,7 +118,9 @@ def extract_metadata(header: fits.header.Header) -> dict:
         'date_obs': header.get('DATE-OBS'),
         'instrument': header.get('INSTRUME'),
         'telescope': header.get('TELESCOP'),
-        'gain': header.get('GAIN'),
+        'gain': gain,
+        'readnoise': readnoise,
+        'satlevel': satlevel,
         'temperature': header.get('CCD-TEMP'),
         'binning': f"{header.get('XBINNING', 1)}x{header.get('YBINNING', 1)}",
         'image_type': header.get('IMAGETYP'),
@@ -374,11 +391,11 @@ async def update_job_progress(job_id, progress):
     await insert_job(job_id, status=None, progress=progress)
 
 async def run_calibration_job(job: CalibrationJobRequest, job_id: str):
+    print("[DEBUG] Entered run_calibration_job", flush=True)
     try:
-        print(f"[BG] Starting calibration job: {job.dict()} (job_id={job_id})")
+        print(f"[BG] Starting calibration job: {job.dict()} (job_id={job_id})", flush=True)
         await insert_job(job_id, status="running", progress=0)
         fits_input_paths = [p for p in job.input_paths if p.lower().endswith((".fit", ".fits"))]
-        # Limit number of dark frames for testing
         fits_input_paths = fits_input_paths[:10]
         print(f"[BG] FITS files to process: {fits_input_paths}")
         timestamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
@@ -388,6 +405,76 @@ async def run_calibration_job(job: CalibrationJobRequest, job_id: str):
             local_files = []
             local_light_files = []
             light_input_paths = getattr(job, 'light_input_paths', None)
+            # --- Download dark frames ---
+            for i, spath in enumerate(fits_input_paths):
+                local_path = os.path.join(tmpdir, f"input_{i}.fits")
+                print(f"[BG] Downloading {spath} to {local_path}")
+                try:
+                    download_file(job.input_bucket, spath, local_path)
+                except Exception as e:
+                    tb = traceback.format_exc()
+                    print(f"[ERROR] Failed to download {spath}: {e}\n{tb}")
+                    await insert_job(job_id, status="error", error=f"Download failed: {e}", progress=0)
+                    return
+                local_files.append(local_path)
+            print(f"[BG] Downloaded {len(local_files)} files.")
+            # --- Bias subtraction logic for master dark ---
+            frame_type = infer_frame_type(local_files)
+            bias_subtraction = job.settings.get('biasSubtraction', False)
+            master_bias_path = job.settings.get('masterBiasPath')
+            master_bias_local = None
+            if frame_type == 'dark' and bias_subtraction:
+                print(f"[BG] Bias subtraction enabled.")
+                # Manual selection
+                if master_bias_path:
+                    print(f"[BG] Using manually selected master bias: {master_bias_path}")
+                    master_bias_local = os.path.join(tmpdir, 'master_bias.fits')
+                    try:
+                        download_file(job.input_bucket, master_bias_path, master_bias_local)
+                    except Exception as e:
+                        tb = traceback.format_exc()
+                        print(f"[ERROR] Failed to download master bias: {e}\n{tb}")
+                        await insert_job(job_id, status="error", error=f"Master bias download failed: {e}", progress=0)
+                        return
+                else:
+                    # Auto-select: look for master bias in this project
+                    print(f"[BG] Auto-selecting master bias for project {job.project_id}")
+                    bias_prefix = f"{job.user_id}/{job.project_id}/master-bias/"
+                    from .supabase_io import list_files
+                    bias_files = list_files(job.input_bucket, bias_prefix)
+                    bias_fits = [f for f in bias_files if f['name'].lower().endswith(('.fit', '.fits'))]
+                    if not bias_fits:
+                        print(f"[ERROR] No master bias found for project {job.project_id}")
+                        await insert_job(job_id, status="error", error="No master bias found for this project.", progress=0)
+                        return
+                    # Pick the most recent (by name, or just first)
+                    selected_bias = sorted(bias_fits, key=lambda f: f['name'], reverse=True)[0]
+                    master_bias_path = bias_prefix + selected_bias['name']
+                    master_bias_local = os.path.join(tmpdir, 'master_bias.fits')
+                    print(f"[BG] Auto-selected master bias: {master_bias_path}")
+                    try:
+                        download_file(job.input_bucket, master_bias_path, master_bias_local)
+                    except Exception as e:
+                        tb = traceback.format_exc()
+                        print(f"[ERROR] Failed to download master bias: {e}\n{tb}")
+                        await insert_job(job_id, status="error", error=f"Master bias download failed: {e}", progress=0)
+                        return
+                # Subtract master bias from each dark frame
+                with fits.open(master_bias_local) as hdul:
+                    bias_data = hdul[0].data.astype(np.float32)
+                bias_corrected_files = []
+                for i, dark_path in enumerate(local_files):
+                    with fits.open(dark_path) as hdul:
+                        dark_data = hdul[0].data.astype(np.float32)
+                        if dark_data.shape != bias_data.shape:
+                            print(f"[ERROR] Shape mismatch: dark {dark_data.shape} vs bias {bias_data.shape}")
+                            await insert_job(job_id, status="error", error="Master bias and dark frame shape mismatch.", progress=0)
+                            return
+                        corrected = dark_data - bias_data
+                        corrected_path = os.path.join(tmpdir, f"bias_corrected_{i}.fits")
+                        fits.PrimaryHDU(corrected, header=hdul[0].header).writeto(corrected_path, overwrite=True)
+                        bias_corrected_files.append(corrected_path)
+                local_files = bias_corrected_files
             # --- Progress logic depends on settings ---
             dark_scaling = job.settings.get('darkScaling', False)
             if dark_scaling:
@@ -455,92 +542,115 @@ async def run_calibration_job(job: CalibrationJobRequest, job_id: str):
                             continue
                         local_light_files.append(local_path)
                 await update_job_progress(job_id, 30)
-            try:
-                method = job.settings.get('stackingMethod', 'median')
-                sigma = float(job.settings.get('sigmaThreshold', 3.0))
-                cosmetic = job.settings.get('cosmeticCorrection', False)
-                cosmetic_method = job.settings.get('cosmeticMethod', 'hot_pixel_map')
-                cosmetic_threshold = float(job.settings.get('cosmeticThreshold', 0.5))
-                print(f"[BG] Dark scaling: enabled={dark_scaling}, auto={job.settings.get('darkScalingAuto', True)}, factor={job.settings.get('darkScalingFactor', 1.0)}")
-                print(f"[BG] Starting calibration: method={method}, sigma={sigma}, cosmetic={cosmetic}, cosmetic_method={cosmetic_method}, cosmetic_threshold={cosmetic_threshold}")
-                frame_type = infer_frame_type(local_files)
-                print(f"[BG] Frame type: {frame_type}")
-                print(f"[BG] Running analyze_frames...")
-                stats = analyze_frames(local_files)
-                print(f"[BG] Frame analysis: {stats}")
-                await update_job_progress(job_id, 40)
-                rec_method, rec_sigma, reason = recommend_stacking(stats, method, sigma)
-                print(f"[BG] Recommendation: {reason}")
-                print(f"[BG] Running create_master_frame...")
-                master = create_master_frame(
-                    local_files,
-                    method=method,
-                    sigma_clip=sigma if method in ['sigma', 'winsorized'] else None,
-                    cosmetic=cosmetic,
-                    cosmetic_method=cosmetic_method,
-                    cosmetic_threshold=cosmetic_threshold
-                )
-                # --- Dark scaling logic ---
-                if frame_type == 'dark' and dark_scaling:
-                    from .calibration_worker import estimate_dark_scaling_factor
-                    try:
-                        print(f"[BG] Calling estimate_dark_scaling_factor with {len(local_files)} darks and {len(local_light_files)} lights...")
-                        if job.settings.get('darkScalingAuto', True):
-                            await update_job_progress(job_id, 50)
-                            scaling_factor = estimate_dark_scaling_factor(local_files, local_light_files if local_light_files else None)
-                            print(f"[BG] Auto-estimated dark scaling factor: {scaling_factor:.4f}")
+            # --- Frame validation before stacking ---
+            print("[DEBUG] Validating frames...", flush=True)
+            valid_files = []
+            rejected_files = []
+            for f in local_files:
+                try:
+                    with fits.open(f) as hdul:
+                        header = hdul[0].header
+                        analysis = analyze_fits_headers(header)
+                        is_valid = analysis.confidence >= 0.7 and not any('Missing' in w or 'must' in w for w in analysis.warnings)
+                        if is_valid:
+                            valid_files.append(f)
                         else:
-                            scaling_factor = float(job.settings.get('darkScalingFactor', 1.0))
-                            print(f"[BG] Manual dark scaling factor: {scaling_factor:.4f}")
-                        master = master * scaling_factor
-                        await update_job_progress(job_id, 60)
-                    except Exception as e:
-                        tb = traceback.format_exc()
-                        print(f"[ERROR] Exception in dark scaling: {e}\n{tb}")
-                        await insert_job(job_id, status="error", error=f"Dark scaling failed: {e}\n{tb}", progress=40)
-                        return
-                else:
+                            rejected_files.append((f, analysis.warnings))
+                except Exception as e:
+                    print(f"[ERROR] Exception during validation of {f}: {e}", flush=True)
+                    traceback.print_exc()
+                    rejected_files.append({'file': os.path.basename(f), 'reason': f'Error reading FITS: {e}'})
+            if not valid_files:
+                await insert_job(job_id, status="error", error="No valid frames for stacking. All frames rejected.", progress=100, result={
+                    'used': 0,
+                    'rejected': len(rejected_files),
+                    'rejected_details': rejected_files
+                })
+                return
+            # --- Proceed with stacking only valid files ---
+            print(f"[BG] {len(valid_files)} valid frames, {len(rejected_files)} rejected.")
+            stats = analyze_frames(valid_files)
+            # --- FIX: Define method and sigma from job.settings ---
+            method = job.settings.get('stackingMethod', 'median')
+            sigma = float(job.settings.get('sigmaThreshold', 3.0))
+            cosmetic = job.settings.get('cosmetic', None)
+            # Extract cosmetic_method and cosmetic_threshold with defaults
+            cosmetic_method = job.settings.get('cosmeticMethod', 'hot_pixel_map')
+            cosmetic_threshold = float(job.settings.get('cosmeticThreshold', 0.5))
+            rec_method, rec_sigma, reason = recommend_stacking(stats, method, sigma)
+            master = create_master_frame(
+                valid_files,
+                method=method,
+                sigma_clip=sigma if method in ['sigma', 'winsorized'] else None,
+                cosmetic=cosmetic,
+                cosmetic_method=cosmetic_method,
+                cosmetic_threshold=cosmetic_threshold,
+                la_cosmic_params=la_cosmic_params
+            )
+            # --- Dark scaling logic ---
+            if frame_type == 'dark' and dark_scaling:
+                from .calibration_worker import estimate_dark_scaling_factor
+                try:
+                    print(f"[BG] Calling estimate_dark_scaling_factor with {len(local_files)} darks and {len(local_light_files)} lights...")
+                    if job.settings.get('darkScalingAuto', True):
+                        await update_job_progress(job_id, 50)
+                        scaling_factor = estimate_dark_scaling_factor(local_files, local_light_files if local_light_files else None)
+                        print(f"[BG] Auto-estimated dark scaling factor: {scaling_factor:.4f}")
+                    else:
+                        scaling_factor = float(job.settings.get('darkScalingFactor', 1.0))
+                        print(f"[BG] Manual dark scaling factor: {scaling_factor:.4f}")
+                    master = master * scaling_factor
                     await update_job_progress(job_id, 60)
-                fits_path = os.path.join(tmpdir, 'master.fits')
-                png_path = os.path.join(tmpdir, 'master.png')
-                print(f"[BG] Running save_master_frame...")
-                save_master_frame(master, fits_path)
-                print(f"[BG] Running save_master_preview...")
-                save_master_preview(master, png_path)
-                await update_job_progress(job_id, 75)
-                fits_storage_path = output_base_with_ts + '.fits'
-                png_storage_path = output_base_with_ts + '.png'
-                print(f"[BG] About to upload FITS to Supabase: {fits_storage_path}")
-                try:
-                    upload_file(job.output_bucket, fits_storage_path, fits_path, public=False)
                 except Exception as e:
                     tb = traceback.format_exc()
-                    print(f"[ERROR] Failed to upload FITS: {e}\n{tb}")
-                    await insert_job(job_id, status="error", error=f"FITS upload failed: {e}", progress=75)
+                    print(f"[ERROR] Exception in dark scaling: {e}\n{tb}")
+                    await insert_job(job_id, status="error", error=f"Dark scaling failed: {e}\n{tb}", progress=40)
                     return
-                print(f"[BG] FITS file uploaded to Supabase: {fits_storage_path}")
-                print(f"[BG] About to upload PNG to Supabase: {png_storage_path}")
-                try:
-                    preview_url = upload_file(job.output_bucket, png_storage_path, png_path, public=True)
-                except Exception as e:
-                    tb = traceback.format_exc()
-                    print(f"[ERROR] Failed to upload PNG: {e}\n{tb}")
-                    await insert_job(job_id, status="error", error=f"PNG upload failed: {e}", progress=80)
-                    return
-                print(f"[BG] Preview PNG uploaded to: {png_storage_path}")
-                print(f"[BG] Preview public URL: {preview_url}")
-                await update_job_progress(job_id, 95)
-                await insert_job(job_id, status="complete", result={"preview_url": preview_url, "fits_path": fits_storage_path, "preview_png_path": png_storage_path}, diagnostics=stats, warnings=[], error=None, progress=100)
-                print(f"[BG] Calibration job {job_id} completed successfully.")
+            else:
+                await update_job_progress(job_id, 60)
+            fits_path = os.path.join(tmpdir, 'master.fits')
+            png_path = os.path.join(tmpdir, 'master.png')
+            print(f"[BG] Running save_master_frame...")
+            save_master_frame(master, fits_path)
+            print(f"[BG] Running save_master_preview...")
+            save_master_preview(master, png_path)
+            await update_job_progress(job_id, 75)
+            fits_storage_path = output_base_with_ts + '.fits'
+            png_storage_path = output_base_with_ts + '.png'
+            print(f"[BG] About to upload FITS to Supabase: {fits_storage_path}")
+            try:
+                upload_file(job.output_bucket, fits_storage_path, fits_path, public=False)
             except Exception as e:
                 tb = traceback.format_exc()
-                print(f"[ERROR] Calibration failed: {e}\n{tb}")
-                await insert_job(job_id, status="error", error=f"Calibration failed: {e}\n{tb}", progress=0)
+                print(f"[ERROR] Failed to upload FITS: {e}\n{tb}")
+                await insert_job(job_id, status="error", error=f"FITS upload failed: {e}", progress=75)
                 return
+            print(f"[BG] FITS file uploaded to Supabase: {fits_storage_path}")
+            print(f"[BG] About to upload PNG to Supabase: {png_storage_path}")
+            try:
+                preview_url = upload_file(job.output_bucket, png_storage_path, png_path, public=True)
+            except Exception as e:
+                tb = traceback.format_exc()
+                print(f"[ERROR] Failed to upload PNG: {e}\n{tb}")
+                await insert_job(job_id, status="error", error=f"PNG upload failed: {e}", progress=80)
+                return
+            print(f"[BG] Preview PNG uploaded to: {png_storage_path}")
+            print(f"[BG] Preview public URL: {preview_url}")
+            await update_job_progress(job_id, 95)
+            await insert_job(job_id, status="complete", result={"preview_url": preview_url, "fits_path": fits_storage_path, "preview_png_path": png_storage_path}, diagnostics=stats, warnings=[], error=None, progress=100)
+            print(f"[BG] Calibration job {job_id} completed successfully.")
+            # --- Feedback for frontend ---
+            await insert_job(job_id, status="success", progress=100, result={
+                'used': len(valid_files),
+                'rejected': len(rejected_files),
+                'rejected_details': rejected_files
+            })
+            print("[DEBUG] Stacking/master frame creation complete.", flush=True)
+            print("[DEBUG] Post-processing complete.", flush=True)
     except Exception as e:
-        tb = traceback.format_exc()
-        print(f"[FATAL ERROR] Unexpected error in run_calibration_job: {e}\n{tb}")
-        await insert_job(job_id, status="error", error=f"Fatal error: {e}\n{tb}", progress=0)
+        print(f"[FATAL ERROR] Unexpected error in run_calibration_job: {e}", flush=True)
+        traceback.print_exc()
+        return { 'status': 'error', 'progress': 0, 'error': str(e) }
 
 @app.post("/jobs/submit")
 async def submit_job(job: CalibrationJobRequest, request: Request, background_tasks: BackgroundTasks):

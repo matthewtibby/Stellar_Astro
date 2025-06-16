@@ -1,0 +1,1478 @@
+
+> stellar-astro@0.1.0 dev
+> ./start-dev.sh
+
+Cleaning up existing processes...
+Starting Python worker server...
+Waiting for Python worker to start...
+INFO:     Will watch for changes in these directories: ['/Users/matthewcarter-lang/Documents/Stellar_Astro/python-worker']
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [99466] using StatReload
+INFO:     Started server process [99470]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+Database URL: postgresql://postgres.wxannuklwbocdheqhmbx:hqwn+DSHJtwY*2e@aws-0-eu-west-2.pooler.supabase.com:5432/postgres
+SUPABASE_URL: https://wxannuklwbocdheqhmbx.supabase.co
+SUPABASE_SERVICE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind4YW5udWtsd2JvY2RoZXFobWJ4Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NTAxMTY5NiwiZXhwIjoyMDYwNTg3Njk2fQ.EKkWWKvibhQnLxtKLeCqyYj42htf-zItO0nYMlXmxzA
+Connecting to database with URL: postgresql://postgres.wxannuklwbocdheqhmbx:hqwn+DSHJtwY*2e@aws-0-eu-west-2.pooler.supabase.com:5432/postgres
+INFO:     127.0.0.1:60038 - "GET /health HTTP/1.1" 200 OK
+Python worker is ready
+Starting Next.js development server...
+Waiting for Next.js to start...
+  ▲ Next.js 14.2.3
+  - Local:        http://localhost:3000
+  - Environments: .env.local, .env
+
+ ✓ Starting...
+ ✓ Ready in 1501ms
+ ○ Compiling / ...
+ ✓ Compiled / in 560ms (796 modules)
+ GET / 200 in 721ms
+Next.js is ready
+Servers started successfully
+Next.js running on http://localhost:3000
+Python worker running on http://localhost:8000
+ ✓ Compiled /middleware in 140ms (145 modules)
+Middleware cookies: [
+  {
+  name: 'sb-wxannuklwbocdheqhmbx-auth-token',
+  value: 'base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdjaU9pSklVekkxTmlJc0ltdHBaQ0k2SWs1dWVVOHhOMnBMTjFaNVNEQmlTVEVpTENKMGVYQWlPaUpLVjFRaWZRLmV5SnBjM01pT2lKb2RIUndjem92TDNkNFlXNXVkV3RzZDJKdlkyUm9aWEZvYldKNExuTjFjR0ZpWVhObExtTnZMMkYxZEdndmRqRWlMQ0p6ZFdJaU9pSmtOek5oWVRkbU9TMWxORFV3TFRReFlXVXRPRFEzWXkxaE9EVTRZMll5WmpWbE1Ea2lMQ0poZFdRaU9pSmhkWFJvWlc1MGFXTmhkR1ZrSWl3aVpYaHdJam94TnpVd01UQTNNVEF3TENKcFlYUWlPakUzTlRBeE1ETTFNREFzSW1WdFlXbHNJam9pYldGMGRHaGxkMEJ6ZEdWc2JHRnlMV0Z6ZEhKdkxtTnZMblZySWl3aWNHaHZibVVpT2lJaUxDSmhjSEJmYldWMFlXUmhkR0VpT25zaWNISnZkbWxrWlhJaU9pSmxiV0ZwYkNJc0luQnliM1pwWkdWeWN5STZXeUpsYldGcGJDSmRmU3dpZFhObGNsOXRaWFJoWkdGMFlTSTZleUpsYldGcGJDSTZJbTFoZEhSb1pYZEFjM1JsYkd4aGNpMWhjM1J5Ynk1amJ5NTFheUlzSW1WdFlXbHNYM1psY21sbWFXVmtJanAwY25WbExDSndhRzl1WlY5MlpYSnBabWxsWkNJNlptRnNjMlVzSW5OMVlpSTZJbVEzTTJGaE4yWTVMV1UwTlRBdE5ERmhaUzA0TkRkakxXRTROVGhqWmpKbU5XVXdPU0o5TENKeWIyeGxJam9pWVhWMGFHVnVkR2xqWVhSbFpDSXNJbUZoYkNJNkltRmhiREVpTENKaGJYSWlPbHQ3SW0xbGRHaHZaQ0k2SW5CaGMzTjNiM0prSWl3aWRHbHRaWE4wWVcxd0lqb3hOelE1Tnprek5qZ3hmVjBzSW5ObGMzTnBiMjVmYVdRaU9pSTJZVGd5WXpnM01DMWhOVE5oTFRSa1lqVXRZV1ZpWlMxa01ERXlaVEZpTnpreE1tRWlMQ0pwYzE5aGJtOXVlVzF2ZFhNaU9tWmhiSE5sZlEuWTkzcldrVEdnQkZWUk84UWdhTFNCRHdOZklnblZ1VnpxUnhvbjNhWWFwbyIsInRva2VuX3R5cGUiOiJiZWFyZXIiLCJleHBpcmVzX2luIjozNjAwLCJleHBpcmVzX2F0IjoxNzUwMTA3MTAwLCJyZWZyZXNoX3Rva2VuIjoiYzJxcG9idTVjeWE0IiwidXNlciI6eyJpZCI6ImQ3M2FhN2Y5LWU0NTAtNDFhZS04NDdjLWE4NThjZjJmNWUwOSIsImF1ZCI6ImF1dGhlbnRpY2F0ZWQiLCJyb2xlIjoiYXV0aGVudGljYXRlZCIsImVtYWlsIjoibWF0dGhld0BzdGVsbGFyLWFzdHJvLmNvLnVrIiwiZW1haWxfY29uZmlybWVkX2F0IjoiMjAyNS0wNS0wOFQxMjozMzo1OS41ODY3OTJaIiwicGhvbmUiOiIiLCJjb25maXJtYXRpb25fc2VudF9hdCI6IjIwMjUtMDUtMDhUMTI6MzM6MDguODIxNzcxWiIsImNvbmZpcm1lZF9hdCI6IjIwMjUtMDUtMDhUMTI6MzM6NTkuNTg2NzkyWiIsImxhc3Rfc2lnbl9pbl9hdCI6IjIwMjUtMDUtMTBUMTE6NTU6MDYuNTU5NjM4WiIsImFwcF9tZXRhZGF0YSI6eyJwcm92aWRlciI6ImVtYWlsIiwicHJvdmlkZXJzIjpbImVtYWlsIl19LCJ1c2VyX21ldGFkYXRhIjp7ImVtYWlsIjoibWF0dGhld0BzdGVsbGFyLWFzdHJvLmNvLnVrIiwiZW1haWxfdmVyaWZpZWQiOnRydWUsInBob25lX3ZlcmlmaWVkIjpmYWxzZSwic3ViIjoiZDczYWE3ZjktZTQ1MC00MWFlLTg0N2MtYTg1OGNmMmY1ZTA5In0sImlkZW50aXRpZXMiOlt7ImlkZW50aXR5X2lkIjoiM2U0OTkyNTYtYzQ3MC00ZWEyLTg4ZTUtZWRkZDQ3NGQxZTQzIiwiaWQiOiJkNzNhYTdmOS1lNDUwLTQxYWUtODQ3Yy1hODU4Y2YyZjVlMDkiLCJ1c2VyX2lkIjoiZDczYWE3ZjktZTQ1MC00MWFlLTg0N2MtYTg1OGNmMmY1ZTA5IiwiaWRlbnRpdHlfZGF0YSI6eyJlbWFpbCI6Im1hdHRoZXdAc3RlbGxhci1hc3Ryby5jby51ayIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJwaG9uZV92ZXJpZmllZCI6ZmFsc2UsInN1YiI6ImQ3M2FhN2Y5LWU0NTAtNDFhZS04NDdjLWE4NThjZjJmNWUwOSJ9LCJwcm92aWRlciI6ImVtYWlsIiwibGFzdF9zaWduX2luX2F0IjoiMjAyNS0wNS0wOFQxMjozMzowOC44MDk1NDRaIiwiY3JlYXRlZF9hdCI6IjIwMjUtMDUtMDhUMTI6MzM6MDguODA5NTk0WiIsInVwZGF0ZWRfYXQiOiIyMDI1LTA1LTA4VDEyOjMzOjA4LjgwOTU5NFoiLCJlbWFpbCI6Im1hdHRoZXdAc3RlbGxhci1hc3Ryby5jby51ayJ9XSwiY3JlYXRlZF9hdCI6IjIwMjUtMDUtMDhUMTI6MzM6MDguODAxMDM4WiIsInVwZGF0ZWRfYXQiOiIyMDI1LTA2LTE2VDE5OjUxOjQwLjM2MDEyOFoiLCJpc19hbm9ueW1vdXMiOmZhbHNlfX0'
+}
+]
+Middleware user: {
+  id: 'd73aa7f9-e450-41ae-847c-a858cf2f5e09',
+  aud: 'authenticated',
+  role: 'authenticated',
+  email: 'matthew@stellar-astro.co.uk',
+  email_confirmed_at: '2025-05-08T12:33:59.586792Z',
+  phone: '',
+  confirmation_sent_at: '2025-05-08T12:33:08.821771Z',
+  confirmed_at: '2025-05-08T12:33:59.586792Z',
+  last_sign_in_at: '2025-05-10T11:55:06.559638Z',
+  app_metadata: { provider: 'email', providers: [ 'email' ] },
+  user_metadata: {
+  email: 'matthew@stellar-astro.co.uk',
+  email_verified: true,
+  phone_verified: false,
+  sub: 'd73aa7f9-e450-41ae-847c-a858cf2f5e09'
+},
+  identities: [
+  {
+  identity_id: '3e499256-c470-4ea2-88e5-eddd474d1e43',
+  id: 'd73aa7f9-e450-41ae-847c-a858cf2f5e09',
+  user_id: 'd73aa7f9-e450-41ae-847c-a858cf2f5e09',
+  identity_data: {
+  email: 'matthew@stellar-astro.co.uk',
+  email_verified: true,
+  phone_verified: false,
+  sub: 'd73aa7f9-e450-41ae-847c-a858cf2f5e09'
+},
+  provider: 'email',
+  last_sign_in_at: '2025-05-08T12:33:08.809544Z',
+  created_at: '2025-05-08T12:33:08.809594Z',
+  updated_at: '2025-05-08T12:33:08.809594Z',
+  email: 'matthew@stellar-astro.co.uk'
+}
+],
+  created_at: '2025-05-08T12:33:08.801038Z',
+  updated_at: '2025-05-10T13:08:45.118957Z',
+  is_anonymous: false
+}
+ ○ Compiling /dashboard/[projectId]/calibration-frames ...
+ ⚠ ./node_modules/@supabase/realtime-js/dist/main/RealtimeClient.js
+Critical dependency: the request of a dependency is an expression
+
+Import trace for requested module:
+./node_modules/@supabase/realtime-js/dist/main/RealtimeClient.js
+./node_modules/@supabase/realtime-js/dist/main/index.js
+./node_modules/@supabase/supabase-js/dist/module/index.js
+./src/lib/supabase.ts
+./src/lib/server/getDashboardProjects.ts
+./app/dashboard/[projectId]/calibration-frames/page.tsx
+SSR cookies in createSupabaseServerClient: [
+  {
+    name: 'sb-wxannuklwbocdheqhmbx-auth-token',
+    value: 'base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdjaU9pSklVekkxTmlJc0ltdHBaQ0k2SWs1dWVVOHhOMnBMTjFaNVNEQmlTVEVpTENKMGVYQWlPaUpLVjFRaWZRLmV5SnBjM01pT2lKb2RIUndjem92TDNkNFlXNXVkV3RzZDJKdlkyUm9aWEZvYldKNExuTjFjR0ZpWVhObExtTnZMMkYxZEdndmRqRWlMQ0p6ZFdJaU9pSmtOek5oWVRkbU9TMWxORFV3TFRReFlXVXRPRFEzWXkxaE9EVTRZMll5WmpWbE1Ea2lMQ0poZFdRaU9pSmhkWFJvWlc1MGFXTmhkR1ZrSWl3aVpYaHdJam94TnpVd01UQTNNVEF3TENKcFlYUWlPakUzTlRBeE1ETTFNREFzSW1WdFlXbHNJam9pYldGMGRHaGxkMEJ6ZEdWc2JHRnlMV0Z6ZEhKdkxtTnZMblZySWl3aWNHaHZibVVpT2lJaUxDSmhjSEJmYldWMFlXUmhkR0VpT25zaWNISnZkbWxrWlhJaU9pSmxiV0ZwYkNJc0luQnliM1pwWkdWeWN5STZXeUpsYldGcGJDSmRmU3dpZFhObGNsOXRaWFJoWkdGMFlTSTZleUpsYldGcGJDSTZJbTFoZEhSb1pYZEFjM1JsYkd4aGNpMWhjM1J5Ynk1amJ5NTFheUlzSW1WdFlXbHNYM1psY21sbWFXVmtJanAwY25WbExDSndhRzl1WlY5MlpYSnBabWxsWkNJNlptRnNjMlVzSW5OMVlpSTZJbVEzTTJGaE4yWTVMV1UwTlRBdE5ERmhaUzA0TkRkakxXRTROVGhqWmpKbU5XVXdPU0o5TENKeWIyeGxJam9pWVhWMGFHVnVkR2xqWVhSbFpDSXNJbUZoYkNJNkltRmhiREVpTENKaGJYSWlPbHQ3SW0xbGRHaHZaQ0k2SW5CaGMzTjNiM0prSWl3aWRHbHRaWE4wWVcxd0lqb3hOelE1Tnprek5qZ3hmVjBzSW5ObGMzTnBiMjVmYVdRaU9pSTJZVGd5WXpnM01DMWhOVE5oTFRSa1lqVXRZV1ZpWlMxa01ERXlaVEZpTnpreE1tRWlMQ0pwYzE5aGJtOXVlVzF2ZFhNaU9tWmhiSE5sZlEuWTkzcldrVEdnQkZWUk84UWdhTFNCRHdOZklnblZ1VnpxUnhvbjNhWWFwbyIsInRva2VuX3R5cGUiOiJiZWFyZXIiLCJleHBpcmVzX2luIjozNjAwLCJleHBpcmVzX2F0IjoxNzUwMTA3MTAwLCJyZWZyZXNoX3Rva2VuIjoiYzJxcG9idTVjeWE0IiwidXNlciI6eyJpZCI6ImQ3M2FhN2Y5LWU0NTAtNDFhZS04NDdjLWE4NThjZjJmNWUwOSIsImF1ZCI6ImF1dGhlbnRpY2F0ZWQiLCJyb2xlIjoiYXV0aGVudGljYXRlZCIsImVtYWlsIjoibWF0dGhld0BzdGVsbGFyLWFzdHJvLmNvLnVrIiwiZW1haWxfY29uZmlybWVkX2F0IjoiMjAyNS0wNS0wOFQxMjozMzo1OS41ODY3OTJaIiwicGhvbmUiOiIiLCJjb25maXJtYXRpb25fc2VudF9hdCI6IjIwMjUtMDUtMDhUMTI6MzM6MDguODIxNzcxWiIsImNvbmZpcm1lZF9hdCI6IjIwMjUtMDUtMDhUMTI6MzM6NTkuNTg2NzkyWiIsImxhc3Rfc2lnbl9pbl9hdCI6IjIwMjUtMDUtMTBUMTE6NTU6MDYuNTU5NjM4WiIsImFwcF9tZXRhZGF0YSI6eyJwcm92aWRlciI6ImVtYWlsIiwicHJvdmlkZXJzIjpbImVtYWlsIl19LCJ1c2VyX21ldGFkYXRhIjp7ImVtYWlsIjoibWF0dGhld0BzdGVsbGFyLWFzdHJvLmNvLnVrIiwiZW1haWxfdmVyaWZpZWQiOnRydWUsInBob25lX3ZlcmlmaWVkIjpmYWxzZSwic3ViIjoiZDczYWE3ZjktZTQ1MC00MWFlLTg0N2MtYTg1OGNmMmY1ZTA5In0sImlkZW50aXRpZXMiOlt7ImlkZW50aXR5X2lkIjoiM2U0OTkyNTYtYzQ3MC00ZWEyLTg4ZTUtZWRkZDQ3NGQxZTQzIiwiaWQiOiJkNzNhYTdmOS1lNDUwLTQxYWUtODQ3Yy1hODU4Y2YyZjVlMDkiLCJ1c2VyX2lkIjoiZDczYWE3ZjktZTQ1MC00MWFlLTg0N2MtYTg1OGNmMmY1ZTA5IiwiaWRlbnRpdHlfZGF0YSI6eyJlbWFpbCI6Im1hdHRoZXdAc3RlbGxhci1hc3Ryby5jby51ayIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJwaG9uZV92ZXJpZmllZCI6ZmFsc2UsInN1YiI6ImQ3M2FhN2Y5LWU0NTAtNDFhZS04NDdjLWE4NThjZjJmNWUwOSJ9LCJwcm92aWRlciI6ImVtYWlsIiwibGFzdF9zaWduX2luX2F0IjoiMjAyNS0wNS0wOFQxMjozMzowOC44MDk1NDRaIiwiY3JlYXRlZF9hdCI6IjIwMjUtMDUtMDhUMTI6MzM6MDguODA5NTk0WiIsInVwZGF0ZWRfYXQiOiIyMDI1LTA1LTA4VDEyOjMzOjA4LjgwOTU5NFoiLCJlbWFpbCI6Im1hdHRoZXdAc3RlbGxhci1hc3Ryby5jby51ayJ9XSwiY3JlYXRlZF9hdCI6IjIwMjUtMDUtMDhUMTI6MzM6MDguODAxMDM4WiIsInVwZGF0ZWRfYXQiOiIyMDI1LTA2LTE2VDE5OjUxOjQwLjM2MDEyOFoiLCJpc19hbm9ueW1vdXMiOmZhbHNlfX0'
+  }
+]
+[listAllFilesRecursive] Listing: d73aa7f9-e450-41ae-847c-a858cf2f5e09/b8487aa8-dc6d-405e-a4a1-7b4023d6658c/ Items: [
+  {
+    name: 'bias',
+    id: null,
+    updated_at: null,
+    created_at: null,
+    last_accessed_at: null,
+    metadata: null
+  },
+  {
+    name: 'dark',
+    id: null,
+    updated_at: null,
+    created_at: null,
+    last_accessed_at: null,
+    metadata: null
+  },
+  {
+    name: 'flat',
+    id: null,
+    updated_at: null,
+    created_at: null,
+    last_accessed_at: null,
+    metadata: null
+  },
+  {
+    name: 'light',
+    id: null,
+    updated_at: null,
+    created_at: null,
+    last_accessed_at: null,
+    metadata: null
+  }
+] Error: null
+[listAllFilesRecursive] Listing: d73aa7f9-e450-41ae-847c-a858cf2f5e09/b8487aa8-dc6d-405e-a4a1-7b4023d6658c/bias/ Items: [
+  {
+    name: 'Bias_1.0ms_Bin1_20250102-221917_0001.fit',
+    id: 'cc40dfe3-5f1b-4c2c-a1af-f6842c2017fa',
+    updated_at: '2025-05-11T15:48:55.795Z',
+    created_at: '2025-05-11T15:48:55.795Z',
+    last_accessed_at: '2025-05-11T15:48:55.795Z',
+    metadata: {
+      eTag: '"9ad759a74071dddf94b7fb73c4913f6d-5"',
+      size: 23394240,
+      mimetype: 'application/octet-stream',
+      cacheControl: 'no-cache',
+      lastModified: '2025-05-11T15:48:55.000Z',
+      contentLength: 23394240,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Bias_1.0ms_Bin1_20250102-221917_0001.png',
+    id: 'a841e46e-d553-4c23-bd9d-a1d0de18417d',
+    updated_at: '2025-06-13T18:20:55.874Z',
+    created_at: '2025-06-13T18:20:55.874Z',
+    last_accessed_at: '2025-06-13T18:20:55.874Z',
+    metadata: {
+      eTag: '"10970ce0ef4985bf3116673ad177c546"',
+      size: 120618,
+      mimetype: 'image/png',
+      cacheControl: 'no-cache',
+      lastModified: '2025-06-13T18:20:56.000Z',
+      contentLength: 120618,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Bias_1.0ms_Bin1_20250102-221919_0002.fit',
+    id: 'f2462c9a-743f-4560-8f35-f0eac107899c',
+    updated_at: '2025-05-11T15:48:44.655Z',
+    created_at: '2025-05-11T15:48:44.655Z',
+    last_accessed_at: '2025-05-11T15:48:44.655Z',
+    metadata: {
+      eTag: '"edf29e8396c8166f57e5d4dacef0d4af-5"',
+      size: 23394240,
+      mimetype: 'application/octet-stream',
+      cacheControl: 'no-cache',
+      lastModified: '2025-05-11T15:48:44.000Z',
+      contentLength: 23394240,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Bias_1.0ms_Bin1_20250102-221919_0002.png',
+    id: 'd06eae9c-e572-4186-9345-56b3bc4c301c',
+    updated_at: '2025-06-13T18:20:59.127Z',
+    created_at: '2025-06-13T18:20:59.127Z',
+    last_accessed_at: '2025-06-13T18:20:59.127Z',
+    metadata: {
+      eTag: '"a0f26e5913c8733a78a8c7569c5360dc"',
+      size: 103940,
+      mimetype: 'image/png',
+      cacheControl: 'no-cache',
+      lastModified: '2025-06-13T18:21:00.000Z',
+      contentLength: 103940,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Bias_1.0ms_Bin1_20250102-221923_0003.fit',
+    id: 'ea4c39f6-2504-44b8-a17c-b8bacdf09c47',
+    updated_at: '2025-05-11T15:48:33.252Z',
+    created_at: '2025-05-11T15:48:33.252Z',
+    last_accessed_at: '2025-05-11T15:48:33.252Z',
+    metadata: {
+      eTag: '"2c6b5853f5bbf6dd224e2490399f559a-5"',
+      size: 23394240,
+      mimetype: 'application/octet-stream',
+      cacheControl: 'no-cache',
+      lastModified: '2025-05-11T15:48:33.000Z',
+      contentLength: 23394240,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Bias_1.0ms_Bin1_20250102-221923_0003.png',
+    id: 'd1fd9723-9be3-4a46-aa07-5663b4c98ed2',
+    updated_at: '2025-06-13T18:21:02.618Z',
+    created_at: '2025-06-13T18:21:02.618Z',
+    last_accessed_at: '2025-06-13T18:21:02.618Z',
+    metadata: {
+      eTag: '"29262096821f3052a8d80a7b443541c5"',
+      size: 104052,
+      mimetype: 'image/png',
+      cacheControl: 'no-cache',
+      lastModified: '2025-06-13T18:21:03.000Z',
+      contentLength: 104052,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Bias_1.0ms_Bin1_20250102-221926_0004.fit',
+    id: '42d6393b-a9e0-417c-bcbf-59e6dc3d5849',
+    updated_at: '2025-05-11T15:48:22.423Z',
+    created_at: '2025-05-11T15:48:22.423Z',
+    last_accessed_at: '2025-05-11T15:48:22.423Z',
+    metadata: {
+      eTag: '"2a56f8716a40cdd4ff159c98a2b44a54-5"',
+      size: 23394240,
+      mimetype: 'application/octet-stream',
+      cacheControl: 'no-cache',
+      lastModified: '2025-05-11T15:48:22.000Z',
+      contentLength: 23394240,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Bias_1.0ms_Bin1_20250102-221926_0004.png',
+    id: '402e87e3-7a3a-4695-88ed-122b95ca5c18',
+    updated_at: '2025-06-13T18:21:06.021Z',
+    created_at: '2025-06-13T18:21:06.021Z',
+    last_accessed_at: '2025-06-13T18:21:06.021Z',
+    metadata: {
+      eTag: '"e5534b6c31ae0d4eb2d51f2d86c2fc06"',
+      size: 120249,
+      mimetype: 'image/png',
+      cacheControl: 'no-cache',
+      lastModified: '2025-06-13T18:21:06.000Z',
+      contentLength: 120249,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Bias_1.0ms_Bin1_20250102-221930_0005.fit',
+    id: 'e22bb617-8e7d-41d2-9614-c59ac59dda86',
+    updated_at: '2025-05-11T15:48:12.051Z',
+    created_at: '2025-05-11T15:48:12.051Z',
+    last_accessed_at: '2025-05-11T15:48:12.051Z',
+    metadata: {
+      eTag: '"684c3f09651472e6e2a511a6c7e7e937-5"',
+      size: 23394240,
+      mimetype: 'application/octet-stream',
+      cacheControl: 'no-cache',
+      lastModified: '2025-05-11T15:48:12.000Z',
+      contentLength: 23394240,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Bias_1.0ms_Bin1_20250102-221930_0005.png',
+    id: 'f6ee6eb0-edf7-44f2-af7c-bb3a94502006',
+    updated_at: '2025-06-13T18:21:08.358Z',
+    created_at: '2025-06-13T18:21:08.358Z',
+    last_accessed_at: '2025-06-13T18:21:08.358Z',
+    metadata: {
+      eTag: '"dd398d82b988a5c73296c77367d56155"',
+      size: 103828,
+      mimetype: 'image/png',
+      cacheControl: 'no-cache',
+      lastModified: '2025-06-13T18:21:09.000Z',
+      contentLength: 103828,
+      httpStatusCode: 200
+    }
+  }
+] Error: null
+[listAllFilesRecursive] Listing: d73aa7f9-e450-41ae-847c-a858cf2f5e09/b8487aa8-dc6d-405e-a4a1-7b4023d6658c/dark/ Items: [
+  {
+    name: 'Dark_300.0s_Bin1_20250102-222504_0001.fit',
+    id: 'd7c7b270-1d7a-45ee-9699-0ad25fa7bf88',
+    updated_at: '2025-05-11T15:44:57.052Z',
+    created_at: '2025-05-11T15:44:57.052Z',
+    last_accessed_at: '2025-05-11T15:44:57.052Z',
+    metadata: {
+      eTag: '"f6d43cb3c32f20b86f5607f55e883735-5"',
+      size: 23394240,
+      mimetype: 'application/octet-stream',
+      cacheControl: 'no-cache',
+      lastModified: '2025-05-11T15:44:57.000Z',
+      contentLength: 23394240,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Dark_300.0s_Bin1_20250102-222504_0001.png',
+    id: 'b4d53e9d-1aa1-4b5b-9aad-2638d3bba25d',
+    updated_at: '2025-06-13T18:21:11.596Z',
+    created_at: '2025-06-13T18:21:11.596Z',
+    last_accessed_at: '2025-06-13T18:21:11.596Z',
+    metadata: {
+      eTag: '"acf364bc7f638e6132908b2c13a4ae17"',
+      size: 129123,
+      mimetype: 'image/png',
+      cacheControl: 'no-cache',
+      lastModified: '2025-06-13T18:21:12.000Z',
+      contentLength: 129123,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Dark_300.0s_Bin1_20250102-223006_0002.fit',
+    id: 'a4977c74-173a-4b95-a0d5-6617fe8fd1e0',
+    updated_at: '2025-05-11T15:45:16.273Z',
+    created_at: '2025-05-11T15:45:16.273Z',
+    last_accessed_at: '2025-05-11T15:45:16.273Z',
+    metadata: {
+      eTag: '"644768f9438b0e0dcb4d59856216ba79-5"',
+      size: 23394240,
+      mimetype: 'application/octet-stream',
+      cacheControl: 'no-cache',
+      lastModified: '2025-05-11T15:45:16.000Z',
+      contentLength: 23394240,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Dark_300.0s_Bin1_20250102-223006_0002.png',
+    id: 'e8ec1cd5-7b93-4752-aff6-05a36d231453',
+    updated_at: '2025-06-13T18:21:13.840Z',
+    created_at: '2025-06-13T18:21:13.840Z',
+    last_accessed_at: '2025-06-13T18:21:13.840Z',
+    metadata: {
+      eTag: '"41fa25881dcc2b01757ca26d2ceab78b"',
+      size: 128997,
+      mimetype: 'image/png',
+      cacheControl: 'no-cache',
+      lastModified: '2025-06-13T18:21:14.000Z',
+      contentLength: 128997,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Dark_300.0s_Bin1_20250102-223509_0003.fit',
+    id: '3b5df4b6-0976-4a76-a99a-86eb3195adad',
+    updated_at: '2025-05-11T15:45:34.959Z',
+    created_at: '2025-05-11T15:45:34.959Z',
+    last_accessed_at: '2025-05-11T15:45:34.959Z',
+    metadata: {
+      eTag: '"de290f745046c9d70ff453339964d35c-5"',
+      size: 23394240,
+      mimetype: 'application/octet-stream',
+      cacheControl: 'no-cache',
+      lastModified: '2025-05-11T15:45:35.000Z',
+      contentLength: 23394240,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Dark_300.0s_Bin1_20250102-223509_0003.png',
+    id: 'e4a8c205-7e44-472a-8397-8a334329d1a3',
+    updated_at: '2025-06-13T18:21:16.282Z',
+    created_at: '2025-06-13T18:21:16.282Z',
+    last_accessed_at: '2025-06-13T18:21:16.282Z',
+    metadata: {
+      eTag: '"c515ed51a027ba53719bfae351402658"',
+      size: 128887,
+      mimetype: 'image/png',
+      cacheControl: 'no-cache',
+      lastModified: '2025-06-13T18:21:17.000Z',
+      contentLength: 128887,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Dark_300.0s_Bin1_20250102-224011_0004.fit',
+    id: '689fe005-3c36-4776-9314-a9f8c2e92321',
+    updated_at: '2025-05-11T15:47:25.200Z',
+    created_at: '2025-05-11T15:47:25.200Z',
+    last_accessed_at: '2025-05-11T15:47:25.200Z',
+    metadata: {
+      eTag: '"0b5372d84c582d5a636eb89ccce020eb-5"',
+      size: 23394240,
+      mimetype: 'application/octet-stream',
+      cacheControl: 'no-cache',
+      lastModified: '2025-05-11T15:47:25.000Z',
+      contentLength: 23394240,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Dark_300.0s_Bin1_20250102-224011_0004.png',
+    id: '8a4beef1-7af9-4ca7-8ada-1c5c2da9f992',
+    updated_at: '2025-06-13T18:21:20.241Z',
+    created_at: '2025-06-13T18:21:20.241Z',
+    last_accessed_at: '2025-06-13T18:21:20.241Z',
+    metadata: {
+      eTag: '"ab50424302a7d812f250586ff470e4df"',
+      size: 128956,
+      mimetype: 'image/png',
+      cacheControl: 'no-cache',
+      lastModified: '2025-06-13T18:21:21.000Z',
+      contentLength: 128956,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Dark_300.0s_Bin1_20250102-224513_0005.fit',
+    id: 'a0119ab3-0bd8-4fc9-8e3f-ad04a075b188',
+    updated_at: '2025-05-11T15:47:44.545Z',
+    created_at: '2025-05-11T15:47:44.545Z',
+    last_accessed_at: '2025-05-11T15:47:44.545Z',
+    metadata: {
+      eTag: '"57f0fa82e5924da6eb87a925217148d0-5"',
+      size: 23394240,
+      mimetype: 'application/octet-stream',
+      cacheControl: 'no-cache',
+      lastModified: '2025-05-11T15:47:44.000Z',
+      contentLength: 23394240,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Dark_300.0s_Bin1_20250102-224513_0005.png',
+    id: '93d9fd6f-1268-4a9d-a4be-7348a61acb91',
+    updated_at: '2025-06-13T18:21:23.510Z',
+    created_at: '2025-06-13T18:21:23.510Z',
+    last_accessed_at: '2025-06-13T18:21:23.510Z',
+    metadata: {
+      eTag: '"d5c2559540a0c88504c5df594933f6cf"',
+      size: 128566,
+      mimetype: 'image/png',
+      cacheControl: 'no-cache',
+      lastModified: '2025-06-13T18:21:24.000Z',
+      contentLength: 128566,
+      httpStatusCode: 200
+    }
+  }
+] Error: null
+[listAllFilesRecursive] Listing: d73aa7f9-e450-41ae-847c-a858cf2f5e09/b8487aa8-dc6d-405e-a4a1-7b4023d6658c/flat/ Items: [
+  {
+    name: 'Flat_4.0s_Bin1_294MC_gain200_20250103-092900_-14.1C_0001.fit',
+    id: '0b04e285-6c1e-4b41-b89c-f13b72b20c2a',
+    updated_at: '2025-05-11T15:55:32.198Z',
+    created_at: '2025-05-11T15:55:32.198Z',
+    last_accessed_at: '2025-05-11T15:55:32.198Z',
+    metadata: {
+      eTag: '"0715f2feb1986e03fae9692eb4c28eee-5"',
+      size: 23394240,
+      mimetype: 'application/octet-stream',
+      cacheControl: 'no-cache',
+      lastModified: '2025-05-11T15:55:32.000Z',
+      contentLength: 23394240,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Flat_4.0s_Bin1_294MC_gain200_20250103-092900_-14.1C_0001.png',
+    id: '8af27a81-b909-4ac3-8333-c075754fb28c',
+    updated_at: '2025-06-13T18:21:26.609Z',
+    created_at: '2025-06-13T18:21:26.609Z',
+    last_accessed_at: '2025-06-13T18:21:26.609Z',
+    metadata: {
+      eTag: '"0a1494b2b3509d8c0a0e20eb0a8f4805"',
+      size: 163837,
+      mimetype: 'image/png',
+      cacheControl: 'no-cache',
+      lastModified: '2025-06-13T18:21:27.000Z',
+      contentLength: 163837,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Flat_4.0s_Bin1_294MC_gain200_20250103-092906_-14.8C_0002.fit',
+    id: 'f46dbfd5-eafc-4075-bc7d-b94ed842d277',
+    updated_at: '2025-05-11T15:55:12.711Z',
+    created_at: '2025-05-11T15:55:12.711Z',
+    last_accessed_at: '2025-05-11T15:55:12.711Z',
+    metadata: {
+      eTag: '"8820993b3c664150604240faa0eb7b2f-5"',
+      size: 23394240,
+      mimetype: 'application/octet-stream',
+      cacheControl: 'no-cache',
+      lastModified: '2025-05-11T15:55:12.000Z',
+      contentLength: 23394240,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Flat_4.0s_Bin1_294MC_gain200_20250103-092906_-14.8C_0002.png',
+    id: '0a7a8758-1f2b-4642-93d8-bc2e65cce4b1',
+    updated_at: '2025-06-13T18:21:29.878Z',
+    created_at: '2025-06-13T18:21:29.878Z',
+    last_accessed_at: '2025-06-13T18:21:29.878Z',
+    metadata: {
+      eTag: '"14d6937b656a789e7f1cfc3495ba2742"',
+      size: 163884,
+      mimetype: 'image/png',
+      cacheControl: 'no-cache',
+      lastModified: '2025-06-13T18:21:30.000Z',
+      contentLength: 163884,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Flat_4.0s_Bin1_294MC_gain200_20250103-092912_-14.1C_0003.fit',
+    id: 'c9f8f890-d5c5-4a7f-b88c-b529815e0427',
+    updated_at: '2025-05-11T15:55:00.471Z',
+    created_at: '2025-05-11T15:55:00.471Z',
+    last_accessed_at: '2025-05-11T15:55:00.471Z',
+    metadata: {
+      eTag: '"c58be98c06066c2c1c8f12e3d6be6cd0-5"',
+      size: 23394240,
+      mimetype: 'application/octet-stream',
+      cacheControl: 'no-cache',
+      lastModified: '2025-05-11T15:55:00.000Z',
+      contentLength: 23394240,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Flat_4.0s_Bin1_294MC_gain200_20250103-092912_-14.1C_0003.png',
+    id: 'fc146842-24ec-4695-a38f-0e0dc9fd5b54',
+    updated_at: '2025-06-13T18:21:33.650Z',
+    created_at: '2025-06-13T18:21:33.650Z',
+    last_accessed_at: '2025-06-13T18:21:33.650Z',
+    metadata: {
+      eTag: '"9e72b3af9fac716d536f19fa0da8bc1d"',
+      size: 163600,
+      mimetype: 'image/png',
+      cacheControl: 'no-cache',
+      lastModified: '2025-06-13T18:21:34.000Z',
+      contentLength: 163600,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Flat_4.0s_Bin1_294MC_gain200_20250103-092918_-14.8C_0004.fit',
+    id: '643563f2-ad26-493d-b6ad-b5a6bfb24525',
+    updated_at: '2025-05-11T15:54:49.737Z',
+    created_at: '2025-05-11T15:54:49.737Z',
+    last_accessed_at: '2025-05-11T15:54:49.737Z',
+    metadata: {
+      eTag: '"e4eef91f4db59229c103fa28a90e793b-5"',
+      size: 23394240,
+      mimetype: 'application/octet-stream',
+      cacheControl: 'no-cache',
+      lastModified: '2025-05-11T15:54:49.000Z',
+      contentLength: 23394240,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Flat_4.0s_Bin1_294MC_gain200_20250103-092918_-14.8C_0004.png',
+    id: '8e5bcc0b-2971-4777-8f28-5b4e535f10a7',
+    updated_at: '2025-06-13T18:21:37.301Z',
+    created_at: '2025-06-13T18:21:37.301Z',
+    last_accessed_at: '2025-06-13T18:21:37.301Z',
+    metadata: {
+      eTag: '"9166f51ac442fe09b15a873eb055ab4c"',
+      size: 163628,
+      mimetype: 'image/png',
+      cacheControl: 'no-cache',
+      lastModified: '2025-06-13T18:21:38.000Z',
+      contentLength: 163628,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Flat_4.0s_Bin1_294MC_gain200_20250103-092924_-14.8C_0005.fit',
+    id: '6159eb15-1ca5-4cf4-8495-c9c9f845ed66',
+    updated_at: '2025-05-11T15:54:37.344Z',
+    created_at: '2025-05-11T15:54:37.344Z',
+    last_accessed_at: '2025-05-11T15:54:37.344Z',
+    metadata: {
+      eTag: '"1cfc1d1aeb92c5270a1583f510ab55bd-5"',
+      size: 23394240,
+      mimetype: 'application/octet-stream',
+      cacheControl: 'no-cache',
+      lastModified: '2025-05-11T15:54:37.000Z',
+      contentLength: 23394240,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Flat_4.0s_Bin1_294MC_gain200_20250103-092924_-14.8C_0005.png',
+    id: '2d66b022-ca05-4665-bd33-a785c4da7999',
+    updated_at: '2025-06-13T18:21:41.358Z',
+    created_at: '2025-06-13T18:21:41.358Z',
+    last_accessed_at: '2025-06-13T18:21:41.358Z',
+    metadata: {
+      eTag: '"0e79f66fbbaf43a3a78ccc139c9e0e3b"',
+      size: 163626,
+      mimetype: 'image/png',
+      cacheControl: 'no-cache',
+      lastModified: '2025-06-13T18:21:42.000Z',
+      contentLength: 163626,
+      httpStatusCode: 200
+    }
+  }
+] Error: null
+[listAllFilesRecursive] Listing: d73aa7f9-e450-41ae-847c-a858cf2f5e09/b8487aa8-dc6d-405e-a4a1-7b4023d6658c/light/ Items: [
+  {
+    name: 'Light_NGC1893_300.0s_Bin1_20250102-182457_0001.fit',
+    id: '8a4b691b-e3a2-4b9d-840c-0e72d28aba9c',
+    updated_at: '2025-05-11T15:43:54.330Z',
+    created_at: '2025-05-11T15:43:54.330Z',
+    last_accessed_at: '2025-05-11T15:43:54.330Z',
+    metadata: {
+      eTag: '"98c2bb9d917e256034de3ee8eb08082e-5"',
+      size: 23397120,
+      mimetype: 'application/octet-stream',
+      cacheControl: 'no-cache',
+      lastModified: '2025-05-11T15:43:54.000Z',
+      contentLength: 23397120,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Light_NGC1893_300.0s_Bin1_20250102-182457_0001.png',
+    id: 'd0eb967e-7526-4d20-9b25-0cfeeb40c0ba',
+    updated_at: '2025-06-13T18:21:44.211Z',
+    created_at: '2025-06-13T18:21:44.211Z',
+    last_accessed_at: '2025-06-13T18:21:44.211Z',
+    metadata: {
+      eTag: '"653aca162a7eb31db36b56b9b16c15a9"',
+      size: 129171,
+      mimetype: 'image/png',
+      cacheControl: 'no-cache',
+      lastModified: '2025-06-13T18:21:45.000Z',
+      contentLength: 129171,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Light_NGC1893_300.0s_Bin1_20250102-182958_0002.fit',
+    id: 'e3f48001-1b96-4aeb-86a5-0db7382ed6b8',
+    updated_at: '2025-05-11T15:44:04.504Z',
+    created_at: '2025-05-11T15:44:04.504Z',
+    last_accessed_at: '2025-05-11T15:44:04.504Z',
+    metadata: {
+      eTag: '"067941437f3279fbb88f46d3d2ce9ff2-5"',
+      size: 23397120,
+      mimetype: 'application/octet-stream',
+      cacheControl: 'no-cache',
+      lastModified: '2025-05-11T15:44:04.000Z',
+      contentLength: 23397120,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Light_NGC1893_300.0s_Bin1_20250102-182958_0002.png',
+    id: '36bf3f92-b6af-4b4d-a319-af4a46d81cb9',
+    updated_at: '2025-06-13T18:21:47.246Z',
+    created_at: '2025-06-13T18:21:47.246Z',
+    last_accessed_at: '2025-06-13T18:21:47.246Z',
+    metadata: {
+      eTag: '"e7be8ed28652ded90d5f8ec5f23ba6c4"',
+      size: 129157,
+      mimetype: 'image/png',
+      cacheControl: 'no-cache',
+      lastModified: '2025-06-13T18:21:48.000Z',
+      contentLength: 129157,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Light_NGC1893_300.0s_Bin1_20250102-183500_0003.fit',
+    id: '48394e59-e355-4323-a634-b3ad2a14aac1',
+    updated_at: '2025-05-11T15:44:14.020Z',
+    created_at: '2025-05-11T15:44:14.020Z',
+    last_accessed_at: '2025-05-11T15:44:14.020Z',
+    metadata: {
+      eTag: '"4695a532a1ce7d1b5ba5295016855678-5"',
+      size: 23397120,
+      mimetype: 'application/octet-stream',
+      cacheControl: 'no-cache',
+      lastModified: '2025-05-11T15:44:14.000Z',
+      contentLength: 23397120,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Light_NGC1893_300.0s_Bin1_20250102-183500_0003.png',
+    id: 'd809d701-c8b8-43e0-80f7-91ad5d4960e0',
+    updated_at: '2025-06-13T18:21:49.702Z',
+    created_at: '2025-06-13T18:21:49.702Z',
+    last_accessed_at: '2025-06-13T18:21:49.702Z',
+    metadata: {
+      eTag: '"503c99dc87da20195e5b053dab611152"',
+      size: 132149,
+      mimetype: 'image/png',
+      cacheControl: 'no-cache',
+      lastModified: '2025-06-13T18:21:50.000Z',
+      contentLength: 132149,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Light_NGC1893_300.0s_Bin1_20250102-184105_0004.fit',
+    id: '74971b77-c65f-4c0e-8f49-d43687e09097',
+    updated_at: '2025-05-11T15:44:24.274Z',
+    created_at: '2025-05-11T15:44:24.274Z',
+    last_accessed_at: '2025-05-11T15:44:24.274Z',
+    metadata: {
+      eTag: '"bb2e0c8e15a4371a1e59938940d06134-5"',
+      size: 23397120,
+      mimetype: 'application/octet-stream',
+      cacheControl: 'no-cache',
+      lastModified: '2025-05-11T15:44:24.000Z',
+      contentLength: 23397120,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Light_NGC1893_300.0s_Bin1_20250102-184105_0004.png',
+    id: '113bc1cd-752b-4a31-afc0-aede19450109',
+    updated_at: '2025-06-13T18:21:53.261Z',
+    created_at: '2025-06-13T18:21:53.261Z',
+    last_accessed_at: '2025-06-13T18:21:53.261Z',
+    metadata: {
+      eTag: '"a393e4f039a5e8ed8769cca6d8c04393"',
+      size: 130761,
+      mimetype: 'image/png',
+      cacheControl: 'no-cache',
+      lastModified: '2025-06-13T18:21:54.000Z',
+      contentLength: 130761,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Light_NGC1893_300.0s_Bin1_20250102-184607_0005.fit',
+    id: '7c764776-c7e5-4755-ad9b-2ecf3b995c9b',
+    updated_at: '2025-05-11T15:44:35.217Z',
+    created_at: '2025-05-11T15:44:35.217Z',
+    last_accessed_at: '2025-05-11T15:44:35.217Z',
+    metadata: {
+      eTag: '"4071580b4331ec54a7debf70722dc880-5"',
+      size: 23397120,
+      mimetype: 'application/octet-stream',
+      cacheControl: 'no-cache',
+      lastModified: '2025-05-11T15:44:35.000Z',
+      contentLength: 23397120,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Light_NGC1893_300.0s_Bin1_20250102-184607_0005.png',
+    id: 'c0496e9c-62d9-4acd-b14f-1e3acb2afefc',
+    updated_at: '2025-06-13T18:21:55.879Z',
+    created_at: '2025-06-13T18:21:55.879Z',
+    last_accessed_at: '2025-06-13T18:21:55.879Z',
+    metadata: {
+      eTag: '"2b11310b8a86332ff8fb91a6f1ca8068"',
+      size: 130789,
+      mimetype: 'image/png',
+      cacheControl: 'no-cache',
+      lastModified: '2025-06-13T18:21:56.000Z',
+      contentLength: 130789,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Light_NGC1893_300.0s_Bin1_20250102-185109_0006.fit',
+    id: 'b3719cb7-8691-4a38-94b4-9d1a6d2f7ba8',
+    updated_at: '2025-05-11T15:44:57.812Z',
+    created_at: '2025-05-11T15:44:57.812Z',
+    last_accessed_at: '2025-05-11T15:44:57.812Z',
+    metadata: {
+      eTag: '"b99e7099d0fd3bf876110fbfad839a7c-5"',
+      size: 23397120,
+      mimetype: 'application/octet-stream',
+      cacheControl: 'no-cache',
+      lastModified: '2025-05-11T15:44:57.000Z',
+      contentLength: 23397120,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Light_NGC1893_300.0s_Bin1_20250102-185109_0006.png',
+    id: 'cf78c628-bbbf-4320-8ee2-0212e52fc378',
+    updated_at: '2025-06-13T18:21:58.828Z',
+    created_at: '2025-06-13T18:21:58.828Z',
+    last_accessed_at: '2025-06-13T18:21:58.828Z',
+    metadata: {
+      eTag: '"4c6e14318d2cf399637031a9f5ccfa3f"',
+      size: 127947,
+      mimetype: 'image/png',
+      cacheControl: 'no-cache',
+      lastModified: '2025-06-13T18:21:59.000Z',
+      contentLength: 127947,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Light_NGC1893_300.0s_Bin1_20250102-185714_0007.fit',
+    id: 'a1ba7b67-b5b7-4552-83b6-1472214dd7b9',
+    updated_at: '2025-05-11T15:45:17.372Z',
+    created_at: '2025-05-11T15:45:17.372Z',
+    last_accessed_at: '2025-05-11T15:45:17.372Z',
+    metadata: {
+      eTag: '"85c598a8d91eea16642ab10e805e7d85-5"',
+      size: 23397120,
+      mimetype: 'application/octet-stream',
+      cacheControl: 'no-cache',
+      lastModified: '2025-05-11T15:45:17.000Z',
+      contentLength: 23397120,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Light_NGC1893_300.0s_Bin1_20250102-185714_0007.png',
+    id: '0af332b8-89c3-4387-ab8b-d6c8c98e35ab',
+    updated_at: '2025-06-13T18:22:01.952Z',
+    created_at: '2025-06-13T18:22:01.952Z',
+    last_accessed_at: '2025-06-13T18:22:01.952Z',
+    metadata: {
+      eTag: '"299f72ad2bcfd73ba1784bc19ab3e8ac"',
+      size: 128339,
+      mimetype: 'image/png',
+      cacheControl: 'no-cache',
+      lastModified: '2025-06-13T18:22:02.000Z',
+      contentLength: 128339,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Light_NGC1893_300.0s_Bin1_20250102-190216_0008.fit',
+    id: '422180b5-6e85-4a3e-b798-1819c75361e3',
+    updated_at: '2025-05-11T15:45:35.580Z',
+    created_at: '2025-05-11T15:45:35.580Z',
+    last_accessed_at: '2025-05-11T15:45:35.580Z',
+    metadata: {
+      eTag: '"fe47c5befa8707e04b90f458735fc2e6-5"',
+      size: 23397120,
+      mimetype: 'application/octet-stream',
+      cacheControl: 'no-cache',
+      lastModified: '2025-05-11T15:45:36.000Z',
+      contentLength: 23397120,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Light_NGC1893_300.0s_Bin1_20250102-190216_0008.png',
+    id: 'd1a382a0-4271-4b32-a3c9-ec29db2da4c4',
+    updated_at: '2025-06-13T18:22:04.662Z',
+    created_at: '2025-06-13T18:22:04.662Z',
+    last_accessed_at: '2025-06-13T18:22:04.662Z',
+    metadata: {
+      eTag: '"0f1309215df70371099514bfe7d1f14d"',
+      size: 127942,
+      mimetype: 'image/png',
+      cacheControl: 'no-cache',
+      lastModified: '2025-06-13T18:22:05.000Z',
+      contentLength: 127942,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Light_NGC1893_300.0s_Bin1_20250102-190718_0009.fit',
+    id: '60f36b4f-b3d3-4af5-ba63-19110488f182',
+    updated_at: '2025-05-11T15:47:25.338Z',
+    created_at: '2025-05-11T15:47:25.338Z',
+    last_accessed_at: '2025-05-11T15:47:25.338Z',
+    metadata: {
+      eTag: '"eeb83cbad50cc2e02b65f52bac7b08f7-5"',
+      size: 23397120,
+      mimetype: 'application/octet-stream',
+      cacheControl: 'no-cache',
+      lastModified: '2025-05-11T15:47:25.000Z',
+      contentLength: 23397120,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Light_NGC1893_300.0s_Bin1_20250102-190718_0009.png',
+    id: '9e8ad215-443a-4a2e-9229-4e258ca49dba',
+    updated_at: '2025-06-13T18:22:07.675Z',
+    created_at: '2025-06-13T18:22:07.675Z',
+    last_accessed_at: '2025-06-13T18:22:07.675Z',
+    metadata: {
+      eTag: '"f4aa8201c56fa796fc1e96c833296cab"',
+      size: 128998,
+      mimetype: 'image/png',
+      cacheControl: 'no-cache',
+      lastModified: '2025-06-13T18:22:08.000Z',
+      contentLength: 128998,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Light_NGC1893_300.0s_Bin1_20250102-191323_0010.fit',
+    id: '883cea72-49b6-43c2-8675-1798d06086df',
+    updated_at: '2025-05-11T15:47:44.565Z',
+    created_at: '2025-05-11T15:47:44.565Z',
+    last_accessed_at: '2025-05-11T15:47:44.565Z',
+    metadata: {
+      eTag: '"d4dac71ddaabe802f023532b92b1e2d7-5"',
+      size: 23397120,
+      mimetype: 'application/octet-stream',
+      cacheControl: 'no-cache',
+      lastModified: '2025-05-11T15:47:44.000Z',
+      contentLength: 23397120,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Light_NGC1893_300.0s_Bin1_20250102-191323_0010.png',
+    id: '510dbf1e-ffdd-4b61-82fe-a7974176db67',
+    updated_at: '2025-06-13T18:22:11.033Z',
+    created_at: '2025-06-13T18:22:11.033Z',
+    last_accessed_at: '2025-06-13T18:22:11.033Z',
+    metadata: {
+      eTag: '"6d94e16c21423a9a066a93303f203892"',
+      size: 131448,
+      mimetype: 'image/png',
+      cacheControl: 'no-cache',
+      lastModified: '2025-06-13T18:22:11.000Z',
+      contentLength: 131448,
+      httpStatusCode: 200
+    }
+  }
+] Error: null
+Hydrated equipment from project_files for project b8487aa8-dc6d-405e-a4a1-7b4023d6658c [
+  { type: 'telescope', name: 'EQMod Mount' },
+  { type: 'camera', name: 'ZWO ASI294MC Pro' },
+  { type: 'telescope', name: 'Sky Watcher Evostar 100 ED' }
+]
+[listAllFilesRecursive] Listing: d73aa7f9-e450-41ae-847c-a858cf2f5e09/b025af3c-dc65-40d9-a8c6-8289a5aba0e8/ Items: [
+  {
+    name: 'bias',
+    id: null,
+    updated_at: null,
+    created_at: null,
+    last_accessed_at: null,
+    metadata: null
+  },
+  {
+    name: 'light',
+    id: null,
+    updated_at: null,
+    created_at: null,
+    last_accessed_at: null,
+    metadata: null
+  }
+] Error: null
+[listAllFilesRecursive] Listing: d73aa7f9-e450-41ae-847c-a858cf2f5e09/b025af3c-dc65-40d9-a8c6-8289a5aba0e8/bias/ Items: [
+  {
+    name: 'Bias_1.0ms_Bin1_20250102-221917_0001.fit',
+    id: '2f27c5ab-8ea0-4fe5-b1ea-7c50ac4ca3ed',
+    updated_at: '2025-05-11T07:33:18.724Z',
+    created_at: '2025-05-11T07:33:18.724Z',
+    last_accessed_at: '2025-05-11T07:33:18.724Z',
+    metadata: {
+      eTag: '"9ad759a74071dddf94b7fb73c4913f6d-5"',
+      size: 23394240,
+      mimetype: 'application/octet-stream',
+      cacheControl: 'no-cache',
+      lastModified: '2025-05-11T07:33:19.000Z',
+      contentLength: 23394240,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Bias_1.0ms_Bin1_20250102-221917_0001.png',
+    id: '5b4e42af-6e3d-47a6-b344-dd079cb21d5b',
+    updated_at: '2025-06-13T18:20:16.175Z',
+    created_at: '2025-06-13T18:20:16.175Z',
+    last_accessed_at: '2025-06-13T18:20:16.175Z',
+    metadata: {
+      eTag: '"10970ce0ef4985bf3116673ad177c546"',
+      size: 120618,
+      mimetype: 'image/png',
+      cacheControl: 'no-cache',
+      lastModified: '2025-06-13T18:20:17.000Z',
+      contentLength: 120618,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Bias_1.0ms_Bin1_20250102-221919_0002.fit',
+    id: '99624236-6902-49ff-b275-1055b1e11fc1',
+    updated_at: '2025-05-11T07:35:02.563Z',
+    created_at: '2025-05-11T07:35:02.563Z',
+    last_accessed_at: '2025-05-11T07:35:02.563Z',
+    metadata: {
+      eTag: '"edf29e8396c8166f57e5d4dacef0d4af-5"',
+      size: 23394240,
+      mimetype: 'application/octet-stream',
+      cacheControl: 'no-cache',
+      lastModified: '2025-05-11T07:35:02.000Z',
+      contentLength: 23394240,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Bias_1.0ms_Bin1_20250102-221919_0002.png',
+    id: '8ea3df16-1d45-4da0-bb76-0fc56c2d5555',
+    updated_at: '2025-06-13T18:20:18.530Z',
+    created_at: '2025-06-13T18:20:18.530Z',
+    last_accessed_at: '2025-06-13T18:20:18.530Z',
+    metadata: {
+      eTag: '"a0f26e5913c8733a78a8c7569c5360dc"',
+      size: 103940,
+      mimetype: 'image/png',
+      cacheControl: 'no-cache',
+      lastModified: '2025-06-13T18:20:19.000Z',
+      contentLength: 103940,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Bias_1.0ms_Bin1_20250102-221923_0003.fit',
+    id: '3d28823f-a69d-4a24-9c55-b7e4a2d1e945',
+    updated_at: '2025-05-11T07:35:13.331Z',
+    created_at: '2025-05-11T07:35:13.331Z',
+    last_accessed_at: '2025-05-11T07:35:13.331Z',
+    metadata: {
+      eTag: '"2c6b5853f5bbf6dd224e2490399f559a-5"',
+      size: 23394240,
+      mimetype: 'application/octet-stream',
+      cacheControl: 'no-cache',
+      lastModified: '2025-05-11T07:35:13.000Z',
+      contentLength: 23394240,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Bias_1.0ms_Bin1_20250102-221923_0003.png',
+    id: 'c0b0bcff-2689-403b-80cd-b0db2bfbb5b7',
+    updated_at: '2025-06-13T18:20:20.844Z',
+    created_at: '2025-06-13T18:20:20.844Z',
+    last_accessed_at: '2025-06-13T18:20:20.844Z',
+    metadata: {
+      eTag: '"29262096821f3052a8d80a7b443541c5"',
+      size: 104052,
+      mimetype: 'image/png',
+      cacheControl: 'no-cache',
+      lastModified: '2025-06-13T18:20:21.000Z',
+      contentLength: 104052,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Bias_1.0ms_Bin1_20250102-221926_0004.fit',
+    id: 'a735588f-f1b2-485f-9e76-f59532de8a8b',
+    updated_at: '2025-05-11T07:35:24.096Z',
+    created_at: '2025-05-11T07:35:24.096Z',
+    last_accessed_at: '2025-05-11T07:35:24.096Z',
+    metadata: {
+      eTag: '"2a56f8716a40cdd4ff159c98a2b44a54-5"',
+      size: 23394240,
+      mimetype: 'application/octet-stream',
+      cacheControl: 'no-cache',
+      lastModified: '2025-05-11T07:35:24.000Z',
+      contentLength: 23394240,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Bias_1.0ms_Bin1_20250102-221926_0004.png',
+    id: 'a84f7690-b65e-4d96-9da1-a74654b13be6',
+    updated_at: '2025-06-13T18:20:24.795Z',
+    created_at: '2025-06-13T18:20:24.795Z',
+    last_accessed_at: '2025-06-13T18:20:24.795Z',
+    metadata: {
+      eTag: '"e5534b6c31ae0d4eb2d51f2d86c2fc06"',
+      size: 120249,
+      mimetype: 'image/png',
+      cacheControl: 'no-cache',
+      lastModified: '2025-06-13T18:20:25.000Z',
+      contentLength: 120249,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Bias_1.0ms_Bin1_20250102-221930_0005.fit',
+    id: '87cd787a-81c9-45ae-bc37-79dea2f3a448',
+    updated_at: '2025-05-11T07:35:34.986Z',
+    created_at: '2025-05-11T07:35:34.986Z',
+    last_accessed_at: '2025-05-11T07:35:34.986Z',
+    metadata: {
+      eTag: '"684c3f09651472e6e2a511a6c7e7e937-5"',
+      size: 23394240,
+      mimetype: 'application/octet-stream',
+      cacheControl: 'no-cache',
+      lastModified: '2025-05-11T07:35:35.000Z',
+      contentLength: 23394240,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Bias_1.0ms_Bin1_20250102-221930_0005.png',
+    id: 'e899d4e2-660f-419e-bb7d-0fa457465de7',
+    updated_at: '2025-06-13T18:20:27.546Z',
+    created_at: '2025-06-13T18:20:27.546Z',
+    last_accessed_at: '2025-06-13T18:20:27.546Z',
+    metadata: {
+      eTag: '"dd398d82b988a5c73296c77367d56155"',
+      size: 103828,
+      mimetype: 'image/png',
+      cacheControl: 'no-cache',
+      lastModified: '2025-06-13T18:20:28.000Z',
+      contentLength: 103828,
+      httpStatusCode: 200
+    }
+  }
+] Error: null
+[listAllFilesRecursive] Listing: d73aa7f9-e450-41ae-847c-a858cf2f5e09/b025af3c-dc65-40d9-a8c6-8289a5aba0e8/light/ Items: [
+  {
+    name: 'Light_NGC1893_300.0s_Bin1_20250102-183500_0003.fit',
+    id: '2042a0b7-85b1-4623-bc91-0329cc90384b',
+    updated_at: '2025-05-11T06:44:36.286Z',
+    created_at: '2025-05-11T06:44:36.286Z',
+    last_accessed_at: '2025-05-11T06:44:36.286Z',
+    metadata: {
+      eTag: '"4695a532a1ce7d1b5ba5295016855678-5"',
+      size: 23397120,
+      mimetype: 'application/octet-stream',
+      cacheControl: 'no-cache',
+      lastModified: '2025-05-11T06:44:36.000Z',
+      contentLength: 23397120,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Light_NGC1893_300.0s_Bin1_20250102-183500_0003.png',
+    id: '0870484d-577f-41fa-b4c8-02f2d0654098',
+    updated_at: '2025-06-13T18:20:31.829Z',
+    created_at: '2025-06-13T18:20:31.829Z',
+    last_accessed_at: '2025-06-13T18:20:31.829Z',
+    metadata: {
+      eTag: '"503c99dc87da20195e5b053dab611152"',
+      size: 132149,
+      mimetype: 'image/png',
+      cacheControl: 'no-cache',
+      lastModified: '2025-06-13T18:20:32.000Z',
+      contentLength: 132149,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Light_NGC1893_300.0s_Bin1_20250102-184105_0004.fit',
+    id: 'b36af766-1032-407a-a556-f46cf7131bfc',
+    updated_at: '2025-05-11T06:44:46.505Z',
+    created_at: '2025-05-11T06:44:46.505Z',
+    last_accessed_at: '2025-05-11T06:44:46.505Z',
+    metadata: {
+      eTag: '"bb2e0c8e15a4371a1e59938940d06134-5"',
+      size: 23397120,
+      mimetype: 'application/octet-stream',
+      cacheControl: 'no-cache',
+      lastModified: '2025-05-11T06:44:46.000Z',
+      contentLength: 23397120,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Light_NGC1893_300.0s_Bin1_20250102-184105_0004.png',
+    id: '32cf2abf-aa0b-470a-b502-98e7616df2f0',
+    updated_at: '2025-06-13T18:20:34.480Z',
+    created_at: '2025-06-13T18:20:34.480Z',
+    last_accessed_at: '2025-06-13T18:20:34.480Z',
+    metadata: {
+      eTag: '"a393e4f039a5e8ed8769cca6d8c04393"',
+      size: 130761,
+      mimetype: 'image/png',
+      cacheControl: 'no-cache',
+      lastModified: '2025-06-13T18:20:35.000Z',
+      contentLength: 130761,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Light_NGC1893_300.0s_Bin1_20250102-184607_0005.fit',
+    id: '831cdf97-497d-4ca2-a386-4a6cd7df334e',
+    updated_at: '2025-05-11T06:44:57.425Z',
+    created_at: '2025-05-11T06:44:57.425Z',
+    last_accessed_at: '2025-05-11T06:44:57.425Z',
+    metadata: {
+      eTag: '"4071580b4331ec54a7debf70722dc880-5"',
+      size: 23397120,
+      mimetype: 'application/octet-stream',
+      cacheControl: 'no-cache',
+      lastModified: '2025-05-11T06:44:57.000Z',
+      contentLength: 23397120,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Light_NGC1893_300.0s_Bin1_20250102-184607_0005.png',
+    id: '6b3ca083-53d2-4349-b0c3-7db5efe76538',
+    updated_at: '2025-06-13T18:20:37.580Z',
+    created_at: '2025-06-13T18:20:37.580Z',
+    last_accessed_at: '2025-06-13T18:20:37.580Z',
+    metadata: {
+      eTag: '"2b11310b8a86332ff8fb91a6f1ca8068"',
+      size: 130789,
+      mimetype: 'image/png',
+      cacheControl: 'no-cache',
+      lastModified: '2025-06-13T18:20:38.000Z',
+      contentLength: 130789,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Light_NGC1893_300.0s_Bin1_20250102-185109_0006.fit',
+    id: 'a25aece8-2a22-4b19-84b5-01e5f161a973',
+    updated_at: '2025-05-11T06:45:08.808Z',
+    created_at: '2025-05-11T06:45:08.808Z',
+    last_accessed_at: '2025-05-11T06:45:08.808Z',
+    metadata: {
+      eTag: '"b99e7099d0fd3bf876110fbfad839a7c-5"',
+      size: 23397120,
+      mimetype: 'application/octet-stream',
+      cacheControl: 'no-cache',
+      lastModified: '2025-05-11T06:45:09.000Z',
+      contentLength: 23397120,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Light_NGC1893_300.0s_Bin1_20250102-185109_0006.png',
+    id: '7a280bf1-8c9d-4ee9-9948-38b7f2754981',
+    updated_at: '2025-06-13T18:20:40.868Z',
+    created_at: '2025-06-13T18:20:40.868Z',
+    last_accessed_at: '2025-06-13T18:20:40.868Z',
+    metadata: {
+      eTag: '"4c6e14318d2cf399637031a9f5ccfa3f"',
+      size: 127947,
+      mimetype: 'image/png',
+      cacheControl: 'no-cache',
+      lastModified: '2025-06-13T18:20:41.000Z',
+      contentLength: 127947,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Light_NGC1893_300.0s_Bin1_20250102-185714_0007.fit',
+    id: '19e44e07-3667-4a4f-80c0-c36ac2ba7ed5',
+    updated_at: '2025-05-11T06:45:20.248Z',
+    created_at: '2025-05-11T06:45:20.248Z',
+    last_accessed_at: '2025-05-11T06:45:20.248Z',
+    metadata: {
+      eTag: '"85c598a8d91eea16642ab10e805e7d85-5"',
+      size: 23397120,
+      mimetype: 'application/octet-stream',
+      cacheControl: 'no-cache',
+      lastModified: '2025-05-11T06:45:20.000Z',
+      contentLength: 23397120,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Light_NGC1893_300.0s_Bin1_20250102-185714_0007.png',
+    id: '115f5276-f4b4-4148-adb7-6294677e21ce',
+    updated_at: '2025-06-13T18:20:43.497Z',
+    created_at: '2025-06-13T18:20:43.497Z',
+    last_accessed_at: '2025-06-13T18:20:43.497Z',
+    metadata: {
+      eTag: '"299f72ad2bcfd73ba1784bc19ab3e8ac"',
+      size: 128339,
+      mimetype: 'image/png',
+      cacheControl: 'no-cache',
+      lastModified: '2025-06-13T18:20:44.000Z',
+      contentLength: 128339,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Light_NGC1893_300.0s_Bin1_20250102-190216_0008.fit',
+    id: '6f307d67-10b5-4959-9241-b8d081ec0479',
+    updated_at: '2025-05-11T06:45:31.205Z',
+    created_at: '2025-05-11T06:45:31.205Z',
+    last_accessed_at: '2025-05-11T06:45:31.205Z',
+    metadata: {
+      eTag: '"fe47c5befa8707e04b90f458735fc2e6-5"',
+      size: 23397120,
+      mimetype: 'application/octet-stream',
+      cacheControl: 'no-cache',
+      lastModified: '2025-05-11T06:45:31.000Z',
+      contentLength: 23397120,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Light_NGC1893_300.0s_Bin1_20250102-190216_0008.png',
+    id: 'ff959681-0c42-49de-a39e-cfbba65a6e75',
+    updated_at: '2025-06-13T18:20:46.815Z',
+    created_at: '2025-06-13T18:20:46.815Z',
+    last_accessed_at: '2025-06-13T18:20:46.815Z',
+    metadata: {
+      eTag: '"0f1309215df70371099514bfe7d1f14d"',
+      size: 127942,
+      mimetype: 'image/png',
+      cacheControl: 'no-cache',
+      lastModified: '2025-06-13T18:20:47.000Z',
+      contentLength: 127942,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Light_NGC1893_300.0s_Bin1_20250102-190718_0009.fit',
+    id: 'e9bcfe72-f8db-4346-a6c9-810bc945e804',
+    updated_at: '2025-05-11T06:45:42.223Z',
+    created_at: '2025-05-11T06:45:42.223Z',
+    last_accessed_at: '2025-05-11T06:45:42.223Z',
+    metadata: {
+      eTag: '"eeb83cbad50cc2e02b65f52bac7b08f7-5"',
+      size: 23397120,
+      mimetype: 'application/octet-stream',
+      cacheControl: 'no-cache',
+      lastModified: '2025-05-11T06:45:42.000Z',
+      contentLength: 23397120,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Light_NGC1893_300.0s_Bin1_20250102-190718_0009.png',
+    id: '551f6d13-ebb5-4e13-9841-e968485f00c5',
+    updated_at: '2025-06-13T18:20:49.202Z',
+    created_at: '2025-06-13T18:20:49.202Z',
+    last_accessed_at: '2025-06-13T18:20:49.202Z',
+    metadata: {
+      eTag: '"f4aa8201c56fa796fc1e96c833296cab"',
+      size: 128998,
+      mimetype: 'image/png',
+      cacheControl: 'no-cache',
+      lastModified: '2025-06-13T18:20:50.000Z',
+      contentLength: 128998,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Light_NGC1893_300.0s_Bin1_20250102-191323_0010.fit',
+    id: '0fc10d1b-bbb4-4d7d-bad6-6d2db09693f4',
+    updated_at: '2025-05-11T06:45:53.402Z',
+    created_at: '2025-05-11T06:45:53.402Z',
+    last_accessed_at: '2025-05-11T06:45:53.402Z',
+    metadata: {
+      eTag: '"d4dac71ddaabe802f023532b92b1e2d7-5"',
+      size: 23397120,
+      mimetype: 'application/octet-stream',
+      cacheControl: 'no-cache',
+      lastModified: '2025-05-11T06:45:53.000Z',
+      contentLength: 23397120,
+      httpStatusCode: 200
+    }
+  },
+  {
+    name: 'Light_NGC1893_300.0s_Bin1_20250102-191323_0010.png',
+    id: '5ffe4393-a48f-4ea6-84ca-a073285eacdf',
+    updated_at: '2025-06-13T18:20:51.839Z',
+    created_at: '2025-06-13T18:20:51.839Z',
+    last_accessed_at: '2025-06-13T18:20:51.839Z',
+    metadata: {
+      eTag: '"6d94e16c21423a9a066a93303f203892"',
+      size: 131448,
+      mimetype: 'image/png',
+      cacheControl: 'no-cache',
+      lastModified: '2025-06-13T18:20:52.000Z',
+      contentLength: 131448,
+      httpStatusCode: 200
+    }
+  }
+] Error: null
+Hydrated equipment from project_files for project b025af3c-dc65-40d9-a8c6-8289a5aba0e8 [
+  { type: 'telescope', name: 'Sky Watcher Evostar 100 ED ' },
+  { type: 'camera', name: 'ZWO ASI294MC Pro' },
+  { type: 'telescope', name: 'EQMod Mount' }
+]
+ GET /dashboard/b8487aa8-dc6d-405e-a4a1-7b4023d6658c/calibration-frames 200 in 2835ms
+ ⚠ ./node_modules/@supabase/realtime-js/dist/main/RealtimeClient.js
+Critical dependency: the request of a dependency is an expression
+
+Import trace for requested module:
+./node_modules/@supabase/realtime-js/dist/main/RealtimeClient.js
+./node_modules/@supabase/realtime-js/dist/main/index.js
+./node_modules/@supabase/supabase-js/dist/module/index.js
+./src/lib/supabase.ts
+./src/lib/server/getDashboardProjects.ts
+./app/dashboard/[projectId]/calibration-frames/page.tsx
+ ⚠ ./node_modules/@supabase/realtime-js/dist/main/RealtimeClient.js
+Critical dependency: the request of a dependency is an expression
+
+Import trace for requested module:
+./node_modules/@supabase/realtime-js/dist/main/RealtimeClient.js
+./node_modules/@supabase/realtime-js/dist/main/index.js
+./node_modules/@supabase/supabase-js/dist/module/index.js
+./src/lib/supabase.ts
+./src/lib/server/getDashboardProjects.ts
+./app/dashboard/[projectId]/calibration-frames/page.tsx
+ GET /favicon.ico 200 in 256ms
+ ⚠ ./node_modules/@supabase/realtime-js/dist/main/RealtimeClient.js
+Critical dependency: the request of a dependency is an expression
+
+Import trace for requested module:
+./node_modules/@supabase/realtime-js/dist/main/RealtimeClient.js
+./node_modules/@supabase/realtime-js/dist/main/index.js
+./node_modules/@supabase/supabase-js/dist/module/index.js
+./src/lib/supabase.ts
+./src/lib/server/getDashboardProjects.ts
+./app/dashboard/[projectId]/calibration-frames/page.tsx
+ ⚠ ./node_modules/@supabase/realtime-js/dist/main/RealtimeClient.js
+Critical dependency: the request of a dependency is an expression
+
+Import trace for requested module:
+./node_modules/@supabase/realtime-js/dist/main/RealtimeClient.js
+./node_modules/@supabase/realtime-js/dist/main/index.js
+./node_modules/@supabase/supabase-js/dist/module/index.js
+./src/lib/supabase.ts
+./src/lib/server/getDashboardProjects.ts
+./app/dashboard/[projectId]/calibration-frames/page.tsx
+[API] Submitting calibration job to Python worker: {
+  input_bucket: 'raw-frames',
+  input_paths: [
+    'd73aa7f9-e450-41ae-847c-a858cf2f5e09/b8487aa8-dc6d-405e-a4a1-7b4023d6658c/bias/Bias_1.0ms_Bin1_20250102-221917_0001.fit',
+    'd73aa7f9-e450-41ae-847c-a858cf2f5e09/b8487aa8-dc6d-405e-a4a1-7b4023d6658c/bias/Bias_1.0ms_Bin1_20250102-221919_0002.fit',
+    'd73aa7f9-e450-41ae-847c-a858cf2f5e09/b8487aa8-dc6d-405e-a4a1-7b4023d6658c/bias/Bias_1.0ms_Bin1_20250102-221923_0003.fit',
+    'd73aa7f9-e450-41ae-847c-a858cf2f5e09/b8487aa8-dc6d-405e-a4a1-7b4023d6658c/bias/Bias_1.0ms_Bin1_20250102-221926_0004.fit',
+    'd73aa7f9-e450-41ae-847c-a858cf2f5e09/b8487aa8-dc6d-405e-a4a1-7b4023d6658c/bias/Bias_1.0ms_Bin1_20250102-221930_0005.fit'
+  ],
+  output_bucket: 'calibrated-frames',
+  output_base: 'd73aa7f9-e450-41ae-847c-a858cf2f5e09/b8487aa8-dc6d-405e-a4a1-7b4023d6658c/bias/master_bias',
+  settings: { stackingMethod: 'median', sigmaThreshold: '3.0' },
+  project_id: 'b8487aa8-dc6d-405e-a4a1-7b4023d6658c',
+  user_id: 'd73aa7f9-e450-41ae-847c-a858cf2f5e09',
+  metadata: undefined,
+  test_name: undefined
+}
+[API] /jobs/submit called. Raw body: b'{"input_bucket":"raw-frames","input_paths":["d73aa7f9-e450-41ae-847c-a858cf2f5e09/b8487aa8-dc6d-405e-a4a1-7b4023d6658c/bias/Bias_1.0ms_Bin1_20250102-221917_0001.fit","d73aa7f9-e450-41ae-847c-a858cf2f5e09/b8487aa8-dc6d-405e-a4a1-7b4023d6658c/bias/Bias_1.0ms_Bin1_20250102-221919_0002.fit","d73aa7f9-e450-41ae-847c-a858cf2f5e09/b8487aa8-dc6d-405e-a4a1-7b4023d6658c/bias/Bias_1.0ms_Bin1_20250102-221923_0003.fit","d73aa7f9-e450-41ae-847c-a858cf2f5e09/b8487aa8-dc6d-405e-a4a1-7b4023d6658c/bias/Bias_1.0ms_Bin1_20250102-221926_0004.fit","d73aa7f9-e450-41ae-847c-a858cf2f5e09/b8487aa8-dc6d-405e-a4a1-7b4023d6658c/bias/Bias_1.0ms_Bin1_20250102-221930_0005.fit"],"output_bucket":"calibrated-frames","output_base":"d73aa7f9-e450-41ae-847c-a858cf2f5e09/b8487aa8-dc6d-405e-a4a1-7b4023d6658c/bias/master_bias","settings":{"stackingMethod":"median","sigmaThreshold":"3.0"},"project_id":"b8487aa8-dc6d-405e-a4a1-7b4023d6658c","user_id":"d73aa7f9-e450-41ae-847c-a858cf2f5e09"}'
+[API] Parsed job: {'input_bucket': 'raw-frames', 'input_paths': ['d73aa7f9-e450-41ae-847c-a858cf2f5e09/b8487aa8-dc6d-405e-a4a1-7b4023d6658c/bias/Bias_1.0ms_Bin1_20250102-221917_0001.fit', 'd73aa7f9-e450-41ae-847c-a858cf2f5e09/b8487aa8-dc6d-405e-a4a1-7b4023d6658c/bias/Bias_1.0ms_Bin1_20250102-221919_0002.fit', 'd73aa7f9-e450-41ae-847c-a858cf2f5e09/b8487aa8-dc6d-405e-a4a1-7b4023d6658c/bias/Bias_1.0ms_Bin1_20250102-221923_0003.fit', 'd73aa7f9-e450-41ae-847c-a858cf2f5e09/b8487aa8-dc6d-405e-a4a1-7b4023d6658c/bias/Bias_1.0ms_Bin1_20250102-221926_0004.fit', 'd73aa7f9-e450-41ae-847c-a858cf2f5e09/b8487aa8-dc6d-405e-a4a1-7b4023d6658c/bias/Bias_1.0ms_Bin1_20250102-221930_0005.fit'], 'output_bucket': 'calibrated-frames', 'output_base': 'd73aa7f9-e450-41ae-847c-a858cf2f5e09/b8487aa8-dc6d-405e-a4a1-7b4023d6658c/bias/master_bias', 'settings': {'stackingMethod': 'median', 'sigmaThreshold': '3.0'}, 'project_id': 'b8487aa8-dc6d-405e-a4a1-7b4023d6658c', 'user_id': 'd73aa7f9-e450-41ae-847c-a858cf2f5e09', 'metadata': None, 'test_name': None}
+[API] Queued calibration job: job-6d9850d0
+INFO:     127.0.0.1:60151 - "POST /jobs/submit HTTP/1.1" 200 OK
+[DEBUG] Entered run_calibration_job
+[BG] Starting calibration job: {'input_bucket': 'raw-frames', 'input_paths': ['d73aa7f9-e450-41ae-847c-a858cf2f5e09/b8487aa8-dc6d-405e-a4a1-7b4023d6658c/bias/Bias_1.0ms_Bin1_20250102-221917_0001.fit', 'd73aa7f9-e450-41ae-847c-a858cf2f5e09/b8487aa8-dc6d-405e-a4a1-7b4023d6658c/bias/Bias_1.0ms_Bin1_20250102-221919_0002.fit', 'd73aa7f9-e450-41ae-847c-a858cf2f5e09/b8487aa8-dc6d-405e-a4a1-7b4023d6658c/bias/Bias_1.0ms_Bin1_20250102-221923_0003.fit', 'd73aa7f9-e450-41ae-847c-a858cf2f5e09/b8487aa8-dc6d-405e-a4a1-7b4023d6658c/bias/Bias_1.0ms_Bin1_20250102-221926_0004.fit', 'd73aa7f9-e450-41ae-847c-a858cf2f5e09/b8487aa8-dc6d-405e-a4a1-7b4023d6658c/bias/Bias_1.0ms_Bin1_20250102-221930_0005.fit'], 'output_bucket': 'calibrated-frames', 'output_base': 'd73aa7f9-e450-41ae-847c-a858cf2f5e09/b8487aa8-dc6d-405e-a4a1-7b4023d6658c/bias/master_bias', 'settings': {'stackingMethod': 'median', 'sigmaThreshold': '3.0'}, 'project_id': 'b8487aa8-dc6d-405e-a4a1-7b4023d6658c', 'user_id': 'd73aa7f9-e450-41ae-847c-a858cf2f5e09', 'metadata': None, 'test_name': None} (job_id=job-6d9850d0)
+[API] Python worker response status: 200
+[API] Python worker response data: { jobId: 'job-6d9850d0' }
+ POST /api/projects/b8487aa8-dc6d-405e-a4a1-7b4023d6658c/calibration-jobs/submit 200 in 880ms
+ ⚠ ./node_modules/@supabase/realtime-js/dist/main/RealtimeClient.js
+Critical dependency: the request of a dependency is an expression
+
+Import trace for requested module:
+./node_modules/@supabase/realtime-js/dist/main/RealtimeClient.js
+./node_modules/@supabase/realtime-js/dist/main/index.js
+./node_modules/@supabase/supabase-js/dist/module/index.js
+./src/lib/supabase.ts
+./src/lib/server/getDashboardProjects.ts
+./app/dashboard/[projectId]/calibration-frames/page.tsx
+ ⚠ ./node_modules/@supabase/realtime-js/dist/main/RealtimeClient.js
+Critical dependency: the request of a dependency is an expression
+
+Import trace for requested module:
+./node_modules/@supabase/realtime-js/dist/main/RealtimeClient.js
+./node_modules/@supabase/realtime-js/dist/main/index.js
+./node_modules/@supabase/supabase-js/dist/module/index.js
+./src/lib/supabase.ts
+./src/lib/server/getDashboardProjects.ts
+./app/dashboard/[projectId]/calibration-frames/page.tsx
+Shutting down servers...
+./start-dev.sh: line 4: 99466 Hangup: 1               uvicorn app.main:app --reload --port 8000 --host 0.0.0.0  (wd: ~/Documents/Stellar_Astro/python-worker)
+./start-dev.sh: line 4: 99475 Hangup: 1               PORT=3000 npx next dev

@@ -1,1 +1,29 @@
 /opt/homebrew/opt/python@3.13/bin/python3.13: No module named uvicorn
+Traceback (most recent call last):
+  File "/Users/matthewcarter-lang/Documents/Stellar_Astro/python-worker/app/main.py", line 22, in <module>
+    from .db import init_db, get_db
+ImportError: attempted relative import with no known parent package
+INFO:     Started server process [91144]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+Database URL: postgresql://postgres.wxannuklwbocdheqhmbx:hqwn+DSHJtwY*2e@aws-0-eu-west-2.pooler.supabase.com:5432/postgres
+SUPABASE_URL: https://wxannuklwbocdheqhmbx.supabase.co
+SUPABASE_SERVICE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind4YW5udWtsd2JvY2RoZXFobWJ4Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NTAxMTY5NiwiZXhwIjoyMDYwNTg3Njk2fQ.EKkWWKvibhQnLxtKLeCqyYj42htf-zItO0nYMlXmxzA
+Connecting to database with URL: postgresql://postgres.wxannuklwbocdheqhmbx:hqwn+DSHJtwY*2e@aws-0-eu-west-2.pooler.supabase.com:5432/postgres
+INFO:     127.0.0.1:51342 - "GET /jobs/status?job_id=job-36b73ca1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51342 - "GET /jobs/status?job_id=job-36b73ca1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51342 - "GET /jobs/status?job_id=job-36b73ca1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51342 - "GET /jobs/status?job_id=job-36b73ca1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51342 - "GET /jobs/status?job_id=job-36b73ca1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51342 - "GET /jobs/status?job_id=job-36b73ca1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51342 - "GET /jobs/status?job_id=job-36b73ca1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51342 - "GET /jobs/status?job_id=job-36b73ca1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51342 - "GET /jobs/status?job_id=job-36b73ca1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51342 - "GET /jobs/status?job_id=job-36b73ca1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51342 - "GET /jobs/status?job_id=job-36b73ca1 HTTP/1.1" 200 OK
+[API] /jobs/submit called. Raw body: b'{"input_bucket":"raw-frames","input_paths":["d73aa7f9-e450-41ae-847c-a858cf2f5e09/b8487aa8-dc6d-405e-a4a1-7b4023d6658c/bias/Bias_1.0ms_Bin1_20250102-221917_0001.fit","d73aa7f9-e450-41ae-847c-a858cf2f5e09/b8487aa8-dc6d-405e-a4a1-7b4023d6658c/bias/Bias_1.0ms_Bin1_20250102-221919_0002.fit","d73aa7f9-e450-41ae-847c-a858cf2f5e09/b8487aa8-dc6d-405e-a4a1-7b4023d6658c/bias/Bias_1.0ms_Bin1_20250102-221923_0003.fit","d73aa7f9-e450-41ae-847c-a858cf2f5e09/b8487aa8-dc6d-405e-a4a1-7b4023d6658c/bias/Bias_1.0ms_Bin1_20250102-221926_0004.fit","d73aa7f9-e450-41ae-847c-a858cf2f5e09/b8487aa8-dc6d-405e-a4a1-7b4023d6658c/bias/Bias_1.0ms_Bin1_20250102-221930_0005.fit"],"output_bucket":"calibrated-frames","output_base":"d73aa7f9-e450-41ae-847c-a858cf2f5e09/b8487aa8-dc6d-405e-a4a1-7b4023d6658c/bias/master_bias","settings":{"stackingMethod":"median","sigmaThreshold":"3.0"},"project_id":"b8487aa8-dc6d-405e-a4a1-7b4023d6658c","user_id":"d73aa7f9-e450-41ae-847c-a858cf2f5e09"}'
+[API] Parsed job: {'input_bucket': 'raw-frames', 'input_paths': ['d73aa7f9-e450-41ae-847c-a858cf2f5e09/b8487aa8-dc6d-405e-a4a1-7b4023d6658c/bias/Bias_1.0ms_Bin1_20250102-221917_0001.fit', 'd73aa7f9-e450-41ae-847c-a858cf2f5e09/b8487aa8-dc6d-405e-a4a1-7b4023d6658c/bias/Bias_1.0ms_Bin1_20250102-221919_0002.fit', 'd73aa7f9-e450-41ae-847c-a858cf2f5e09/b8487aa8-dc6d-405e-a4a1-7b4023d6658c/bias/Bias_1.0ms_Bin1_20250102-221923_0003.fit', 'd73aa7f9-e450-41ae-847c-a858cf2f5e09/b8487aa8-dc6d-405e-a4a1-7b4023d6658c/bias/Bias_1.0ms_Bin1_20250102-221926_0004.fit', 'd73aa7f9-e450-41ae-847c-a858cf2f5e09/b8487aa8-dc6d-405e-a4a1-7b4023d6658c/bias/Bias_1.0ms_Bin1_20250102-221930_0005.fit'], 'output_bucket': 'calibrated-frames', 'output_base': 'd73aa7f9-e450-41ae-847c-a858cf2f5e09/b8487aa8-dc6d-405e-a4a1-7b4023d6658c/bias/master_bias', 'settings': {'stackingMethod': 'median', 'sigmaThreshold': '3.0'}, 'project_id': 'b8487aa8-dc6d-405e-a4a1-7b4023d6658c', 'user_id': 'd73aa7f9-e450-41ae-847c-a858cf2f5e09', 'metadata': None, 'test_name': None}
+[API] Queued calibration job: job-ef39ab06
+INFO:     127.0.0.1:51408 - "POST /jobs/submit HTTP/1.1" 200 OK
+ERROR:    Error loading ASGI app. Could not import module "app.main".

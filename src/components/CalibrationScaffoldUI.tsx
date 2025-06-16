@@ -13,9 +13,9 @@ import { supabase } from '../lib/supabaseClient';
 import Image from 'next/image';
 
 const FRAME_TYPES = [
+  { key: 'bias', label: 'Master Bias' },
   { key: 'dark', label: 'Master Dark' },
   { key: 'flat', label: 'Master Flat' },
-  { key: 'bias', label: 'Master Bias' },
 ];
 
 type MasterType = 'dark' | 'flat' | 'bias';
@@ -103,7 +103,7 @@ function getProgressMessage(progress: number) {
 }
 
 const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = ({ projectId, userId }) => {
-  const [selectedType, setSelectedType] = useState<MasterType>('dark');
+  const [selectedType, setSelectedType] = useState<MasterType>('bias');
   const [tabState, setTabState] = useState({
     dark: {
       advanced: false,
@@ -158,11 +158,24 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
     onAccept: () => void;
     onDecline: () => void;
   }>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewUrls, setPreviewUrls] = useState<{ [K in MasterType]?: string | null }>({});
+  const [previewLoadings, setPreviewLoadings] = useState<{ [K in MasterType]?: boolean }>({});
   const [realFiles, setRealFiles] = useState<string[]>([]);
   const [jobProgress, setJobProgress] = useState<number>(0);
   const [jobId, setJobId] = useState<string | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
+  const [masterBiasOptions, setMasterBiasOptions] = useState<{ path: string, name: string }[]>([]);
+  const [selectedMasterBias, setSelectedMasterBias] = useState<string>('');
+  const [laCosmicParams, setLaCosmicParams] = useState({
+    sigclip: 4.5,
+    readnoise: 6.5,
+    gain: 1.0,
+    satlevel: 65535,
+    niter: 4,
+  });
+  // Track which parameters are auto-populated
+  const [autoPopulated, setAutoPopulated] = useState<{ readnoise?: boolean; gain?: boolean; satlevel?: boolean }>({});
+  const [lastAutoPopulated, setLastAutoPopulated] = useState<{ readnoise?: number; gain?: number; satlevel?: number }>({});
+  const [lastMeta, setLastMeta] = useState<any>(null);
 
   // Add a warning if userId is undefined
   useEffect(() => {
@@ -190,6 +203,49 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
     };
     fetchFiles();
   }, [selectedType, projectId, userId]);
+
+  // Auto-populate L.A.Cosmic params from FITS metadata
+  useEffect(() => {
+    async function fetchAndSetLaCosmicParams() {
+      if (selectedType !== 'bias' || !realFiles.length) return;
+      const filePath = `${userId}/${projectId}/${selectedType}/${realFiles[0]}`;
+      const { data, error } = await supabase
+        .from('fits_metadata')
+        .select('metadata')
+        .eq('file_path', filePath)
+        .single();
+      // Add logging for debugging
+      console.log('[LACOSMIC] fits_metadata API response:', { data, error, filePath });
+      if (!error && data && data.metadata) {
+        const meta = data.metadata;
+        setLastMeta(meta);
+        setLaCosmicParams(prev => {
+          const newParams = { ...prev };
+          const auto: typeof autoPopulated = {};
+          if (meta.readnoise !== undefined && meta.readnoise !== prev.readnoise) {
+            newParams.readnoise = meta.readnoise;
+            auto.readnoise = true;
+          }
+          if (meta.gain !== undefined && meta.gain !== prev.gain) {
+            newParams.gain = meta.gain;
+            auto.gain = true;
+          }
+          if (meta.satlevel !== undefined && meta.satlevel !== prev.satlevel) {
+            newParams.satlevel = meta.satlevel;
+            auto.satlevel = true;
+          }
+          setAutoPopulated(auto);
+          setLastAutoPopulated({
+            readnoise: meta.readnoise,
+            gain: meta.gain,
+            satlevel: meta.satlevel,
+          });
+          return newParams;
+        });
+      }
+    }
+    fetchAndSetLaCosmicParams();
+  }, [realFiles, selectedType, projectId, userId]);
 
   // Keyboard accessibility for modal
   useEffect(() => {
@@ -332,11 +388,18 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
         sigmaThreshold: currentTab.sigmaThreshold,
         // ...add other advanced settings as needed
         ...(selectedType === 'dark'
-          ? {
-              darkScaling: (currentTab as typeof tabState.dark).darkScaling,
-              darkScalingAuto: (currentTab as typeof tabState.dark).darkScalingAuto,
-              darkScalingFactor: (currentTab as typeof tabState.dark).darkScalingFactor,
-            }
+          ? (() => {
+              const darkTab = currentTab as typeof tabState['dark'];
+              return {
+                darkScaling: darkTab.darkScaling,
+                darkScalingAuto: darkTab.darkScalingAuto,
+                darkScalingFactor: darkTab.darkScalingFactor,
+                biasSubtraction: darkTab.biasSubtraction,
+                ...(darkTab.biasSubtraction && selectedMasterBias
+                  ? { masterBiasPath: selectedMasterBias }
+                  : {}),
+              };
+            })()
           : {}),
       },
       projectId,
@@ -407,7 +470,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
   useEffect(() => {
     if (jobStatus === 'success' && jobId) {
       let isMounted = true;
-      setPreviewLoading(true);
+      setPreviewLoadings(prev => ({ ...prev, [selectedType]: true }));
       const fetchResults = async () => {
         const res = await fetch(`/api/projects/${projectId}/calibration-jobs/results?jobId=${jobId}`);
         console.log('[Preview] Results API response:', res);
@@ -420,29 +483,94 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
           const data = await res.json();
           console.log('[Preview] Results data:', data);
           if (isMounted && data.results?.preview_url) {
-            setPreviewUrl(data.results.preview_url);
-            setPreviewLoading(false);
+            setPreviewUrls(prev => ({ ...prev, [selectedType]: data.results.preview_url }));
+            setPreviewLoadings(prev => ({ ...prev, [selectedType]: false }));
             console.log('[Preview] Setting previewUrl:', data.results.preview_url);
+            // --- Notification logic for used/rejected frames ---
+            if (data.results && (typeof data.results.used === 'number' || typeof data.results.rejected === 'number')) {
+              let message = `Calibration complete: ${data.results.used ?? 0} frames used.`;
+              if (data.results.rejected > 0) {
+                message += ` ${data.results.rejected} frame(s) rejected.`;
+                if (Array.isArray(data.results.rejected_details) && data.results.rejected_details.length > 0) {
+                  message += '\nReasons:';
+                  for (const rej of data.results.rejected_details) {
+                    message += `\n- ${rej.file}: ${rej.reason}`;
+                  }
+                }
+              }
+              // Send notification to bell
+              fetch('/api/notifications', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  type: data.results.rejected > 0 ? 'warning' : 'success',
+                  eventType: 'processing_step',
+                  message,
+                  data: data.results,
+                }),
+              });
+            }
           } else {
             console.log('[Preview] No preview_url found in results:', data.results);
           }
         } else {
-          setPreviewLoading(false);
+          setPreviewLoadings(prev => ({ ...prev, [selectedType]: false }));
           console.error('[Preview] Results API not ok:', res.status);
         }
       };
       fetchResults();
       return () => { isMounted = false; };
     }
-  }, [jobStatus, jobId, projectId]);
+  }, [jobStatus, jobId, projectId, selectedType]);
 
   useEffect(() => {
-    if (previewUrl) {
-      console.log('[Preview] Preview URL set:', previewUrl);
+    if (previewUrls[selectedType]) {
+      console.log('[Preview] Preview URL set:', previewUrls[selectedType]);
     } else {
       console.log('[Preview] Preview URL is null or empty');
     }
-  }, [previewUrl]);
+  }, [previewUrls, selectedType]);
+
+  // Fetch master bias frames when Master Dark tab is active and bias subtraction is enabled
+  useEffect(() => {
+    async function fetchMasterBiases() {
+      if (selectedType === 'dark' && tabState.dark.biasSubtraction) {
+        const prefix = `${userId}/${projectId}/master-bias/`;
+        const { data, error } = await supabase.storage.from('raw-frames').list(prefix);
+        if (!error && data) {
+          const fits = data.filter((f: any) => f.name.toLowerCase().endsWith('.fits') || f.name.toLowerCase().endsWith('.fit'));
+          setMasterBiasOptions(fits.map((f: any) => ({ path: prefix + f.name, name: f.name })));
+        } else {
+          setMasterBiasOptions([]);
+        }
+      } else {
+        setMasterBiasOptions([]);
+      }
+    }
+    fetchMasterBiases();
+  }, [selectedType, tabState.dark.biasSubtraction, projectId, userId]);
+
+  // Handler for user changing a parameter (removes auto badge)
+  const handleLaCosmicParamChange = (key: keyof typeof laCosmicParams, value: number) => {
+    setLaCosmicParams(prev => ({ ...prev, [key]: value }));
+    setAutoPopulated(prev => ({ ...prev, [key]: false }));
+  };
+
+  // Handler to reset all params to last auto-populated values
+  const handleResetToMetadata = () => {
+    if (!lastMeta) return;
+    setLaCosmicParams(prev => ({
+      ...prev,
+      readnoise: lastMeta.readnoise ?? prev.readnoise,
+      gain: lastMeta.gain ?? prev.gain,
+      satlevel: lastMeta.satlevel ?? prev.satlevel,
+    }));
+    setAutoPopulated({
+      readnoise: lastMeta.readnoise !== undefined,
+      gain: lastMeta.gain !== undefined,
+      satlevel: lastMeta.satlevel !== undefined,
+    });
+  };
 
   return (
     <TooltipProvider>
@@ -455,7 +583,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
           </div>
         )}
         {/* Preview Loading Spinner/Message */}
-        {previewLoading && (
+        {previewLoadings[selectedType] && (
           <div className="flex items-center gap-2 mt-4 text-blue-500">
             <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>
             <span>Generating preview...</span>
@@ -585,84 +713,198 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
             <div className="h-px bg-[#232946]/40 mb-8" />
             {/* Calibration Settings */}
             <div className="flex flex-col gap-6">
-              {/* Beginner/Advanced toggle with labels */}
-              <div className="flex items-center mb-4 gap-4">
-                <span className="font-medium text-blue-200">Beginner</span>
-                <label className="inline-flex relative items-center cursor-pointer">
-                  <input type="checkbox" className="sr-only peer" checked={tabState.dark.advanced} onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, advanced: e.target.checked } }))} />
-                  <div className="w-10 h-5 bg-gray-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:bg-blue-600 transition-all flex items-center justify-start peer-checked:justify-end">
-                    {!tabState.dark.advanced && <span className="w-3 h-3 bg-white rounded-full ml-1" />}
-                    {tabState.dark.advanced && <span className="w-3 h-3 bg-blue-300 rounded-full mr-1" />}
+              {/* Master Bias Tab */}
+              {selectedType === 'bias' && (
+                <>
+                  {/* Beginner/Advanced toggle for Bias */}
+                  <div className="flex items-center mb-4 gap-4">
+                    <span className="font-medium text-blue-200">Beginner</span>
+                    <label className="inline-flex relative items-center cursor-pointer">
+                      <input type="checkbox" className="sr-only peer" checked={tabState.bias.advanced} onChange={e => setTabState(prev => ({ ...prev, bias: { ...prev.bias, advanced: e.target.checked } }))} />
+                      <div className="w-10 h-5 bg-gray-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:bg-blue-600 transition-all flex items-center justify-start peer-checked:justify-end">
+                        {!tabState.bias.advanced && <span className="w-3 h-3 bg-white rounded-full ml-1" />}
+                        {tabState.bias.advanced && <span className="w-3 h-3 bg-blue-300 rounded-full mr-1" />}
+                      </div>
+                    </label>
+                    <span className="font-medium text-blue-200">Advanced</span>
                   </div>
-                </label>
-                <span className="font-medium text-blue-200">Advanced</span>
-              </div>
-              {/* Beginner mode: only show stacking method radio group (Median, Mean) */}
-              {!tabState.dark.advanced && (
-                <div className="mb-4">
-                  <label className="block font-medium mb-1 text-blue-100">Stacking Method</label>
-                  <div className="flex flex-col gap-2">
-                    {BASIC_STACKING_METHODS.map(m => (
-                      <label key={m.value} className="flex items-center gap-2 text-blue-200">
-                        <input
-                          type="radio"
-                          name="darkStackingMethod"
-                          value={m.value}
-                          checked={tabState.dark.stackingMethod === m.value}
-                          onChange={() => setTabState(prev => ({
-                            ...prev,
-                            dark: {
-                              ...prev.dark,
-                              stackingMethod: m.value,
-                            }
-                          }))}
-                          className="accent-blue-600"
-                        />
-                        <span>{m.label}</span>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span tabIndex={0}><Info className="w-4 h-4 text-blue-300 cursor-pointer" /></span>
-                          </TooltipTrigger>
-                          <TooltipContent side="top">
-                            {(() => {
-                              switch (m.value) {
-                                case 'median':
-                                  return 'Median: Robust to outliers, good for most calibration frames.';
-                                  case 'mean':
-                                    return 'Mean: Improves SNR, but sensitive to outliers.';
-                                  default:
-                                    return '';
-                              }
-                            })()}
-                          </TooltipContent>
-                        </Tooltip>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {/* Advanced mode: show all advanced options as before */}
-              {tabState.dark.advanced && (
-                <div className="mb-4">
-                  <button
-                    className="flex items-center gap-2 text-blue-200 font-semibold mb-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
-                    onClick={() => setIsAdvancedOpen(v => !v)}
-                    aria-expanded={isAdvancedOpen}
-                    aria-controls="advanced-dark-panel"
-                  >
-                    <span className="w-5 h-5"><Zap /></span>
-                    Advanced Options
-                    <span className={`transition-transform ${isAdvancedOpen ? 'rotate-90' : ''}`}>▶</span>
-                  </button>
-                  <div
-                    id="advanced-dark-panel"
-                    className={`transition-all duration-300 overflow-hidden ${isAdvancedOpen ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0'}`}
-                  >
-                    {/* Stacking Method Radio Group (always visible) */}
+                  {/* Beginner mode: only show stacking method (Median, Mean) */}
+                  {!tabState.bias.advanced && (
                     <div className="mb-4">
                       <label className="block font-medium mb-1 text-blue-100">Stacking Method</label>
                       <div className="flex flex-col gap-2">
-                        {ADVANCED_DARK_STACKING_METHODS.map(m => (
+                        {BASIC_STACKING_METHODS.map(m => (
+                          <label key={m.value} className="flex items-center gap-2 text-blue-200">
+                            <input
+                              type="radio"
+                              name="biasStackingMethod"
+                              value={m.value}
+                              checked={tabState.bias.stackingMethod === m.value}
+                              onChange={() => setTabState(prev => ({
+                                ...prev,
+                                bias: {
+                                  ...prev.bias,
+                                  stackingMethod: m.value,
+                                }
+                              }))}
+                              className="accent-blue-600"
+                            />
+                            <span>{m.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {/* Advanced mode: all stacking methods, cosmetic correction, custom rejection */}
+                  {tabState.bias.advanced && (
+                    <>
+                      <div className="mb-4">
+                        <label className="block font-medium mb-1 text-blue-100">Stacking Method</label>
+                        <div className="flex flex-col gap-2">
+                          {ADVANCED_DARK_STACKING_METHODS.map(m => (
+                            <label key={m.value} className="flex items-center gap-2 text-blue-200">
+                              <input
+                                type="radio"
+                                name="biasStackingMethod"
+                                value={m.value}
+                                checked={tabState.bias.stackingMethod === m.value}
+                                onChange={() => setTabState(prev => ({
+                                  ...prev,
+                                  bias: {
+                                    ...prev.bias,
+                                    stackingMethod: m.value,
+                                  }
+                                }))}
+                                className="accent-blue-600"
+                              />
+                              <span>{m.label}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      {/* Cosmetic Correction (optional) */}
+                      <div className="mb-4 flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          id="cosmeticCorrectionBias"
+                          checked={tabState.bias.cosmeticCorrection}
+                          onChange={e => setTabState(prev => ({ ...prev, bias: { ...prev.bias, cosmeticCorrection: e.target.checked } }))}
+                          className="mr-2 accent-blue-600"
+                        />
+                        <label htmlFor="cosmeticCorrectionBias" className="font-medium text-blue-100 flex items-center gap-2">
+                          Cosmetic Correction
+                        </label>
+                      </div>
+                      {tabState.bias.cosmeticCorrection && (
+                        <div className="mb-4">
+                          <label className="block font-medium mb-1 text-blue-100">Correction Method</label>
+                          <select
+                            className="bg-[#181c23] text-white border border-[#232946] rounded px-3 py-2 mt-1"
+                            value={tabState.bias.cosmeticMethod}
+                            onChange={e => setTabState(prev => ({ ...prev, bias: { ...prev.bias, cosmeticMethod: e.target.value } }))}
+                          >
+                            {COSMETIC_METHODS.map((m: { value: string; label: string }) => (
+                              <option key={m.value} value={m.value}>{m.label}</option>
+                            ))}
+                          </select>
+                          <div className="mt-4">
+                            <label className="block font-medium mb-1 text-blue-100">Threshold</label>
+                            <input
+                              type="range"
+                              min="0"
+                              max="1"
+                              step="0.01"
+                              value={tabState.bias.cosmeticThreshold}
+                              onChange={e => setTabState(prev => ({ ...prev, bias: { ...prev.bias, cosmeticThreshold: Number(e.target.value) } }))}
+                              className="w-40 accent-blue-600"
+                            />
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              max="1"
+                              value={tabState.bias.cosmeticThreshold}
+                              onChange={e => setTabState(prev => ({ ...prev, bias: { ...prev.bias, cosmeticThreshold: Number(e.target.value) } }))}
+                              className="border rounded px-2 py-1 w-20 bg-[#181c23] text-white border-[#232946] ml-2"
+                            />
+                          </div>
+                        </div>
+                      )}
+                      {/* Custom Rejection Expression (optional) */}
+                      <div className="mb-4">
+                        <label className="block font-medium mb-1 text-blue-100">Custom Rejection Expression</label>
+                        <input
+                          type="text"
+                          className="border rounded px-3 py-2 w-full bg-[#181c23] text-white border-[#232946]"
+                          value={tabState.bias.customRejection}
+                          onChange={e => setTabState(prev => ({ ...prev, bias: { ...prev.bias, customRejection: e.target.value } }))}
+                          placeholder="e.g. value > 5000"
+                        />
+                      </div>
+                      {/* LA Cosmic parameters */}
+                      {selectedType === 'bias' && tabState.bias.cosmeticMethod === 'la_cosmic' && (
+                        <div className="bg-[#232946] rounded-lg p-4 mb-4 border border-blue-900 shadow max-w-lg">
+                          {/* Info banner if any param is auto-populated */}
+                          {Object.values(autoPopulated).some(Boolean) && (
+                            <div className="mb-3 p-2 bg-blue-900/70 border border-blue-500/30 rounded text-blue-100 text-sm flex items-center gap-2">
+                              <Info className="w-4 h-4 text-blue-300" />
+                              Some parameters have been pre-filled from your frame metadata. You can adjust them if needed.
+                              <button onClick={handleResetToMetadata} className="ml-auto px-2 py-1 text-xs bg-blue-800 hover:bg-blue-700 rounded text-blue-100 border border-blue-600">Reset to Metadata</button>
+                            </div>
+                          )}
+                          <div className="flex flex-col gap-3">
+                            <div>
+                              <label className="block text-blue-200 text-sm mb-1">Sigma Clip (sigclip)</label>
+                              <input type="number" step="0.1" min="1" max="10" value={laCosmicParams.sigclip} onChange={e => handleLaCosmicParamChange('sigclip', parseFloat(e.target.value))} className="input bg-[#2a2e3a] text-blue-100 border-blue-700" />
+                            </div>
+                            <div>
+                              <label className="block text-blue-200 text-sm mb-1 flex items-center gap-1">Read Noise (e-) (readnoise) {autoPopulated.readnoise && <TooltipProvider><Tooltip><TooltipTrigger><span className="ml-1 px-1 py-0.5 text-[10px] bg-blue-700 text-blue-100 rounded">auto</span></TooltipTrigger><TooltipContent>Auto-filled from FITS metadata</TooltipContent></Tooltip></TooltipProvider>}</label>
+                              <input type="number" step="0.1" min="0" value={laCosmicParams.readnoise} onChange={e => handleLaCosmicParamChange('readnoise', parseFloat(e.target.value))} className="input bg-[#2a2e3a] text-blue-100 border-blue-700" />
+                              <span className="text-xs text-blue-300">Camera read noise in electrons</span>
+                            </div>
+                            <div>
+                              <label className="block text-blue-200 text-sm mb-1 flex items-center gap-1">Gain (e-/ADU) (gain) {autoPopulated.gain && <TooltipProvider><Tooltip><TooltipTrigger><span className="ml-1 px-1 py-0.5 text-[10px] bg-blue-700 text-blue-100 rounded">auto</span></TooltipTrigger><TooltipContent>Auto-filled from FITS metadata</TooltipContent></Tooltip></TooltipProvider>}</label>
+                              <input type="number" step="0.01" min="0.01" value={laCosmicParams.gain} onChange={e => handleLaCosmicParamChange('gain', parseFloat(e.target.value))} className="input bg-[#2a2e3a] text-blue-100 border-blue-700" />
+                              <span className="text-xs text-blue-300">Electrons per ADU (camera gain)</span>
+                            </div>
+                            <div>
+                              <label className="block text-blue-200 text-sm mb-1 flex items-center gap-1">Saturation Level (satlevel) {autoPopulated.satlevel && <TooltipProvider><Tooltip><TooltipTrigger><span className="ml-1 px-1 py-0.5 text-[10px] bg-blue-700 text-blue-100 rounded">auto</span></TooltipTrigger><TooltipContent>Auto-filled from FITS metadata</TooltipContent></Tooltip></TooltipProvider>}</label>
+                              <input type="number" step="1" min="1000" value={laCosmicParams.satlevel} onChange={e => handleLaCosmicParamChange('satlevel', parseInt(e.target.value))} className="input bg-[#2a2e3a] text-blue-100 border-blue-700" />
+                              <span className="text-xs text-blue-300">Pixel value above which is considered saturated</span>
+                            </div>
+                            <div>
+                              <label className="block text-blue-200 text-sm mb-1">Iterations (niter)</label>
+                              <input type="number" step="1" min="1" max="10" value={laCosmicParams.niter} onChange={e => handleLaCosmicParamChange('niter', parseInt(e.target.value))} className="input bg-[#2a2e3a] text-blue-100 border-blue-700" />
+                              <span className="text-xs text-blue-300">Number of times to run the algorithm</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+              {/* Master Dark Tab */}
+              {selectedType === 'dark' && (
+                <>
+                  {/* Beginner/Advanced toggle for Dark */}
+                  <div className="flex items-center mb-4 gap-4">
+                    <span className="font-medium text-blue-200">Beginner</span>
+                    <label className="inline-flex relative items-center cursor-pointer">
+                      <input type="checkbox" className="sr-only peer" checked={tabState.dark.advanced} onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, advanced: e.target.checked } }))} />
+                      <div className="w-10 h-5 bg-gray-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:bg-blue-600 transition-all flex items-center justify-start peer-checked:justify-end">
+                        {!tabState.dark.advanced && <span className="w-3 h-3 bg-white rounded-full ml-1" />}
+                        {tabState.dark.advanced && <span className="w-3 h-3 bg-blue-300 rounded-full mr-1" />}
+                      </div>
+                    </label>
+                    <span className="font-medium text-blue-200">Advanced</span>
+                  </div>
+                  {/* Beginner mode: only show stacking method (Median, Mean) */}
+                  {!tabState.dark.advanced && (
+                    <div className="mb-4">
+                      <label className="block font-medium mb-1 text-blue-100">Stacking Method</label>
+                      <div className="flex flex-col gap-2">
+                        {BASIC_STACKING_METHODS.map(m => (
                           <label key={m.value} className="flex items-center gap-2 text-blue-200">
                             <input
                               type="radio"
@@ -679,48 +921,42 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                               className="accent-blue-600"
                             />
                             <span>{m.label}</span>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span tabIndex={0}><Info className="w-4 h-4 text-blue-300 cursor-pointer" /></span>
-                              </TooltipTrigger>
-                              <TooltipContent side="top">
-                                {(() => {
-                                  switch (m.value) {
-                                    case 'median':
-                                      return 'Median: Robust to outliers, good for most calibration frames.';
-                                    case 'mean':
-                                      return 'Mean: Improves SNR, but sensitive to outliers.';
-                                    case 'sigma':
-                                      return 'Sigma Clipping: Removes outlier pixels based on standard deviation.';
-                                    case 'winsorized':
-                                      return 'Winsorized Sigma Clipping: Like sigma clipping, but replaces outliers instead of discarding.';
-                                    case 'linear_fit':
-                                      return 'Linear Fit Clipping: Fits a line to reject inconsistent pixels across frames.';
-                                    default:
-                                      return '';
-                                  }
-                                })()}
-                              </TooltipContent>
-                            </Tooltip>
                           </label>
                         ))}
                       </div>
                     </div>
-                    {/* Sigma/Kappa Threshold (slider + input) for relevant algorithms */}
-                    {(tabState.dark.stackingMethod === 'sigma' || tabState.dark.stackingMethod === 'winsorized' || tabState.dark.stackingMethod === 'linear_fit') && (
+                  )}
+                  {/* Advanced mode: all dark options */}
+                  {tabState.dark.advanced && (
+                    <>
                       <div className="mb-4">
-                        <label className="block font-medium mb-1 text-blue-100 flex items-center gap-2">
-                          Sigma/Kappa Threshold
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span tabIndex={0}><Info className="w-4 h-4 text-blue-300 cursor-pointer" /></span>
-                            </TooltipTrigger>
-                            <TooltipContent side="top">
-                              Controls outlier rejection. Lower values (2-3) are stricter, higher values (4-5) are more permissive. Default: 3.0. If you have many frames, use a lower value; for few frames, use a higher value.
-                            </TooltipContent>
-                          </Tooltip>
-                        </label>
-                        <div className="flex items-center gap-4">
+                        <label className="block font-medium mb-1 text-blue-100">Stacking Method</label>
+                        <div className="flex flex-col gap-2">
+                          {ADVANCED_DARK_STACKING_METHODS.map(m => (
+                            <label key={m.value} className="flex items-center gap-2 text-blue-200">
+                              <input
+                                type="radio"
+                                name="darkStackingMethod"
+                                value={m.value}
+                                checked={tabState.dark.stackingMethod === m.value}
+                                onChange={() => setTabState(prev => ({
+                                  ...prev,
+                                  dark: {
+                                    ...prev.dark,
+                                    stackingMethod: m.value,
+                                  }
+                                }))}
+                                className="accent-blue-600"
+                              />
+                              <span>{m.label}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      {/* Sigma/Kappa Threshold for advanced methods */}
+                      {(tabState.dark.stackingMethod === 'sigma' || tabState.dark.stackingMethod === 'winsorized' || tabState.dark.stackingMethod === 'linear_fit') && (
+                        <div className="mb-4">
+                          <label className="block font-medium mb-1 text-blue-100">Sigma/Kappa Threshold</label>
                           <input
                             type="range"
                             min="1.5"
@@ -737,242 +973,265 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                             max="5"
                             value={tabState.dark.sigmaThreshold}
                             onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, sigmaThreshold: e.target.value } }))}
-                            className="border rounded px-2 py-1 w-20 bg-[#181c23] text-white border-[#232946]"
+                            className="border rounded px-2 py-1 w-20 bg-[#181c23] text-white border-[#232946] ml-2"
                           />
                         </div>
-                      </div>
-                    )}
-                    {/* Dark Frame Scaling Toggle and Factor */}
-                    <div className="mb-4">
-                      <label className="block font-medium mb-1 text-blue-100 flex items-center gap-2">
-                        Dark Frame Scaling
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span tabIndex={0}><Info className="w-4 h-4 text-blue-300 cursor-pointer" /></span>
-                          </TooltipTrigger>
-                          <TooltipContent side="top">
-                            Enable to scale darks to match lights. Useful if exposure/temperature differ. Default: off. Only enable if you know your darks need scaling.
-                          </TooltipContent>
-                        </Tooltip>
-                      </label>
-                      <label className="inline-flex items-center gap-2 text-blue-200">
-                        <input type="checkbox" checked={tabState.dark.darkScaling} onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, darkScaling: e.target.checked } }))} className="accent-blue-600" />
-                        Enable
-                      </label>
-                      {tabState.dark.darkScaling && (
-                        <div className="mt-2 flex items-center gap-2">
-                          <span className="text-blue-200">Scaling Factor:</span>
-                          <input
-                            type="number"
-                            step="0.01"
-                            min="0.5"
-                            max="2.0"
-                            value={tabState.dark.darkScalingFactor ?? 1.0}
-                            onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, darkScalingFactor: Number(e.target.value) } }))}
-                            className="border rounded px-2 py-1 w-24 bg-[#181c23] text-white border-[#232946]"
-                            disabled={tabState.dark.darkScalingAuto}
-                          />
-                          <label className="inline-flex items-center gap-1 text-blue-300 ml-2">
+                      )}
+                      {/* Dark Frame Scaling */}
+                      <div className="mb-4">
+                        <label className="block font-medium mb-1 text-blue-100">Dark Frame Scaling</label>
+                        <input type="checkbox" checked={tabState.dark.darkScaling} onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, darkScaling: e.target.checked } }))} className="accent-blue-600" /> Enable
+                        {tabState.dark.darkScaling && (
+                          <>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0.5"
+                              max="2.0"
+                              value={tabState.dark.darkScalingFactor ?? 1.0}
+                              onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, darkScalingFactor: Number(e.target.value) } }))}
+                              className="border rounded px-2 py-1 w-24 bg-[#181c23] text-white border-[#232946] ml-2"
+                              disabled={tabState.dark.darkScalingAuto}
+                            />
                             <input
                               type="checkbox"
                               checked={tabState.dark.darkScalingAuto}
                               onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, darkScalingAuto: e.target.checked } }))}
-                              className="accent-blue-600"
+                              className="accent-blue-600 ml-2"
+                            /> Auto
+                          </>
+                        )}
+                      </div>
+                      {/* Bias Subtraction */}
+                      <div className="mb-4">
+                        <label className="block font-medium mb-1 text-blue-100">Bias Subtraction</label>
+                        <input type="checkbox" checked={tabState.dark.biasSubtraction} onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, biasSubtraction: e.target.checked } }))} className="accent-blue-600" /> Enable
+                        {tabState.dark.biasSubtraction && (
+                          <div className="mt-2">
+                            <label className="block text-blue-100 mb-1">Select Master Bias (optional)</label>
+                            <select
+                              className="bg-[#181c23] text-white border border-[#232946] rounded px-3 py-2 mt-1 w-full"
+                              value={selectedMasterBias}
+                              onChange={e => setSelectedMasterBias(e.target.value)}
+                            >
+                              <option value="">Auto-select (recommended)</option>
+                              {masterBiasOptions.map(opt => (
+                                <option key={opt.path} value={opt.path}>{opt.name}</option>
+                              ))}
+                            </select>
+                            {masterBiasOptions.length === 0 && <div className="text-xs text-blue-300 mt-1">No master bias frames found for this project. Auto-select will fail if none exist.</div>}
+                          </div>
+                        )}
+                      </div>
+                      {/* Amp Glow Suppression */}
+                      <div className="mb-4">
+                        <label className="block font-medium mb-1 text-blue-100">Amp Glow Suppression</label>
+                        <input type="checkbox" checked={tabState.dark.ampGlowSuppression} onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, ampGlowSuppression: e.target.checked } }))} className="accent-blue-600" /> Enable
+                      </div>
+                      {/* Temperature Matching */}
+                      <div className="mb-4">
+                        <label className="block font-medium mb-1 text-blue-100">Temperature Matching</label>
+                        <input type="checkbox" checked={tabState.dark.tempMatching} onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, tempMatching: e.target.checked } }))} className="accent-blue-600" /> Enable
+                      </div>
+                      {/* Exposure Time Matching */}
+                      <div className="mb-4">
+                        <label className="block font-medium mb-1 text-blue-100">Exposure Time Matching</label>
+                        <input type="checkbox" checked={tabState.dark.exposureMatching} onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, exposureMatching: e.target.checked } }))} className="accent-blue-600" /> Enable
+                      </div>
+                      {/* Cosmetic Correction */}
+                      <div className="mb-4 flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          id="cosmeticCorrectionDark"
+                          checked={tabState.dark.cosmeticCorrection}
+                          onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, cosmeticCorrection: e.target.checked } }))}
+                          className="mr-2 accent-blue-600"
+                        />
+                        <label htmlFor="cosmeticCorrectionDark" className="font-medium text-blue-100 flex items-center gap-2">
+                          Cosmetic Correction
+                        </label>
+                      </div>
+                      {tabState.dark.cosmeticCorrection && (
+                        <div className="mb-4">
+                          <label className="block font-medium mb-1 text-blue-100">Correction Method</label>
+                          <select
+                            className="bg-[#181c23] text-white border border-[#232946] rounded px-3 py-2 mt-1"
+                            value={tabState.dark.cosmeticMethod}
+                            onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, cosmeticMethod: e.target.value } }))}
+                          >
+                            {COSMETIC_METHODS.map((m: { value: string; label: string }) => (
+                              <option key={m.value} value={m.value}>{m.label}</option>
+                            ))}
+                          </select>
+                          <div className="mt-4">
+                            <label className="block font-medium mb-1 text-blue-100">Threshold</label>
+                            <input
+                              type="range"
+                              min="0"
+                              max="1"
+                              step="0.01"
+                              value={tabState.dark.cosmeticThreshold}
+                              onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, cosmeticThreshold: Number(e.target.value) } }))}
+                              className="w-40 accent-blue-600"
                             />
-                            Auto
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span tabIndex={0}><Info className="w-4 h-4 text-blue-300 cursor-pointer" /></span>
-                              </TooltipTrigger>
-                              <TooltipContent side="top">
-                                {`Auto: Estimate scaling factor from image statistics. Uncheck to enter a manual value.`}
-                              </TooltipContent>
-                            </Tooltip>
-                          </label>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span tabIndex={0}><Info className="w-4 h-4 text-blue-300 cursor-pointer" /></span>
-                            </TooltipTrigger>
-                            <TooltipContent side="top">
-                              {tabState.dark.darkScalingAuto
-                                ? 'Auto-scaling will estimate the best factor based on your data.'
-                                : 'Manual: Enter a scaling factor (default 1.0 = no scaling).'}
-                            </TooltipContent>
-                          </Tooltip>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              max="1"
+                              value={tabState.dark.cosmeticThreshold}
+                              onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, cosmeticThreshold: Number(e.target.value) } }))}
+                              className="border rounded px-2 py-1 w-20 bg-[#181c23] text-white border-[#232946] ml-2"
+                            />
+                          </div>
                         </div>
                       )}
-                    </div>
-                    {/* Bias Subtraction Toggle */}
-                    <div className="mb-4">
-                      <label className="block font-medium mb-1 text-blue-100 flex items-center gap-2">
-                        Bias Subtraction
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span tabIndex={0}><Info className="w-4 h-4 text-blue-300 cursor-pointer" /></span>
-                          </TooltipTrigger>
-                          <TooltipContent side="top">
-                            Enable to subtract master bias from darks. Default: on for most CCD/CMOS cameras. Disable only if your camera does not require bias subtraction.
-                          </TooltipContent>
-                        </Tooltip>
-                      </label>
-                      <label className="inline-flex items-center gap-2 text-blue-200">
-                        <input type="checkbox" checked={tabState.dark.biasSubtraction} onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, biasSubtraction: e.target.checked } }))} className="accent-blue-600" />
-                        Enable
-                      </label>
-                    </div>
-                    {/* Amp Glow Suppression Toggle */}
-                    <div className="mb-4">
-                      <label className="block font-medium mb-1 text-blue-100 flex items-center gap-2">
-                        Amp Glow Suppression
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span tabIndex={0}><Info className="w-4 h-4 text-blue-300 cursor-pointer" /></span>
-                          </TooltipTrigger>
-                          <TooltipContent side="top">
-                            Enable to reduce amplifier glow artifacts. Default: off. Enable if you see amp glow in your darks/lights.
-                          </TooltipContent>
-                        </Tooltip>
-                      </label>
-                      <label className="inline-flex items-center gap-2 text-blue-200">
-                        <input type="checkbox" checked={tabState.dark.ampGlowSuppression} onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, ampGlowSuppression: e.target.checked } }))} className="accent-blue-600" />
-                        Enable
-                      </label>
-                    </div>
-                    {/* Temperature Matching Toggle */}
-                    <div className="mb-4">
-                      <label className="block font-medium mb-1 text-blue-100 flex items-center gap-2">
-                        Temperature Matching
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span tabIndex={0}><Info className="w-4 h-4 text-blue-300 cursor-pointer" /></span>
-                          </TooltipTrigger>
-                          <TooltipContent side="top">
-                            Enable to only use darks matching the temperature of your lights. Default: on if you have temperature data. Improves calibration accuracy.
-                          </TooltipContent>
-                        </Tooltip>
-                      </label>
-                      <label className="inline-flex items-center gap-2 text-blue-200">
-                        <input type="checkbox" checked={tabState.dark.tempMatching} onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, tempMatching: e.target.checked } }))} className="accent-blue-600" />
-                        Enable
-                      </label>
-                    </div>
-                    {/* Exposure Time Matching Toggle */}
-                    <div className="mb-4">
-                      <label className="block font-medium mb-1 text-blue-100 flex items-center gap-2">
-                        Exposure Time Matching
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span tabIndex={0}><Info className="w-4 h-4 text-blue-300 cursor-pointer" /></span>
-                          </TooltipTrigger>
-                          <TooltipContent side="top">
-                            Enable to only use darks matching the exposure time of your lights. Default: on if you have matching darks. Improves calibration accuracy.
-                          </TooltipContent>
-                        </Tooltip>
-                      </label>
-                      <label className="inline-flex items-center gap-2 text-blue-200">
-                        <input type="checkbox" checked={tabState.dark.exposureMatching} onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, exposureMatching: e.target.checked } }))} className="accent-blue-600" />
-                        Enable
-                      </label>
-                    </div>
-                    {/* Cosmetic Correction and Custom Rejection (for all advanced) */}
-                    <div className="mb-4 flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        id="cosmeticCorrection"
-                        checked={tabState.dark.cosmeticCorrection}
-                        onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, cosmeticCorrection: e.target.checked } }))}
-                        className="mr-2 accent-blue-600"
-                      />
-                      <label htmlFor="cosmeticCorrection" className="font-medium text-blue-100 flex items-center gap-2">
-                        Cosmetic Correction
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span tabIndex={0}><Info className="w-4 h-4 text-blue-300 cursor-pointer" /></span>
-                          </TooltipTrigger>
-                          <TooltipContent side="top">
-                            Removes hot/cold pixels and cosmetic defects. Default: off. Enable if you see many hot/cold pixels in your frames.
-                          </TooltipContent>
-                        </Tooltip>
-                      </label>
-                    </div>
-                    {tabState.dark.cosmeticCorrection && (
+                      {/* Custom Rejection Expression */}
                       <div className="mb-4">
-                        <label className="block font-medium mb-1 text-blue-100 flex items-center gap-2">
-                          Correction Method
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span tabIndex={0}><Info className="w-4 h-4 text-blue-300 cursor-pointer" /></span>
-                            </TooltipTrigger>
-                            <TooltipContent side="top">
-                              Choose the method for cosmetic correction. Hot Pixel Map is fast; L.A.Cosmic is more thorough but slower.
-                            </TooltipContent>
-                          </Tooltip>
-                        </label>
-                        <select
-                          className="bg-[#181c23] text-white border border-[#232946] rounded px-3 py-2 mt-1"
-                          value={tabState.dark.cosmeticMethod}
-                          onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, cosmeticMethod: e.target.value } }))}
-                        >
-                          {COSMETIC_METHODS.map((m: { value: string; label: string }) => (
-                            <option key={m.value} value={m.value}>{m.label}</option>
-                          ))}
-                        </select>
-                        <div className="mt-4">
-                          <label className="block font-medium mb-1 text-blue-100 flex items-center gap-2">
-                            Threshold
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span tabIndex={0}><Info className="w-4 h-4 text-blue-300 cursor-pointer" /></span>
-                              </TooltipTrigger>
-                              <TooltipContent side="top">
-                                Adjust the sensitivity for defect detection. Default: 0.5. Lower for stricter correction, higher for more permissive.
-                              </TooltipContent>
-                            </Tooltip>
+                        <label className="block font-medium mb-1 text-blue-100">Custom Rejection Expression</label>
+                        <input
+                          type="text"
+                          className="border rounded px-3 py-2 w-full bg-[#181c23] text-white border-[#232946]"
+                          value={tabState.dark.customRejection}
+                          onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, customRejection: e.target.value } }))}
+                          placeholder="e.g. value > 5000"
+                        />
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
+              {/* Master Flat Tab */}
+              {selectedType === 'flat' && (
+                <>
+                  {/* Beginner/Advanced toggle for Flat */}
+                  <div className="flex items-center mb-4 gap-4">
+                    <span className="font-medium text-blue-200">Beginner</span>
+                    <label className="inline-flex relative items-center cursor-pointer">
+                      <input type="checkbox" className="sr-only peer" checked={tabState.flat.advanced} onChange={e => setTabState(prev => ({ ...prev, flat: { ...prev.flat, advanced: e.target.checked } }))} />
+                      <div className="w-10 h-5 bg-gray-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:bg-blue-600 transition-all flex items-center justify-start peer-checked:justify-end">
+                        {!tabState.flat.advanced && <span className="w-3 h-3 bg-white rounded-full ml-1" />}
+                        {tabState.flat.advanced && <span className="w-3 h-3 bg-blue-300 rounded-full mr-1" />}
+                      </div>
+                    </label>
+                    <span className="font-medium text-blue-200">Advanced</span>
+                  </div>
+                  {/* Beginner mode: only show stacking method (Median, Mean) */}
+                  {!tabState.flat.advanced && (
+                    <div className="mb-4">
+                      <label className="block font-medium mb-1 text-blue-100">Stacking Method</label>
+                      <div className="flex flex-col gap-2">
+                        {BASIC_STACKING_METHODS.map(m => (
+                          <label key={m.value} className="flex items-center gap-2 text-blue-200">
+                            <input
+                              type="radio"
+                              name="flatStackingMethod"
+                              value={m.value}
+                              checked={tabState.flat.stackingMethod === m.value}
+                              onChange={() => setTabState(prev => ({
+                                ...prev,
+                                flat: {
+                                  ...prev.flat,
+                                  stackingMethod: m.value,
+                                }
+                              }))}
+                              className="accent-blue-600"
+                            />
+                            <span>{m.label}</span>
                           </label>
-                          <input
-                            type="range"
-                            min="0"
-                            max="1"
-                            step="0.01"
-                            value={tabState.dark.cosmeticThreshold}
-                            onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, cosmeticThreshold: Number(e.target.value) } }))}
-                            className="w-40 accent-blue-600"
-                          />
-                          <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            max="1"
-                            value={tabState.dark.cosmeticThreshold}
-                            onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, cosmeticThreshold: Number(e.target.value) } }))}
-                            className="border rounded px-2 py-1 w-20 bg-[#181c23] text-white border-[#232946] ml-2"
-                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {/* Advanced mode: all flat options */}
+                  {tabState.flat.advanced && (
+                    <>
+                      <div className="mb-4">
+                        <label className="block font-medium mb-1 text-blue-100">Stacking Method</label>
+                        <div className="flex flex-col gap-2">
+                          {ADVANCED_DARK_STACKING_METHODS.map(m => (
+                            <label key={m.value} className="flex items-center gap-2 text-blue-200">
+                              <input
+                                type="radio"
+                                name="flatStackingMethod"
+                                value={m.value}
+                                checked={tabState.flat.stackingMethod === m.value}
+                                onChange={() => setTabState(prev => ({
+                                  ...prev,
+                                  flat: {
+                                    ...prev.flat,
+                                    stackingMethod: m.value,
+                                  }
+                                }))}
+                                className="accent-blue-600"
+                              />
+                              <span>{m.label}</span>
+                            </label>
+                          ))}
                         </div>
                       </div>
-                    )}
-                    {/* Custom Rejection Expression */}
-                    <div className="mb-4">
-                      <label className="block font-medium mb-1 text-blue-100 flex items-center gap-2">
-                        Custom Rejection Expression
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span tabIndex={0}><Info className="w-4 h-4 text-blue-300 cursor-pointer" /></span>
-                          </TooltipTrigger>
-                          <TooltipContent side="top">
-                            Optional: Enter a custom outlier rejection rule/expression. For advanced users only.
-                          </TooltipContent>
-                        </Tooltip>
-                      </label>
-                      <input
-                        type="text"
-                        value={tabState.dark.customRejection}
-                        onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, customRejection: e.target.value } }))}
-                        className="border rounded px-2 py-1 w-full bg-[#181c23] text-white border-[#232946]"
-                        placeholder="Optional rejection rule"
-                      />
-                    </div>
-                  </div>
-                </div>
+                      {/* Cosmetic Correction (optional) */}
+                      <div className="mb-4 flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          id="cosmeticCorrectionFlat"
+                          checked={tabState.flat.cosmeticCorrection}
+                          onChange={e => setTabState(prev => ({ ...prev, flat: { ...prev.flat, cosmeticCorrection: e.target.checked } }))}
+                          className="mr-2 accent-blue-600"
+                        />
+                        <label htmlFor="cosmeticCorrectionFlat" className="font-medium text-blue-100 flex items-center gap-2">
+                          Cosmetic Correction
+                        </label>
+                      </div>
+                      {tabState.flat.cosmeticCorrection && (
+                        <div className="mb-4">
+                          <label className="block font-medium mb-1 text-blue-100">Correction Method</label>
+                          <select
+                            className="bg-[#181c23] text-white border border-[#232946] rounded px-3 py-2 mt-1"
+                            value={tabState.flat.cosmeticMethod}
+                            onChange={e => setTabState(prev => ({ ...prev, flat: { ...prev.flat, cosmeticMethod: e.target.value } }))}
+                          >
+                            {COSMETIC_METHODS.map((m: { value: string; label: string }) => (
+                              <option key={m.value} value={m.value}>{m.label}</option>
+                            ))}
+                          </select>
+                          <div className="mt-4">
+                            <label className="block font-medium mb-1 text-blue-100">Threshold</label>
+                            <input
+                              type="range"
+                              min="0"
+                              max="1"
+                              step="0.01"
+                              value={tabState.flat.cosmeticThreshold}
+                              onChange={e => setTabState(prev => ({ ...prev, flat: { ...prev.flat, cosmeticThreshold: Number(e.target.value) } }))}
+                              className="w-40 accent-blue-600"
+                            />
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              max="1"
+                              value={tabState.flat.cosmeticThreshold}
+                              onChange={e => setTabState(prev => ({ ...prev, flat: { ...prev.flat, cosmeticThreshold: Number(e.target.value) } }))}
+                              className="border rounded px-2 py-1 w-20 bg-[#181c23] text-white border-[#232946] ml-2"
+                            />
+                          </div>
+                        </div>
+                      )}
+                      {/* Custom Rejection Expression */}
+                      <div className="mb-4">
+                        <label className="block font-medium mb-1 text-blue-100">Custom Rejection Expression</label>
+                        <input
+                          type="text"
+                          className="border rounded px-3 py-2 w-full bg-[#181c23] text-white border-[#232946]"
+                          value={tabState.flat.customRejection}
+                          onChange={e => setTabState(prev => ({ ...prev, flat: { ...prev.flat, customRejection: e.target.value } }))}
+                          placeholder="e.g. value > 5000"
+                        />
+                      </div>
+                    </>
+                  )}
+                </>
               )}
             </div>
             {/* Create Master Button with extra margin */}
@@ -1068,21 +1327,31 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
           <div className="w-3/5 bg-[#10131a] rounded-2xl p-10 border border-[#232946]/60 flex flex-col items-center shadow-xl h-full">
             <h3 className="text-xl font-bold mb-6 text-white">{FRAME_TYPES.find(f => f.key === selectedType)?.label} Preview</h3>
             <div className="w-full h-96 bg-[#232946] rounded-2xl flex items-center justify-center text-3xl text-blue-200 border-2 border-[#232946] mb-10 shadow-lg">
-              {previewUrl ? (
+              {previewLoadings[selectedType] ? (
+                <div className="flex flex-col items-center justify-center w-full h-full">
+                  <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent mb-4" />
+                  <p className="text-blue-200 text-lg">Loading preview...</p>
+                </div>
+              ) : previewUrls[selectedType] ? (
                 <Image
-                  src={previewUrl}
+                  src={previewUrls[selectedType] as string}
                   alt={`${FRAME_TYPES.find(f => f.key === selectedType)?.label} Preview`}
                   className="w-full h-full object-contain rounded-2xl"
                   style={{ background: '#232946' }}
                   width={384}
                   height={384}
+                  onLoad={() => setPreviewLoadings(prev => ({ ...prev, [selectedType]: false }))}
                   onError={e => {
-                    console.error('Image failed to load:', previewUrl, e);
-                    setPreviewUrl(null);
+                    console.error('Image failed to load:', previewUrls[selectedType], e);
+                    setPreviewUrls(prev => ({ ...prev, [selectedType]: null }));
+                    setPreviewLoadings(prev => ({ ...prev, [selectedType]: false }));
                   }}
                 />
               ) : (
-                'SA'
+                <div className="w-full h-full flex flex-col items-center justify-center animate-pulse">
+                  <div className="w-1/2 h-1/2 bg-blue-900/30 rounded-2xl" />
+                  <span className="mt-4 text-blue-400">No preview available</span>
+                </div>
               )}
             </div>
             {/* Remove the Show Histogram button and replace with an icon */}
