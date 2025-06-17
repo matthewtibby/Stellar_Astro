@@ -27,6 +27,7 @@ import matplotlib.pyplot as plt
 import tempfile
 from .supabase_io import download_file, upload_file, get_public_url, list_files
 import astroscrappy
+import time
 
 # --- Stacking Methods ---
 def load_ccd_list(file_list):
@@ -40,10 +41,12 @@ def load_numpy_list(file_list):
 def stack_frames(file_list: List[str], method: str = 'median', sigma_clip: Optional[float] = None) -> np.ndarray:
     """
     Stack FITS files using the specified method.
-    method: 'mean', 'median', 'sigma', 'winsorized', 'linear_fit', 'minmax', 'adaptive'
+    method: 'mean', 'median', 'sigma', 'winsorized', 'linear_fit', 'minmax', 'adaptive', 'superbias'
     sigma_clip: threshold for sigma clipping (if used)
+    'superbias': PCA-based bias modeling (PixInsight-style)
     """
-    print(f"[LOG] Entered stack_frames with {len(file_list)} files, method={method}, sigma_clip={sigma_clip}", flush=True)
+    print(f"[LOG] stack_frames START: {len(file_list)} files, method={method}, sigma_clip={sigma_clip}", flush=True)
+    t0 = time.time()
     if method in ['mean', 'median', 'sigma']:
         ccd_list = load_ccd_list(file_list)
         print(f"[LOG] Loaded CCD list for stacking. Length: {len(ccd_list)}", flush=True)
@@ -101,34 +104,60 @@ def stack_frames(file_list: List[str], method: str = 'median', sigma_clip: Optio
                 result[i] = np.mean(arr_flat[:, i])
         return result.reshape(arr.shape[1:])
     elif method == 'adaptive':
-        # Layman's explanation:
-        # Adaptive stacking gives more weight to frames that are more consistent (less noisy) at each pixel.
-        # If the variance is very small, the weight can become huge, so we set a minimum variance to avoid this.
-        # This keeps the output on the same scale as the input and prevents weirdly low results.
-        arr = arr.astype(np.float64)
-        var = np.var(arr, axis=0)
-        var = np.maximum(var, 1.0)  # Floor variance to avoid division by zero or tiny numbers
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            weights = 1.0 / var
-        weights_sum = np.sum(weights, axis=0)
-        weights_sum[weights_sum == 0] = 1.0
-        weighted = np.sum(arr * weights, axis=0) / weights_sum
-        # Debug: print some stats
-        print(f"[adaptive] var: min={np.min(var)}, max={np.max(var)}, mean={np.mean(var):.2f}")
-        print(f"[adaptive] weights: min={np.min(weights)}, max={np.max(weights)}, mean={np.mean(weights):.2e}")
-        return weighted
+        # Analyze frames and select the best stacking method and parameters
+        print(f"[adaptive] Analyzing frames for adaptive stacking...", flush=True)
+        stats = analyze_frames(file_list)
+        rec_method, rec_sigma, reason = recommend_stacking(stats, user_method='median')
+        print(f"[adaptive] Selected method: {rec_method}, sigma: {rec_sigma}, reason: {reason}", flush=True)
+        # Call stack_frames recursively with the recommended method and sigma
+        result = stack_frames(file_list, method=rec_method, sigma_clip=rec_sigma)
+        print(f"[adaptive] Adaptive stacking complete using method '{rec_method}'", flush=True)
+        return result
+    elif method == 'superbias':
+        try:
+            from sklearn.decomposition import PCA
+        except ImportError:
+            raise ImportError("scikit-learn is required for superbias/PCA modeling. Please install it with 'pip install scikit-learn'.")
+        n_frames, height, width = arr.shape
+        print(f"[superbias] Input array shape: {arr.shape}, dtype: {arr.dtype}", flush=True)
+        arr_flat = arr.reshape(n_frames, -1)
+        print(f"[superbias] Flattened array shape: {arr_flat.shape}", flush=True)
+        n_components = min(8, n_frames)  # Use up to 8 principal components or n_frames
+        print(f"[superbias] Performing PCA with n_components={n_components}", flush=True)
+        t_pca = time.time()
+        pca = PCA(n_components=n_components)
+        pca.fit(arr_flat)
+        print(f"[superbias] PCA fit complete in {time.time() - t_pca:.2f}s", flush=True)
+        superbias_flat = pca.mean_
+        superbias = superbias_flat.reshape(height, width)
+        print(f"[superbias] Output shape: {superbias.shape}, dtype: {superbias.dtype}", flush=True)
+        print(f"[superbias] PCA explained variance ratio: {pca.explained_variance_ratio_}", flush=True)
+        print(f"[LOG] stack_frames END (superbias): elapsed {time.time() - t0:.2f}s", flush=True)
+        return superbias
     else:
         raise ValueError(f"Unknown stacking method: {method}")
+    print(f"[LOG] stack_frames END: method={method}, elapsed {time.time() - t0:.2f}s", flush=True)
 
 # --- Cosmetic Correction (Stub) ---
-def cosmetic_correction(data: np.ndarray, method: str = 'hot_pixel_map', threshold: float = 5.0, la_cosmic_params: dict = None) -> np.ndarray:
+def cosmetic_correction(data: np.ndarray, method: str = 'hot_pixel_map', threshold: float = 5.0, la_cosmic_params: dict = None, bad_pixel_map: np.ndarray = None) -> np.ndarray:
     """
     Remove hot/cold pixels or cosmetic defects.
     method: 'hot_pixel_map', 'la_cosmic', etc.
     threshold: N-sigma for hot/cold pixel detection (default 5.0)
     la_cosmic_params: dict of extra params for astroscrappy
+    bad_pixel_map: boolean numpy array (True=bad pixel)
     """
+    # Apply BPM first if provided
+    if bad_pixel_map is not None:
+        mask = bad_pixel_map.astype(bool)
+        if np.any(mask):
+            padded = np.pad(data, 1, mode='reflect')
+            corrected = data.copy()
+            idxs = np.argwhere(mask)
+            for y, x in idxs:
+                neighborhood = padded[y:y+3, x:x+3]
+                corrected[y, x] = np.median(neighborhood)
+            data = corrected
     if method == 'hot_pixel_map':
         # Compute mean and std of the image
         mean = np.mean(data)
@@ -169,14 +198,14 @@ def cosmetic_correction(data: np.ndarray, method: str = 'hot_pixel_map', thresho
     return data
 
 # --- Main Calibration Worker Entrypoint ---
-def create_master_frame(file_list: List[str], method: str = 'median', sigma_clip: Optional[float] = None, cosmetic: bool = False, cosmetic_method: str = 'hot_pixel_map', cosmetic_threshold: float = 0.5, **kwargs) -> np.ndarray:
+def create_master_frame(file_list: List[str], method: str = 'median', sigma_clip: Optional[float] = None, cosmetic: bool = False, cosmetic_method: str = 'hot_pixel_map', cosmetic_threshold: float = 0.5, la_cosmic_params: dict = None, bad_pixel_map: np.ndarray = None, **kwargs) -> np.ndarray:
     print(f"[LOG] Entered create_master_frame with {len(file_list)} files, method={method}, sigma_clip={sigma_clip}, cosmetic={cosmetic}, cosmetic_method={cosmetic_method}", flush=True)
     print(f"[LOG] File list: {file_list}", flush=True)
     stacked = stack_frames(file_list, method, sigma_clip)
     print(f"[LOG] Finished stacking frames. Shape: {stacked.shape}, dtype: {stacked.dtype}", flush=True)
     if cosmetic:
         print(f"[LOG] Starting cosmetic correction: method={cosmetic_method}, threshold={cosmetic_threshold}", flush=True)
-        stacked = cosmetic_correction(stacked, cosmetic_method, cosmetic_threshold)
+        stacked = cosmetic_correction(stacked, cosmetic_method, cosmetic_threshold, la_cosmic_params, bad_pixel_map)
         print(f"[LOG] Finished cosmetic correction.", flush=True)
     print(f"[LOG] Returning master frame. Stats: min={np.min(stacked)}, max={np.max(stacked)}, mean={np.mean(stacked):.2f}, median={np.median(stacked):.2f}, std={np.std(stacked):.2f}", flush=True)
     return stacked
@@ -286,7 +315,7 @@ def main():
     parser.add_argument('--input-paths', nargs='+', required=True, help='Supabase storage paths for input FITS files')
     parser.add_argument('--output-bucket', required=True, help='Supabase bucket for output files')
     parser.add_argument('--output-base', required=True, help='Base path (no extension) for output files in Supabase')
-    parser.add_argument('--method', choices=['mean', 'median', 'sigma', 'winsorized', 'linear_fit', 'minmax', 'adaptive'], default='median', help='Stacking method')
+    parser.add_argument('--method', choices=['mean', 'median', 'sigma', 'winsorized', 'linear_fit', 'minmax', 'adaptive', 'superbias'], default='median', help='Stacking method')
     parser.add_argument('--sigma', type=float, default=3.0, help='Sigma threshold for sigma clipping (if used)')
     parser.add_argument('--cosmetic', action='store_true', help='Enable cosmetic correction')
     parser.add_argument('--cosmetic-method', choices=['hot_pixel_map', 'la_cosmic'], default='hot_pixel_map', help='Cosmetic correction method')

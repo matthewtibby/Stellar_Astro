@@ -561,6 +561,22 @@ async def run_calibration_job(job: CalibrationJobRequest, job_id: str):
             if job_status and job_status.get("status") == "cancelled":
                 print(f"[{datetime.utcnow().isoformat()}] [CANCEL] Job {job_id} cancelled after validation.")
                 return
+            # --- Prepare bad pixel map if provided ---
+            bad_pixel_map = None
+            bpm_path = job.settings.get('badPixelMapPath')
+            if bpm_path:
+                # Download BPM FITS file to tempdir
+                bpm_local_path = os.path.join(tmpdir, 'bad_pixel_map.fits')
+                try:
+                    download_file(job.input_bucket, bpm_path, bpm_local_path)
+                    with fits.open(bpm_local_path) as hdul:
+                        bpm_data = hdul[0].data
+                        # Consider nonzero as bad pixel
+                        bad_pixel_map = (bpm_data != 0)
+                    print(f"[LOG] Loaded bad pixel map from {bpm_path}, shape={bad_pixel_map.shape}, bad pixels={np.sum(bad_pixel_map)}", flush=True)
+                except Exception as e:
+                    print(f"[ERROR] Failed to load bad pixel map: {e}", flush=True)
+                    bad_pixel_map = None
             # --- Proceed with stacking only valid files ---
             print(f"[{datetime.utcnow().isoformat()}] [BG] {len(valid_files)} valid frames, {len(rejected_files)} rejected.")
             stats = analyze_frames(valid_files)
@@ -586,7 +602,8 @@ async def run_calibration_job(job: CalibrationJobRequest, job_id: str):
                 cosmetic=cosmetic,
                 cosmetic_method=cosmetic_method,
                 cosmetic_threshold=cosmetic_threshold,
-                la_cosmic_params=la_cosmic_params
+                la_cosmic_params=la_cosmic_params,
+                bad_pixel_map=bad_pixel_map
             )
             # Cancellation check after stacking
             job_status = await get_job(job_id)

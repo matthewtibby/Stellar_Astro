@@ -34,10 +34,21 @@ const BASIC_STACKING_METHODS = [
 ];
 
 const ADVANCED_DARK_STACKING_METHODS = [
+  { value: 'adaptive', label: 'Auto-stacking (recommended)' },
   { value: 'median', label: 'Median' },
   { value: 'mean', label: 'Mean' },
   { value: 'winsorized', label: 'Winsorized Sigma Clipping' },
   { value: 'linear_fit', label: 'Linear Fit Clipping' },
+];
+
+// Add to ADVANCED_DARK_STACKING_METHODS for bias only
+const ADVANCED_BIAS_STACKING_METHODS = [
+  { value: 'adaptive', label: 'Auto-stacking (recommended)' },
+  { value: 'median', label: 'Median' },
+  { value: 'mean', label: 'Mean' },
+  { value: 'winsorized', label: 'Winsorized Sigma Clipping' },
+  { value: 'linear_fit', label: 'Linear Fit Clipping' },
+  { value: 'superbias', label: 'Superbias (PCA modeling, advanced)' },
 ];
 
 const MASTER_STATUS: Record<MasterType, MasterStatus> = {
@@ -121,6 +132,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
       cosmeticThreshold: 0.5,
       customRejection: '',
       pixelRejectionAlgorithm: 'sigma',
+      badPixelMapPath: '',
     },
     flat: {
       advanced: false,
@@ -131,6 +143,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
       cosmeticMethod: 'hot_pixel_map',
       cosmeticThreshold: 0.5,
       customRejection: '',
+      badPixelMapPath: '',
     },
     bias: {
       advanced: false,
@@ -140,6 +153,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
       cosmeticMethod: 'hot_pixel_map',
       cosmeticThreshold: 0.5,
       customRejection: '',
+      badPixelMapPath: '',
     },
   });
   const [showHistogram, setShowHistogram] = useState(false);
@@ -181,6 +195,9 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
   // Timing state for calibration duration
   const [calibrationStart, setCalibrationStart] = useState<number | null>(null);
   const [calibrationEnd, setCalibrationEnd] = useState<number | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
   // Add a warning if userId is undefined
   useEffect(() => {
@@ -300,6 +317,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
       cosmeticThreshold: 0.5,
       customRejection: '',
       pixelRejectionAlgorithm: 'sigma',
+      badPixelMapPath: '',
     },
     flat: {
       advanced: false,
@@ -310,6 +328,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
       cosmeticMethod: 'hot_pixel_map',
       cosmeticThreshold: 0.5,
       customRejection: '',
+      badPixelMapPath: '',
     },
     bias: {
       advanced: false,
@@ -319,6 +338,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
       cosmeticMethod: 'hot_pixel_map',
       cosmeticThreshold: 0.5,
       customRejection: '',
+      badPixelMapPath: '',
     },
   };
 
@@ -370,6 +390,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
         projectId,
         userId,
         // ...add other required fields
+        ...(tabState.bias.badPixelMapPath && { badPixelMapPath: tabState.bias.badPixelMapPath }),
       };
       const res = await fetch(`/api/projects/${projectId}/calibration-jobs/submit`, {
         method: 'POST',
@@ -600,6 +621,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
           cosmeticThreshold: 0.5,
           customRejection: '',
           pixelRejectionAlgorithm: 'sigma',
+          badPixelMapPath: '',
         };
       case 'flat':
         return {
@@ -611,6 +633,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
           cosmeticMethod: 'hot_pixel_map',
           cosmeticThreshold: 0.5,
           customRejection: '',
+          badPixelMapPath: '',
         };
       case 'bias':
       default:
@@ -622,6 +645,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
           cosmeticMethod: 'hot_pixel_map',
           cosmeticThreshold: 0.5,
           customRejection: '',
+          badPixelMapPath: '',
         };
     }
   };
@@ -673,6 +697,85 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
     };
     fetchLatest();
   }, [projectId, selectedType]);
+
+  // Beginner stacking methods for bias, dark, and flat
+  const BEGINNER_BIAS_STACKING_METHODS = [
+    { value: 'adaptive', label: 'Auto-stacking (recommended)' },
+    { value: 'median', label: 'Median' },
+    { value: 'mean', label: 'Mean' },
+  ];
+  const BEGINNER_DARK_STACKING_METHODS = [
+    { value: 'adaptive', label: 'Auto-stacking (recommended)' },
+    { value: 'median', label: 'Median' },
+    { value: 'mean', label: 'Mean' },
+  ];
+  const BEGINNER_FLAT_STACKING_METHODS = [
+    { value: 'adaptive', label: 'Auto-stacking (recommended)' },
+    { value: 'median', label: 'Median' },
+    { value: 'mean', label: 'Mean' },
+  ];
+
+  // Load tabState from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('calibrationTabState_v1');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        setTabState(parsed);
+      } catch (e) {
+        // Ignore parse errors
+      }
+    }
+  }, []);
+  // Save tabState to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('calibrationTabState_v1', JSON.stringify(tabState));
+  }, [tabState]);
+
+  // Fetch latest master preview on mount and when selectedType/projectId/userId changes
+  useEffect(() => {
+    async function fetchPreview() {
+      setPreviewLoading(true);
+      setPreviewError(null);
+      setPreviewUrl(null);
+      try {
+        // List all files in the master frame folder for the selected type
+        const folder = `${userId}/${projectId}/${selectedType}/`;
+        const { data: files, error } = await supabase.storage.from('calibrated-frames').list(folder);
+        if (error || !files || files.length === 0) {
+          setPreviewError('No preview found. Run calibration to generate a master frame.');
+          setPreviewUrl(null);
+          setPreviewLoading(false);
+          return;
+        }
+        // Filter for .png files only
+        const pngFiles = files.filter(f => f.name.toLowerCase().endsWith('.png'));
+        if (pngFiles.length === 0) {
+          setPreviewError('No preview found. Run calibration to generate a master frame.');
+          setPreviewUrl(null);
+          setPreviewLoading(false);
+          return;
+        }
+        // Sort by last_modified (descending) and pick the most recent
+        pngFiles.sort((a, b) => new Date(b.updated_at || b.created_at || 0).getTime() - new Date(a.updated_at || a.created_at || 0).getTime());
+        const latestPng = pngFiles[0];
+        const path = `${folder}${latestPng.name}`;
+        const { data } = await supabase.storage.from('calibrated-frames').getPublicUrl(path);
+        if (!data?.publicUrl) {
+          setPreviewError('No preview found. Run calibration to generate a master frame.');
+          setPreviewUrl(null);
+        } else {
+          setPreviewUrl(data.publicUrl);
+        }
+      } catch (e) {
+        setPreviewError('Error loading preview.');
+        setPreviewUrl(null);
+      } finally {
+        setPreviewLoading(false);
+      }
+    }
+    fetchPreview();
+  }, [selectedType, projectId, userId]);
 
   return (
     <TooltipProvider>
@@ -835,7 +938,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                     <div className="mb-4">
                       <label className="block font-medium mb-1 text-blue-100">Stacking Method</label>
                       <div className="flex flex-col gap-2">
-                        {BASIC_STACKING_METHODS.map(m => (
+                        {BEGINNER_BIAS_STACKING_METHODS.map(m => (
                           <label key={m.value} className="flex items-center gap-2 text-blue-200">
                             <input
                               type="radio"
@@ -863,7 +966,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                       <div className="mb-4">
                         <label className="block font-medium mb-1 text-blue-100">Stacking Method</label>
                         <div className="flex flex-col gap-2">
-                          {ADVANCED_DARK_STACKING_METHODS.map(m => (
+                          {ADVANCED_BIAS_STACKING_METHODS.map(m => (
                             <label key={m.value} className="flex items-center gap-2 text-blue-200">
                               <input
                                 type="radio"
@@ -880,10 +983,45 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                                 className="accent-blue-600"
                               />
                               <span>{m.label}</span>
+                              {m.value === 'superbias' && (
+                                <span className="text-xs text-blue-300 ml-2">Principal component analysis (PCA) modeling for bias frames. For advanced users.</span>
+                              )}
                             </label>
                           ))}
                         </div>
                       </div>
+                      {/* Bad Pixel Map upload UI should be here, not inside the map */}
+                      {tabState.bias.cosmeticCorrection && (
+                        <div className="mb-4">
+                          <label className="block font-medium mb-1 text-blue-100">Bad Pixel Map (optional, FITS)</label>
+                          <input
+                            type="file"
+                            accept=".fits,.fit,.fts"
+                            onChange={async (e) => {
+                              if (e.target.files && e.target.files[0]) {
+                                // Upload to Supabase or your storage bucket
+                                const file = e.target.files[0];
+                                // TODO: Replace with your upload logic
+                                // Example: const path = await uploadBpmFile(file, projectId, userId);
+                                // For now, just set the file name as a placeholder
+                                setTabState(prev => ({ ...prev, bias: { ...prev.bias, badPixelMapPath: file.name } }));
+                              }
+                            }}
+                            className="block w-full text-sm text-blue-100 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-700 file:text-blue-100 hover:file:bg-blue-800"
+                          />
+                          {tabState.bias.badPixelMapPath && (
+                            <div className="flex items-center gap-2 mt-2">
+                              <span className="text-xs text-blue-300">Selected: {tabState.bias.badPixelMapPath}</span>
+                              <button
+                                type="button"
+                                className="text-xs text-red-400 underline"
+                                onClick={() => setTabState(prev => ({ ...prev, bias: { ...prev.bias, badPixelMapPath: '' } }))}
+                              >Clear</button>
+                            </div>
+                          )}
+                          <span className="text-xs text-blue-400">Advanced: Upload a FITS bad pixel map. Bad pixels will be replaced with local median.</span>
+                        </div>
+                      )}
                       {/* Cosmetic Correction (optional) */}
                       <div className="mb-4 flex items-center gap-2">
                         <input
@@ -1006,7 +1144,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                     <div className="mb-4">
                       <label className="block font-medium mb-1 text-blue-100">Stacking Method</label>
                       <div className="flex flex-col gap-2">
-                        {BASIC_STACKING_METHODS.map(m => (
+                        {BEGINNER_DARK_STACKING_METHODS.map(m => (
                           <label key={m.value} className="flex items-center gap-2 text-blue-200">
                             <input
                               type="radio"
@@ -1223,7 +1361,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                     <div className="mb-4">
                       <label className="block font-medium mb-1 text-blue-100">Stacking Method</label>
                       <div className="flex flex-col gap-2">
-                        {BASIC_STACKING_METHODS.map(m => (
+                        {BEGINNER_FLAT_STACKING_METHODS.map(m => (
                           <label key={m.value} className="flex items-center gap-2 text-blue-200">
                             <input
                               type="radio"
@@ -1447,42 +1585,18 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
           {/* Right: Master Preview/Status */}
           <div className="w-3/5 bg-[#10131a] rounded-2xl p-10 border border-[#232946]/60 flex flex-col items-center shadow-xl h-full">
             <h3 className="text-xl font-bold mb-6 text-white">{FRAME_TYPES.find(f => f.key === selectedType)?.label} Preview</h3>
-            <div className="w-full h-96 bg-[#232946] rounded-2xl flex items-center justify-center text-3xl text-blue-200 border-2 border-[#232946] mb-10 shadow-lg">
-              {previewLoadings[selectedType] ? (
-                <div className="flex flex-col items-center justify-center w-full h-full">
-                  <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent mb-4" />
-                  <p className="text-blue-200 text-lg">Loading preview...</p>
-                </div>
-              ) : previewUrls[selectedType] ? (
-                <Image
-                  src={previewUrls[selectedType] as string}
-                  alt={`${FRAME_TYPES.find(f => f.key === selectedType)?.label} Preview`}
-                  className="w-full h-full object-contain rounded-2xl"
-                  style={{ background: '#232946' }}
-                  width={384}
-                  height={384}
-                  onLoad={() => {
-                    setPreviewLoadings(prev => ({ ...prev, [selectedType]: false }));
-                    setJobProgress(100); // Ensure progress bar is full when preview loads
-                    setCalibrationEnd(Date.now());
-                    if (calibrationStart) {
-                      const elapsed = ((Date.now() - calibrationStart) / 1000).toFixed(2);
-                      console.log(`Calibration time (user-perceived): ${elapsed} seconds`);
-                    }
-                  }}
-                  onError={e => {
-                    console.error('Image failed to load:', previewUrls[selectedType], e);
-                    setPreviewUrls(prev => ({ ...prev, [selectedType]: null }));
-                    setPreviewLoadings(prev => ({ ...prev, [selectedType]: false }));
-                  }}
-                />
-              ) : (
-                <div className="w-full h-full flex flex-col items-center justify-center animate-pulse">
-                  <div className="w-1/2 h-1/2 bg-blue-900/30 rounded-2xl" />
-                  <span className="mt-4 text-blue-400">No preview available</span>
-                </div>
-              )}
-            </div>
+            {previewLoading ? (
+              <div className="flex items-center gap-2 mt-4 text-blue-500">
+                <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>
+                <span>Loading preview...</span>
+              </div>
+            ) : previewUrl ? (
+              <img src={previewUrl} alt="Master preview" className="rounded-lg shadow-lg max-w-full max-h-96" />
+            ) : (
+              <div className="text-blue-200 text-center mt-8">
+                {previewError || 'No preview available. Run calibration to generate a master frame.'}
+              </div>
+            )}
             {/* Remove the Show Histogram button and replace with an icon */}
             <div className="mb-8 flex items-center justify-center w-full">
               <Tooltip>
