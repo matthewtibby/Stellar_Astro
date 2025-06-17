@@ -2,7 +2,7 @@ import sys
 from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 import logging
-from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Request, Form
+from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Request, Form, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from astropy.io import fits
@@ -31,6 +31,7 @@ import traceback
 import uuid
 from datetime import datetime
 import glob
+from concurrent.futures import ThreadPoolExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -354,6 +355,9 @@ class CalibrationJobRequest(BaseModel):
     metadata: dict = None
     test_name: str = None
 
+class CancelJobRequest(BaseModel):
+    jobId: str
+
 # --- JOB STATUS/RESULTS DB HELPERS ---
 async def insert_job(job_id, status, error=None, result=None, diagnostics=None, warnings=None, progress=None):
     conn = await get_db()
@@ -388,165 +392,150 @@ async def get_job(job_id):
         await conn.close()
 
 async def update_job_progress(job_id, progress):
-    await insert_job(job_id, status=None, progress=progress)
+    # 3. Preserve current job status
+    job = await get_job(job_id)
+    status = job['status'] if job and 'status' in job else None
+    await insert_job(job_id, status=status, progress=progress)
+
+@app.post("/jobs/cancel")
+async def cancel_job(payload: CancelJobRequest):
+    job_id = payload.jobId
+    await insert_job(job_id, status="cancelled", progress=100, error="Job cancelled by user.")
+    return {"job_id": job_id, "status": "cancelled"}
 
 async def run_calibration_job(job: CalibrationJobRequest, job_id: str):
-    print("[DEBUG] Entered run_calibration_job", flush=True)
+    # Check for cancellation before starting
+    job_status = await get_job(job_id)
+    if job_status and job_status.get("status") == "cancelled":
+        print(f"[CANCEL] Job {job_id} was cancelled before starting.")
+        return
+    print(f"[{datetime.utcnow().isoformat()}] [BG] Starting calibration job: {job.dict()} (job_id={job_id})", flush=True)
     try:
-        print(f"[BG] Starting calibration job: {job.dict()} (job_id={job_id})", flush=True)
         await insert_job(job_id, status="running", progress=0)
         fits_input_paths = [p for p in job.input_paths if p.lower().endswith((".fit", ".fits"))]
         fits_input_paths = fits_input_paths[:10]
-        print(f"[BG] FITS files to process: {fits_input_paths}")
+        print(f"[{datetime.utcnow().isoformat()}] [BG] FITS files to process: {fits_input_paths}")
         timestamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
         output_base_with_ts = f"{job.output_base}_{timestamp}"
         with tempfile.TemporaryDirectory() as tmpdir:
-            print(f"[BG] Created tempdir: {tmpdir}")
+            print(f"[{datetime.utcnow().isoformat()}] [BG] Created tempdir: {tmpdir}")
             local_files = []
             local_light_files = []
             light_input_paths = getattr(job, 'light_input_paths', None)
-            # --- Download dark frames ---
-            for i, spath in enumerate(fits_input_paths):
-                local_path = os.path.join(tmpdir, f"input_{i}.fits")
-                print(f"[BG] Downloading {spath} to {local_path}")
+            dark_scaling = job.settings.get('darkScaling', False)
+            # --- Parallel file download optimization ---
+            from time import time as _time
+            download_start = _time()
+            def download_one(args):
+                bucket, spath, local_path = args
                 try:
-                    download_file(job.input_bucket, spath, local_path)
+                    download_file(bucket, spath, local_path)
+                    return local_path
                 except Exception as e:
-                    tb = traceback.format_exc()
-                    print(f"[ERROR] Failed to download {spath}: {e}\n{tb}")
-                    await insert_job(job_id, status="error", error=f"Download failed: {e}", progress=0)
-                    return
-                local_files.append(local_path)
-            print(f"[BG] Downloaded {len(local_files)} files.")
-            # --- Bias subtraction logic for master dark ---
+                    print(f"[{datetime.utcnow().isoformat()}] [ERROR] Failed to download {spath}: {e}")
+                    return None
+            download_args = [(job.input_bucket, spath, os.path.join(tmpdir, f"input_{i}.fits")) for i, spath in enumerate(fits_input_paths)]
+            with ThreadPoolExecutor(max_workers=8) as executor:
+                local_files = list(executor.map(download_one, download_args))
+            local_files = [f for f in local_files if f is not None]
+            print(f"[{datetime.utcnow().isoformat()}] [OPT] Downloaded {len(local_files)} files in {(_time() - download_start):.2f} seconds.")
+            if light_input_paths:
+                light_input_paths = light_input_paths[:10]
+                for i, spath in enumerate(light_input_paths):
+                    job_status = await get_job(job_id)
+                    if job_status and job_status.get("status") == "cancelled":
+                        print(f"[CANCEL] Job {job_id} cancelled during light file download.")
+                        return
+                    if not spath.lower().endswith((".fit", ".fits")):
+                        continue
+                    local_path = os.path.join(tmpdir, f"light_{i}.fits")
+                    print(f"[{datetime.utcnow().isoformat()}] [BG] Downloading light {spath} to {local_path}")
+                    try:
+                        download_file(job.input_bucket, spath, local_path)
+                    except Exception as e:
+                        tb = traceback.format_exc()
+                        print(f"[{datetime.utcnow().isoformat()}] [ERROR] Failed to download light {spath}: {e}\n{tb}")
+                        continue
+                    local_light_files.append(local_path)
+            await update_job_progress(job_id, 30)
+            # Cancellation check after downloads
+            job_status = await get_job(job_id)
+            if job_status and job_status.get("status") == "cancelled":
+                print(f"[CANCEL] Job {job_id} cancelled after downloads.")
+                return
+            # Bias subtraction logic after download
             frame_type = infer_frame_type(local_files)
             bias_subtraction = job.settings.get('biasSubtraction', False)
             master_bias_path = job.settings.get('masterBiasPath')
             master_bias_local = None
             if frame_type == 'dark' and bias_subtraction:
-                print(f"[BG] Bias subtraction enabled.")
-                # Manual selection
+                print(f"[{datetime.utcnow().isoformat()}] [BG] Bias subtraction enabled.")
                 if master_bias_path:
-                    print(f"[BG] Using manually selected master bias: {master_bias_path}")
+                    print(f"[{datetime.utcnow().isoformat()}] [BG] Using manually selected master bias: {master_bias_path}")
                     master_bias_local = os.path.join(tmpdir, 'master_bias.fits')
                     try:
                         download_file(job.input_bucket, master_bias_path, master_bias_local)
                     except Exception as e:
                         tb = traceback.format_exc()
-                        print(f"[ERROR] Failed to download master bias: {e}\n{tb}")
-                        await insert_job(job_id, status="error", error=f"Master bias download failed: {e}", progress=0)
+                        print(f"[{datetime.utcnow().isoformat()}] [ERROR] Failed to download master bias: {e}\n{tb}")
+                        await insert_job(job_id, status="failed", error=f"Master bias download failed: {e}", progress=0)
                         return
                 else:
-                    # Auto-select: look for master bias in this project
-                    print(f"[BG] Auto-selecting master bias for project {job.project_id}")
+                    print(f"[{datetime.utcnow().isoformat()}] [BG] Auto-selecting master bias for project {job.project_id}")
                     bias_prefix = f"{job.user_id}/{job.project_id}/master-bias/"
                     from .supabase_io import list_files
                     bias_files = list_files(job.input_bucket, bias_prefix)
                     bias_fits = [f for f in bias_files if f['name'].lower().endswith(('.fit', '.fits'))]
                     if not bias_fits:
-                        print(f"[ERROR] No master bias found for project {job.project_id}")
-                        await insert_job(job_id, status="error", error="No master bias found for this project.", progress=0)
+                        print(f"[{datetime.utcnow().isoformat()}] [ERROR] No master bias found for project {job.project_id}")
+                        await insert_job(job_id, status="failed", error="No master bias found for this project.", progress=0)
                         return
-                    # Pick the most recent (by name, or just first)
                     selected_bias = sorted(bias_fits, key=lambda f: f['name'], reverse=True)[0]
                     master_bias_path = bias_prefix + selected_bias['name']
                     master_bias_local = os.path.join(tmpdir, 'master_bias.fits')
-                    print(f"[BG] Auto-selected master bias: {master_bias_path}")
+                    print(f"[{datetime.utcnow().isoformat()}] [BG] Auto-selected master bias: {master_bias_path}")
                     try:
                         download_file(job.input_bucket, master_bias_path, master_bias_local)
                     except Exception as e:
                         tb = traceback.format_exc()
-                        print(f"[ERROR] Failed to download master bias: {e}\n{tb}")
-                        await insert_job(job_id, status="error", error=f"Master bias download failed: {e}", progress=0)
+                        print(f"[{datetime.utcnow().isoformat()}] [ERROR] Failed to download master bias: {e}\n{tb}")
+                        await insert_job(job_id, status="failed", error=f"Master bias download failed: {e}", progress=0)
                         return
-                # Subtract master bias from each dark frame
                 with fits.open(master_bias_local) as hdul:
                     bias_data = hdul[0].data.astype(np.float32)
                 bias_corrected_files = []
                 for i, dark_path in enumerate(local_files):
+                    # Cancellation check inside bias subtraction loop
+                    job_status = await get_job(job_id)
+                    if job_status and job_status.get("status") == "cancelled":
+                        print(f"[{datetime.utcnow().isoformat()}] [CANCEL] Job {job_id} cancelled during bias subtraction.")
+                        return
                     with fits.open(dark_path) as hdul:
                         dark_data = hdul[0].data.astype(np.float32)
                         if dark_data.shape != bias_data.shape:
-                            print(f"[ERROR] Shape mismatch: dark {dark_data.shape} vs bias {bias_data.shape}")
-                            await insert_job(job_id, status="error", error="Master bias and dark frame shape mismatch.", progress=0)
+                            print(f"[{datetime.utcnow().isoformat()}] [ERROR] Shape mismatch: dark {dark_data.shape} vs bias {bias_data.shape}")
+                            await insert_job(job_id, status="failed", error="Master bias and dark frame shape mismatch.", progress=0)
                             return
                         corrected = dark_data - bias_data
                         corrected_path = os.path.join(tmpdir, f"bias_corrected_{i}.fits")
                         fits.PrimaryHDU(corrected, header=hdul[0].header).writeto(corrected_path, overwrite=True)
                         bias_corrected_files.append(corrected_path)
                 local_files = bias_corrected_files
-            # --- Progress logic depends on settings ---
-            dark_scaling = job.settings.get('darkScaling', False)
-            if dark_scaling:
-                # Fine-grained progress for dark scaling jobs
-                total_files = len(fits_input_paths) + (len(light_input_paths) if light_input_paths else 0)
-                downloaded = 0
-                for i, spath in enumerate(fits_input_paths):
-                    local_path = os.path.join(tmpdir, f"input_{i}.fits")
-                    print(f"[BG] Downloading {spath} to {local_path}")
-                    try:
-                        download_file(job.input_bucket, spath, local_path)
-                    except Exception as e:
-                        tb = traceback.format_exc()
-                        print(f"[ERROR] Failed to download {spath}: {e}\n{tb}")
-                        await insert_job(job_id, status="error", error=f"Download failed: {e}", progress=0)
-                        return
-                    local_files.append(local_path)
-                    downloaded += 1
-                    pct = int(5 + 25 * downloaded / max(1, total_files))  # 5–30% for all downloads
-                    await update_job_progress(job_id, pct)
-                if light_input_paths:
-                    light_input_paths = light_input_paths[:10]
-                    for i, spath in enumerate(light_input_paths):
-                        if not spath.lower().endswith((".fit", ".fits")):
-                            continue
-                        local_path = os.path.join(tmpdir, f"light_{i}.fits")
-                        print(f"[BG] Downloading light {spath} to {local_path}")
-                        try:
-                            download_file(job.input_bucket, spath, local_path)
-                        except Exception as e:
-                            tb = traceback.format_exc()
-                            print(f"[ERROR] Failed to download light {spath}: {e}\n{tb}")
-                            continue
-                        local_light_files.append(local_path)
-                        downloaded += 1
-                        pct = int(5 + 25 * downloaded / max(1, total_files))
-                        await update_job_progress(job_id, pct)
-                await update_job_progress(job_id, 30)
-            else:
-                # Default logic for other algorithms/settings
-                for i, spath in enumerate(fits_input_paths):
-                    local_path = os.path.join(tmpdir, f"input_{i}.fits")
-                    print(f"[BG] Downloading {spath} to {local_path}")
-                    try:
-                        download_file(job.input_bucket, spath, local_path)
-                    except Exception as e:
-                        tb = traceback.format_exc()
-                        print(f"[ERROR] Failed to download {spath}: {e}\n{tb}")
-                        await insert_job(job_id, status="error", error=f"Download failed: {e}", progress=0)
-                        return
-                    local_files.append(local_path)
-                print(f"[BG] Downloaded {len(local_files)} files.")
-                if light_input_paths:
-                    light_input_paths = light_input_paths[:10]
-                    for i, spath in enumerate(light_input_paths):
-                        if not spath.lower().endswith((".fit", ".fits")):
-                            continue
-                        local_path = os.path.join(tmpdir, f"light_{i}.fits")
-                        print(f"[BG] Downloading light {spath} to {local_path}")
-                        try:
-                            download_file(job.input_bucket, spath, local_path)
-                        except Exception as e:
-                            tb = traceback.format_exc()
-                            print(f"[ERROR] Failed to download light {spath}: {e}\n{tb}")
-                            continue
-                        local_light_files.append(local_path)
-                await update_job_progress(job_id, 30)
+            # Cancellation check after bias subtraction
+            job_status = await get_job(job_id)
+            if job_status and job_status.get("status") == "cancelled":
+                print(f"[{datetime.utcnow().isoformat()}] [CANCEL] Job {job_id} cancelled after bias subtraction.")
+                return
             # --- Frame validation before stacking ---
-            print("[DEBUG] Validating frames...", flush=True)
+            print(f"[{datetime.utcnow().isoformat()}] [DEBUG] Validating frames...", flush=True)
             valid_files = []
             rejected_files = []
             for f in local_files:
+                # Cancellation check inside validation loop
+                job_status = await get_job(job_id)
+                if job_status and job_status.get("status") == "cancelled":
+                    print(f"[{datetime.utcnow().isoformat()}] [CANCEL] Job {job_id} cancelled during validation.")
+                    return
                 try:
                     with fits.open(f) as hdul:
                         header = hdul[0].header
@@ -557,27 +546,39 @@ async def run_calibration_job(job: CalibrationJobRequest, job_id: str):
                         else:
                             rejected_files.append((f, analysis.warnings))
                 except Exception as e:
-                    print(f"[ERROR] Exception during validation of {f}: {e}", flush=True)
+                    print(f"[{datetime.utcnow().isoformat()}] [ERROR] Exception during validation of {f}: {e}", flush=True)
                     traceback.print_exc()
                     rejected_files.append({'file': os.path.basename(f), 'reason': f'Error reading FITS: {e}'})
             if not valid_files:
-                await insert_job(job_id, status="error", error="No valid frames for stacking. All frames rejected.", progress=100, result={
+                await insert_job(job_id, status="failed", error="No valid frames for stacking. All frames rejected.", progress=100, result={
                     'used': 0,
                     'rejected': len(rejected_files),
                     'rejected_details': rejected_files
                 })
                 return
+            # Cancellation check after validation
+            job_status = await get_job(job_id)
+            if job_status and job_status.get("status") == "cancelled":
+                print(f"[{datetime.utcnow().isoformat()}] [CANCEL] Job {job_id} cancelled after validation.")
+                return
             # --- Proceed with stacking only valid files ---
-            print(f"[BG] {len(valid_files)} valid frames, {len(rejected_files)} rejected.")
+            print(f"[{datetime.utcnow().isoformat()}] [BG] {len(valid_files)} valid frames, {len(rejected_files)} rejected.")
             stats = analyze_frames(valid_files)
             # --- FIX: Define method and sigma from job.settings ---
             method = job.settings.get('stackingMethod', 'median')
             sigma = float(job.settings.get('sigmaThreshold', 3.0))
             cosmetic = job.settings.get('cosmetic', None)
-            # Extract cosmetic_method and cosmetic_threshold with defaults
             cosmetic_method = job.settings.get('cosmeticMethod', 'hot_pixel_map')
             cosmetic_threshold = float(job.settings.get('cosmeticThreshold', 0.5))
+            la_cosmic_params = None
+            if cosmetic_method == 'la_cosmic':
+                la_cosmic_params = job.settings.get('laCosmicParams', None)
             rec_method, rec_sigma, reason = recommend_stacking(stats, method, sigma)
+            # Cancellation check before stacking
+            job_status = await get_job(job_id)
+            if job_status and job_status.get("status") == "cancelled":
+                print(f"[{datetime.utcnow().isoformat()}] [CANCEL] Job {job_id} cancelled before stacking.")
+                return
             master = create_master_frame(
                 valid_files,
                 method=method,
@@ -587,84 +588,109 @@ async def run_calibration_job(job: CalibrationJobRequest, job_id: str):
                 cosmetic_threshold=cosmetic_threshold,
                 la_cosmic_params=la_cosmic_params
             )
+            # Cancellation check after stacking
+            job_status = await get_job(job_id)
+            if job_status and job_status.get("status") == "cancelled":
+                print(f"[{datetime.utcnow().isoformat()}] [CANCEL] Job {job_id} cancelled after stacking.")
+                return
             # --- Dark scaling logic ---
             if frame_type == 'dark' and dark_scaling:
                 from .calibration_worker import estimate_dark_scaling_factor
                 try:
-                    print(f"[BG] Calling estimate_dark_scaling_factor with {len(local_files)} darks and {len(local_light_files)} lights...")
+                    print(f"[{datetime.utcnow().isoformat()}] [BG] Calling estimate_dark_scaling_factor with {len(local_files)} darks and {len(local_light_files)} lights...")
                     if job.settings.get('darkScalingAuto', True):
                         await update_job_progress(job_id, 50)
                         scaling_factor = estimate_dark_scaling_factor(local_files, local_light_files if local_light_files else None)
-                        print(f"[BG] Auto-estimated dark scaling factor: {scaling_factor:.4f}")
+                        print(f"[{datetime.utcnow().isoformat()}] [BG] Auto-estimated dark scaling factor: {scaling_factor:.4f}")
                     else:
                         scaling_factor = float(job.settings.get('darkScalingFactor', 1.0))
-                        print(f"[BG] Manual dark scaling factor: {scaling_factor:.4f}")
+                        print(f"[{datetime.utcnow().isoformat()}] [BG] Manual dark scaling factor: {scaling_factor:.4f}")
                     master = master * scaling_factor
                     await update_job_progress(job_id, 60)
                 except Exception as e:
                     tb = traceback.format_exc()
-                    print(f"[ERROR] Exception in dark scaling: {e}\n{tb}")
-                    await insert_job(job_id, status="error", error=f"Dark scaling failed: {e}\n{tb}", progress=40)
+                    print(f"[{datetime.utcnow().isoformat()}] [ERROR] Exception in dark scaling: {e}\n{tb}")
+                    await insert_job(job_id, status="failed", error=f"Dark scaling failed: {e}\n{tb}", progress=40)
                     return
             else:
                 await update_job_progress(job_id, 60)
+            # Cancellation check before saving results
+            job_status = await get_job(job_id)
+            if job_status and job_status.get("status") == "cancelled":
+                print(f"[{datetime.utcnow().isoformat()}] [CANCEL] Job {job_id} cancelled before saving results.")
+                return
             fits_path = os.path.join(tmpdir, 'master.fits')
             png_path = os.path.join(tmpdir, 'master.png')
-            print(f"[BG] Running save_master_frame...")
+            print(f"[{datetime.utcnow().isoformat()}] [BG] Running save_master_frame...")
             save_master_frame(master, fits_path)
-            print(f"[BG] Running save_master_preview...")
+            print(f"[{datetime.utcnow().isoformat()}] [BG] Running save_master_preview...")
             save_master_preview(master, png_path)
             await update_job_progress(job_id, 75)
             fits_storage_path = output_base_with_ts + '.fits'
             png_storage_path = output_base_with_ts + '.png'
-            print(f"[BG] About to upload FITS to Supabase: {fits_storage_path}")
-            try:
-                upload_file(job.output_bucket, fits_storage_path, fits_path, public=False)
-            except Exception as e:
-                tb = traceback.format_exc()
-                print(f"[ERROR] Failed to upload FITS: {e}\n{tb}")
-                await insert_job(job_id, status="error", error=f"FITS upload failed: {e}", progress=75)
-                return
-            print(f"[BG] FITS file uploaded to Supabase: {fits_storage_path}")
-            print(f"[BG] About to upload PNG to Supabase: {png_storage_path}")
+            # --- Upload PNG preview first, notify frontend, then upload FITS in background ---
+            print(f"[{datetime.utcnow().isoformat()}] [BG] About to upload PNG to Supabase: {png_storage_path}")
             try:
                 preview_url = upload_file(job.output_bucket, png_storage_path, png_path, public=True)
             except Exception as e:
                 tb = traceback.format_exc()
-                print(f"[ERROR] Failed to upload PNG: {e}\n{tb}")
-                await insert_job(job_id, status="error", error=f"PNG upload failed: {e}", progress=80)
+                print(f"[{datetime.utcnow().isoformat()}] [ERROR] Failed to upload PNG: {e}\n{tb}")
+                await insert_job(job_id, status="failed", error=f"PNG upload failed: {e}", progress=80)
                 return
-            print(f"[BG] Preview PNG uploaded to: {png_storage_path}")
-            print(f"[BG] Preview public URL: {preview_url}")
-            await update_job_progress(job_id, 95)
-            await insert_job(job_id, status="complete", result={"preview_url": preview_url, "fits_path": fits_storage_path, "preview_png_path": png_storage_path}, diagnostics=stats, warnings=[], error=None, progress=100)
-            print(f"[BG] Calibration job {job_id} completed successfully.")
+            print(f"[{datetime.utcnow().isoformat()}] [BG] Preview PNG uploaded to: {png_storage_path}")
+            print(f"[{datetime.utcnow().isoformat()}] [BG] Preview public URL: {preview_url}")
+            await update_job_progress(job_id, 98)
+            # Mark job as success for the frontend as soon as preview is ready
+            await insert_job(job_id, status="success", result={"preview_url": preview_url, "preview_png_path": png_storage_path}, diagnostics=stats, warnings=[], error=None, progress=100)
+            print(f"[{datetime.utcnow().isoformat()}] [BG] Notified frontend of preview availability.")
+            # Now upload the FITS file in the background (does not block user)
+            def upload_fits_bg():
+                try:
+                    print(f"[{datetime.utcnow().isoformat()}] [BG] (background) About to upload FITS to Supabase: {fits_storage_path}")
+                    upload_file(job.output_bucket, fits_storage_path, fits_path, public=False)
+                    print(f"[{datetime.utcnow().isoformat()}] [BG] (background) FITS file uploaded to Supabase: {fits_storage_path}")
+                    # Optionally update job result with fits_path
+                    import asyncio
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    loop.run_until_complete(insert_job(job_id, status="success", result={"preview_url": preview_url, "fits_path": fits_storage_path, "preview_png_path": png_storage_path}, diagnostics=stats, warnings=[], error=None, progress=100))
+                    loop.close()
+                except Exception as e:
+                    print(f"[{datetime.utcnow().isoformat()}] [ERROR] (background) Failed to upload FITS: {e}")
+            import threading
+            threading.Thread(target=upload_fits_bg, daemon=True).start()
+            print(f"[{datetime.utcnow().isoformat()}] [BG] Calibration job {job_id} completed successfully.")
             # --- Feedback for frontend ---
-            await insert_job(job_id, status="success", progress=100, result={
+            # Merge previous result with used/rejected counts
+            job_status = await get_job(job_id)
+            current_result = json.loads(job_status.get("result") or "{}")
+            final_result = {
+                **current_result,
                 'used': len(valid_files),
                 'rejected': len(rejected_files),
                 'rejected_details': rejected_files
-            })
-            print("[DEBUG] Stacking/master frame creation complete.", flush=True)
-            print("[DEBUG] Post-processing complete.", flush=True)
+            }
+            await insert_job(job_id, status="success", progress=100, result=final_result)
+            print(f"[{datetime.utcnow().isoformat()}] [DEBUG] Stacking/master frame creation complete.", flush=True)
+            print(f"[{datetime.utcnow().isoformat()}] [DEBUG] Post-processing complete.", flush=True)
     except Exception as e:
-        print(f"[FATAL ERROR] Unexpected error in run_calibration_job: {e}", flush=True)
+        print(f"[{datetime.utcnow().isoformat()}] [FATAL ERROR] Unexpected error in run_calibration_job: {e}", flush=True)
         traceback.print_exc()
-        return { 'status': 'error', 'progress': 0, 'error': str(e) }
+        return { 'status': 'failed', 'progress': 0, 'error': str(e) }
 
 @app.post("/jobs/submit")
 async def submit_job(job: CalibrationJobRequest, request: Request, background_tasks: BackgroundTasks):
     try:
-        print(f"[API] /jobs/submit called. Raw body: {await request.body()}")
-        print(f"[API] Parsed job: {job.dict()}")
+        print(f"[{datetime.utcnow().isoformat()}] [API] /jobs/submit called. Raw body: {await request.body()}")
+        print(f"[{datetime.utcnow().isoformat()}] [API] Parsed job: {job.dict()}")
         job_id = f"job-{uuid.uuid4().hex[:8]}"
         await insert_job(job_id, status="queued", progress=0)
-        print(f"[API] Queued calibration job: {job_id}")
+        print(f"[{datetime.utcnow().isoformat()}] [API] Queued calibration job: {job_id}")
         background_tasks.add_task(run_calibration_job, job, job_id)
         return {"jobId": job_id}
     except Exception as e:
         tb = traceback.format_exc()
-        print(f"[API ERROR] Exception in /jobs/submit: {e}\n{tb}")
+        print(f"[{datetime.utcnow().isoformat()}] [API ERROR] Exception in /jobs/submit: {e}\n{tb}")
         return JSONResponse(status_code=500, content={"error": str(e), "traceback": tb})
 
 @app.get("/jobs/status")
@@ -685,8 +711,15 @@ async def get_job_results(job_id: str):
     job = await get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    if job["status"] != "complete":
-        raise HTTPException(status_code=202, detail="Job not complete")
+    if job["status"] != "success":
+        # 5. Add Retry-After header for 202
+        from fastapi.responses import Response
+        return Response(
+            content=json.dumps({"detail": "Job not complete"}),
+            status_code=202,
+            headers={"Retry-After": "2"},
+            media_type="application/json"
+        )
     # Parse the stringified JSON fields
     results = json.loads(job["result"]) if job["result"] else {}
     diagnostics = json.loads(job["diagnostics"]) if job.get("diagnostics") else {}
@@ -704,7 +737,7 @@ async def get_job_progress(job_id: str):
     job = await get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    print(f"[API] Progress for {job_id}: {job.get('progress', 0)} status={job['status']}")
+    print(f"[{datetime.utcnow().isoformat()}] [API] Progress for {job_id}: {job.get('progress', 0)} status={job['status']}")
     return {"job_id": job_id, "progress": job.get("progress", 0), "status": job["status"]}
 
 def generate_png_preview(fits_path, png_path, downsample_to=512):
@@ -716,8 +749,9 @@ def generate_png_preview(fits_path, png_path, downsample_to=512):
             data = data[::factor, ::factor]
         vmin, vmax = np.percentile(data, [0.1, 99.9])
         data = np.clip(data, vmin, vmax)
+        # 8. Handle NaNs/infs robustly
         norm = (data - vmin) / (vmax - vmin) * 255
-        norm = np.nan_to_num(norm)
+        norm = np.nan_to_num(norm)  # Already handles NaNs/infs
         img = Image.fromarray(norm.astype(np.uint8), mode='L')
         img.save(png_path, format='PNG')
 

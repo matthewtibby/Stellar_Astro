@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Info, Loader2, CheckCircle2, XCircle, RefreshCw, Star, Moon, Sun, Zap, BarChart3 } from 'lucide-react';
+import { Info, Loader2, CheckCircle2, XCircle, RefreshCw, Star, Moon, Sun, Zap, BarChart3, X } from 'lucide-react';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './ui/tooltip';
 import {
   Dialog,
@@ -176,6 +176,11 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
   const [autoPopulated, setAutoPopulated] = useState<{ readnoise?: boolean; gain?: boolean; satlevel?: boolean }>({});
   const [lastAutoPopulated, setLastAutoPopulated] = useState<{ readnoise?: number; gain?: number; satlevel?: number }>({});
   const [lastMeta, setLastMeta] = useState<any>(null);
+  // Add a state for showing a cancel message
+  const [cancelMessage, setCancelMessage] = useState<string | null>(null);
+  // Timing state for calibration duration
+  const [calibrationStart, setCalibrationStart] = useState<number | null>(null);
+  const [calibrationEnd, setCalibrationEnd] = useState<number | null>(null);
 
   // Add a warning if userId is undefined
   useEffect(() => {
@@ -332,6 +337,8 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
 
   // Helper to submit calibration job
   const submitCalibrationJob = async (settings: any) => {
+    setCalibrationStart(Date.now()); // Record start time
+    setCalibrationEnd(null); // Reset end time
     setJobProgress(0);
     setJobStatus('queued');
     try {
@@ -449,6 +456,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
           }
           if (data.status === 'success' || data.status === 'complete') {
             setJobStatus('success');
+            setJobProgress(100); // Ensure progress bar is full when job is done
             setShowSuccess(true);
             setTimeout(() => setShowSuccess(false), 2500);
             clearInterval(interval);
@@ -571,6 +579,100 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
       satlevel: lastMeta.satlevel !== undefined,
     });
   };
+
+  // Add this helper to get default tab state for a given type
+  const getDefaultTabState = (type: MasterType) => {
+    switch (type) {
+      case 'dark':
+        return {
+          advanced: false,
+          stackingMethod: 'median',
+          sigmaThreshold: '3.0',
+          darkScaling: false,
+          darkScalingAuto: true,
+          darkScalingFactor: 1.0,
+          biasSubtraction: false,
+          ampGlowSuppression: false,
+          tempMatching: false,
+          exposureMatching: false,
+          cosmeticCorrection: false,
+          cosmeticMethod: 'hot_pixel_map',
+          cosmeticThreshold: 0.5,
+          customRejection: '',
+          pixelRejectionAlgorithm: 'sigma',
+        };
+      case 'flat':
+        return {
+          advanced: false,
+          stackingMethod: 'mean',
+          sigmaThreshold: '3.0',
+          weightParam: '',
+          cosmeticCorrection: false,
+          cosmeticMethod: 'hot_pixel_map',
+          cosmeticThreshold: 0.5,
+          customRejection: '',
+        };
+      case 'bias':
+      default:
+        return {
+          advanced: false,
+          stackingMethod: 'median',
+          sigmaThreshold: '3.0',
+          cosmeticCorrection: false,
+          cosmeticMethod: 'hot_pixel_map',
+          cosmeticThreshold: 0.5,
+          customRejection: '',
+        };
+    }
+  };
+
+  // Add this handler near other job handlers
+  const handleCancelJob = async () => {
+    if (!jobId) return;
+    try {
+      const res = await fetch(`/api/projects/${projectId}/calibration-jobs/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobId }),
+      });
+      const data = await res.json();
+      if (res.ok && data.status === 'cancelled') {
+        setTabState(prev => ({ ...prev, [selectedType]: getDefaultTabState(selectedType) }));
+        setJobStatus('idle');
+        setJobProgress(0);
+        setJobId(null);
+        setCancelMessage('Calibration cancelled successfully.');
+        setTimeout(() => setCancelMessage(null), 3500);
+      } else {
+        setCancelMessage('Failed to cancel calibration.');
+        setTimeout(() => setCancelMessage(null), 3500);
+      }
+    } catch (e) {
+      setCancelMessage('Failed to cancel calibration.');
+      setTimeout(() => setCancelMessage(null), 3500);
+    }
+  };
+
+  // Add this useEffect after the other useEffects
+  useEffect(() => {
+    // Only run if no job is currently running/queued for this type
+    if (jobStatus === 'queued' || jobStatus === 'running') return;
+    const fetchLatest = async () => {
+      try {
+        const res = await fetch(`/api/projects/${projectId}/calibration-jobs/latest?type=${selectedType}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.status === 'success' && data.preview_url) {
+            setPreviewUrls(prev => ({ ...prev, [selectedType]: data.preview_url }));
+            setJobStatus('success');
+          }
+        }
+      } catch (e) {
+        // Ignore errors (no previous job)
+      }
+    };
+    fetchLatest();
+  }, [projectId, selectedType]);
 
   return (
     <TooltipProvider>
@@ -1252,21 +1354,40 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
             </button>
             {/* Progress Bar for Calibration Job */}
             {(jobStatus === 'queued' || jobStatus === 'running') && (
-              <div className="w-full mt-2 mb-4">
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-xs text-blue-200">Calibration Progress</span>
-                  <span className="text-xs text-blue-300">{jobProgress}%</span>
+              <div className="w-full mt-2 mb-4 flex items-center justify-between">
+                <div className="flex-1">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-xs text-blue-200">Calibration Progress</span>
+                    <span className="text-xs text-blue-300">{jobProgress}%</span>
+                  </div>
+                  {/* Progress status message */}
+                  <div className="mb-1">
+                    <span className="text-xs text-blue-400 font-medium">{getProgressMessage(jobProgress)}</span>
+                  </div>
+                  <div className="w-full bg-gray-700 rounded h-2">
+                    <div
+                      className="h-2 rounded bg-blue-500 transition-all duration-500"
+                      style={{ width: `${jobProgress}%` }}
+                    />
+                  </div>
                 </div>
-                {/* Progress status message */}
-                <div className="mb-1">
-                  <span className="text-xs text-blue-400 font-medium">{getProgressMessage(jobProgress)}</span>
-                </div>
-                <div className="w-full bg-gray-700 rounded h-2">
-                  <div
-                    className="h-2 rounded bg-blue-500 transition-all duration-500"
-                    style={{ width: `${jobProgress}%` }}
-                  />
-                </div>
+                {/* Cancel X icon with tooltip */}
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        className="ml-3 p-1 rounded-full hover:bg-red-600/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+                        onClick={handleCancelJob}
+                        disabled={!jobId}
+                        aria-label="Cancel Calibration"
+                        type="button"
+                      >
+                        <X className="w-5 h-5 text-red-500" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>Cancel Calibration</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </div>
             )}
             {realFiles.length === 0 && (
@@ -1340,7 +1461,15 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                   style={{ background: '#232946' }}
                   width={384}
                   height={384}
-                  onLoad={() => setPreviewLoadings(prev => ({ ...prev, [selectedType]: false }))}
+                  onLoad={() => {
+                    setPreviewLoadings(prev => ({ ...prev, [selectedType]: false }));
+                    setJobProgress(100); // Ensure progress bar is full when preview loads
+                    setCalibrationEnd(Date.now());
+                    if (calibrationStart) {
+                      const elapsed = ((Date.now() - calibrationStart) / 1000).toFixed(2);
+                      console.log(`Calibration time (user-perceived): ${elapsed} seconds`);
+                    }
+                  }}
                   onError={e => {
                     console.error('Image failed to load:', previewUrls[selectedType], e);
                     setPreviewUrls(prev => ({ ...prev, [selectedType]: null }));
@@ -1407,6 +1536,12 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
               </DialogFooter>
             </DialogContent>
           </Dialog>
+        )}
+        {/* Show a positive message if cancelMessage is set */}
+        {cancelMessage && (
+          <div className="w-full mb-2 px-4 py-2 rounded bg-green-700 text-white text-center text-sm animate-fade-in">
+            {cancelMessage}
+          </div>
         )}
       </div>
     </TooltipProvider>
