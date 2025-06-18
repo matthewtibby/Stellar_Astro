@@ -29,7 +29,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       project_id: projectId || req.query.projectId,
       user_id: userId || 'test-user',
       metadata,
-      test_name
+      test_name,
+      ...(req.body.selectedType ? { frame_type: req.body.selectedType } : {})
     };
 
     console.log('[API] Submitting calibration job to Python worker:', payload);

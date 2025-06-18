@@ -51,12 +51,6 @@ const ADVANCED_BIAS_STACKING_METHODS = [
   { value: 'superbias', label: 'Superbias (PCA modeling, advanced)' },
 ];
 
-const MASTER_STATUS: Record<MasterType, MasterStatus> = {
-  dark: 'complete',
-  flat: 'in_progress',
-  bias: 'not_started',
-};
-
 const STATUS_COLORS: Record<MasterStatus, string> = {
   complete: 'bg-green-500',
   in_progress: 'bg-amber-400',
@@ -198,6 +192,35 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [masterStats, setMasterStats] = useState<any>(null);
+
+  // Add this effect after state declarations
+  useEffect(() => {
+    // Fetch latest preview for all frame types
+    async function fetchAllPreviews() {
+      const types: MasterType[] = ['bias', 'dark', 'flat'];
+      const newPreviewUrls: { [K in MasterType]?: string | null } = {};
+      await Promise.all(types.map(async (type) => {
+        try {
+          const res = await fetch(`/api/projects/${projectId}/calibration-jobs/latest-result?userId=${userId}&frameType=${type}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data?.result?.preview_url) {
+              newPreviewUrls[type] = data.result.preview_url;
+            } else {
+              newPreviewUrls[type] = null;
+            }
+          } else {
+            newPreviewUrls[type] = null;
+          }
+        } catch {
+          newPreviewUrls[type] = null;
+        }
+      }));
+      setPreviewUrls(newPreviewUrls);
+    }
+    fetchAllPreviews();
+  }, [projectId, userId]);
 
   // Add a warning if userId is undefined
   useEffect(() => {
@@ -389,6 +412,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
         advanced_settings: settings.advanced_settings,
         projectId,
         userId,
+        selectedType, // <-- add this line
         // ...add other required fields
         ...(tabState.bias.badPixelMapPath && { badPixelMapPath: tabState.bias.badPixelMapPath }),
       };
@@ -515,6 +539,9 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
             setPreviewUrls(prev => ({ ...prev, [selectedType]: data.results.preview_url }));
             setPreviewLoadings(prev => ({ ...prev, [selectedType]: false }));
             console.log('[Preview] Setting previewUrl:', data.results.preview_url);
+            setPreviewUrl(data.results.preview_url);
+            console.log('[Preview] Setting previewLoading to false after setting previewUrl');
+            setPreviewLoading(false);
             // --- Notification logic for used/rejected frames ---
             if (data.results && (typeof data.results.used === 'number' || typeof data.results.rejected === 'number')) {
               let message = `Calibration complete: ${data.results.used ?? 0} frames used.`;
@@ -777,6 +804,55 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
     fetchPreview();
   }, [selectedType, projectId, userId]);
 
+  // Fetch latest master stats when previewUrl changes
+  useEffect(() => {
+    async function fetchStats() {
+      setMasterStats(null);
+      if (!previewUrl) return;
+      try {
+        // Fetch the latest calibration job result for this project/type
+        const res = await fetch(`/api/projects/${projectId}/calibration-jobs/latest-result?userId=${userId}&frameType=${selectedType}`);
+        console.log('[Diagnostics] /latest-result response:', res);
+        if (res.ok) {
+          const data = await res.json();
+          console.log('[Diagnostics] /latest-result data:', data);
+          console.log('[Diagnostics] data.result:', data.result);
+          console.log('[Diagnostics] data.diagnostics:', data.diagnostics);
+          if (data?.result?.master_stats) {
+            console.log('[Diagnostics] Setting masterStats from data.result.master_stats:', data.result.master_stats);
+            setMasterStats(data.result.master_stats);
+            if (data?.result?.preview_url) {
+              setPreviewUrls(prev => ({ ...prev, [selectedType]: data.result.preview_url }));
+            }
+          } else if (data?.diagnostics) {
+            console.log('[Diagnostics] Setting masterStats from data.diagnostics:', data.diagnostics);
+            setMasterStats(data.diagnostics);
+            if (data?.result?.preview_url) {
+              setPreviewUrls(prev => ({ ...prev, [selectedType]: data.result.preview_url }));
+            }
+          } else {
+            console.log('[Diagnostics] No diagnostics found in response.');
+          }
+        } else {
+          console.log('[Diagnostics] /latest-result not ok:', res.status);
+        }
+      } catch (e) {
+        console.error('[Diagnostics] Error fetching stats:', e);
+      }
+    }
+    fetchStats();
+  }, [previewUrl, projectId, selectedType, userId]);
+
+  // Dynamically compute master status for each type
+  function getMasterStatus(type: MasterType): MasterStatus {
+    // If we have a preview URL for this type, it's complete
+    if (previewUrls[type]) return 'complete';
+    // If a job is running for this type, it's in progress
+    if ((jobStatus === 'queued' || jobStatus === 'running') && selectedType === type) return 'in_progress';
+    // Otherwise, not started
+    return 'not_started';
+  }
+
   return (
     <TooltipProvider>
       <div className="flex flex-col h-full bg-[#0a0d13]/80 rounded-2xl shadow-2xl border border-[#232946]/60 p-6 backdrop-blur-md">
@@ -842,12 +918,12 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
               className={`flex items-center gap-1 px-3 py-1.5 rounded-full font-semibold text-base transition-all border-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0d13] shadow-sm ${selectedType === ft.key ? 'bg-gradient-to-r from-blue-900 via-blue-700 to-blue-900 text-white shadow-lg' : 'bg-[#10131a] text-blue-200 hover:bg-[#181c23]'}`}
               style={{ position: 'relative', minWidth: '120px', transition: 'background 0.3s, color 0.3s, box-shadow 0.3s' }}
             >
-              <span className={`absolute left-2 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full ${STATUS_COLORS[MASTER_STATUS[ft.key as MasterType]]}`}></span>
+              <span className={`absolute left-2 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full ${STATUS_COLORS[getMasterStatus(ft.key as MasterType)]}`}></span>
               <span className="ml-4 flex items-center gap-1">
                 {FRAME_TYPE_ICONS[ft.key as MasterType]}
                 <span className="drop-shadow font-bold text-base tracking-tight">{ft.label}</span>
               </span>
-              <span className={`ml-1 text-xs ${selectedType === ft.key ? 'text-white' : 'text-blue-300'}`}>{STATUS_LABELS[MASTER_STATUS[ft.key as MasterType]]}</span>
+              <span className={`ml-1 text-xs ${selectedType === ft.key ? 'text-white' : 'text-blue-300'}`}>{STATUS_LABELS[getMasterStatus(ft.key as MasterType)]}</span>
             </button>
           ))}
         </div>
@@ -860,7 +936,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                 {FRAME_TYPE_ICONS[selectedType]}
                 <h3 className="text-lg font-bold text-white tracking-tight drop-shadow">{FRAME_TYPES.find(f => f.key === selectedType)?.label} Calibration</h3>
                 <span className="ml-2 px-2 py-1 rounded-full bg-green-900 text-green-300 text-xs font-semibold flex items-center gap-1 shadow">
-                  <CheckCircle2 className="w-3 h-3" /> {STATUS_LABELS[MASTER_STATUS[selectedType]]}
+                  <CheckCircle2 className="w-3 h-3" /> {STATUS_LABELS[getMasterStatus(selectedType)]}
                 </span>
               </div>
             </div>
@@ -1591,29 +1667,63 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                 <span>Loading preview...</span>
               </div>
             ) : previewUrl ? (
-              <img src={previewUrl} alt="Master preview" className="rounded-lg shadow-lg max-w-full max-h-96" />
+              (() => { console.log('[PreviewPanel JSX] Rendering <img> with previewUrl:', previewUrl); return null; })(),
+              <div className="flex flex-row items-center w-full max-w-3xl">
+                {/* Histogram toggle icon */}
+                <button
+                  className="p-3 ml-2 rounded-full bg-gray-900/80 hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 shadow-lg flex-shrink-0"
+                  style={{ minWidth: 44, minHeight: 44, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  onClick={() => setShowHistogram((v: boolean): boolean => !v)}
+                  aria-label="Show Histogram"
+                >
+                  <BarChart3 className="w-7 h-7 text-blue-200" />
+                </button>
+                {/* Main image preview, relative for overlay */}
+                <div className="relative flex-grow flex justify-center">
+                  <img src={previewUrl} alt="Master preview" className="rounded-lg shadow-lg max-w-full max-h-96" />
+                  {/* Histogram overlay */}
+                  {showHistogram && masterStats?.histogram && (
+                    <svg className="absolute left-0 bottom-0 w-full h-32 pointer-events-none z-10" viewBox="0 0 400 80">
+                      {(() => {
+                        const hist = masterStats.histogram;
+                        const max = Math.max(...hist);
+                        const minVal = masterStats.min;
+                        const maxVal = masterStats.max;
+                        // X axis: 0 to 400, Y axis: 0 to 80
+                        const points = hist.map((v: number, i: number) => `${(i / (hist.length - 1)) * 400},${80 - (v / max) * 70}`).join(' ');
+                        return <>
+                          {/* Axis bar */}
+                          <line x1={20} y1={80} x2={380} y2={80} stroke="#888" strokeWidth="2" opacity="0.5" />
+                          {/* Histogram curve */}
+                          <polyline points={hist.map((v: number, i: number) => `${20 + (i / (hist.length - 1)) * 360},${80 - (v / max) * 70}`).join(' ')} fill="none" stroke="#00ffcc" strokeWidth="2.5" opacity="0.95" />
+                          {/* 0 and max labels, smaller and flush with bar ends */}
+                          <text x={20} y={75} fill="#aaa" fontSize="11" fontWeight="500" textAnchor="start">0</text>
+                          <text x={380} y={75} fill="#aaa" fontSize="11" fontWeight="500" textAnchor="end">{maxVal}</text>
+                        </>;
+                      })()}
+                    </svg>
+                  )}
+                </div>
+                {/* Info table styled like ASIAIR, right-aligned */}
+                {showHistogram && masterStats && (
+                  <div className="ml-4 mt-2 bg-black/80 rounded-lg p-2 text-xs text-white border border-gray-700 shadow-lg min-w-[90px] max-h-32 flex flex-col justify-start flex-shrink-0">
+                    <div className="font-semibold text-gray-200 mb-1 text-right">Information</div>
+                    <div className="flex flex-col gap-0.5 text-right">
+                      <div><span className="text-gray-400">Max</span> <span className="ml-2 font-mono">{masterStats.max}</span></div>
+                      <div><span className="text-gray-400">Min</span> <span className="ml-2 font-mono">{masterStats.min}</span></div>
+                      <div><span className="text-gray-400">Avg</span> <span className="ml-2 font-mono">{masterStats.mean.toFixed(0)}</span></div>
+                      <div><span className="text-gray-400">Std</span> <span className="ml-2 font-mono">{masterStats.std.toFixed(0)}</span></div>
+                    </div>
+                  </div>
+                )}
+              </div>
             ) : (
               <div className="text-blue-200 text-center mt-8">
                 {previewError || 'No preview available. Run calibration to generate a master frame.'}
               </div>
             )}
             {/* Remove the Show Histogram button and replace with an icon */}
-            <div className="mb-8 flex items-center justify-center w-full">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    className="p-3 rounded-full bg-gray-800 hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
-                    onClick={() => setShowHistogram(v => !v)}
-                    aria-label="Show Histogram"
-                  >
-                    <BarChart3 className="w-7 h-7 text-blue-200" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="top">
-                  {histogramInfo[selectedType]}
-                </TooltipContent>
-              </Tooltip>
-            </div>
+ 
           </div>
         </div>
         {/* Action Buttons */}

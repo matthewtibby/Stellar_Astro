@@ -354,6 +354,7 @@ class CalibrationJobRequest(BaseModel):
     user_id: str = None
     metadata: dict = None
     test_name: str = None
+    frame_type: str = None
 
 class CancelJobRequest(BaseModel):
     jobId: str
@@ -362,24 +363,23 @@ class CancelJobRequest(BaseModel):
 async def insert_job(job_id, status, error=None, result=None, diagnostics=None, warnings=None, progress=None):
     conn = await get_db()
     try:
-        await conn.execute(
-            """
-            insert into jobs (job_id, status, error, result, diagnostics, warnings, progress)
-            values ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, $7)
+        # Build dynamic SQL based on which fields are not None
+        fields = ["status", "error", "result", "warnings", "progress"]
+        values = [status, error, json.dumps(result) if result is not None else None,
+                  json.dumps(warnings) if warnings is not None else None, progress]
+        set_clauses = ["status = excluded.status", "error = excluded.error", "result = excluded.result",
+                       "warnings = excluded.warnings", "progress = excluded.progress"]
+        if diagnostics is not None:
+            fields.insert(3, "diagnostics")
+            values.insert(3, json.dumps(diagnostics))
+            set_clauses.insert(3, "diagnostics = excluded.diagnostics")
+        sql = f"""
+            insert into jobs (job_id, {', '.join(fields)})
+            values ($1, {', '.join(f'${i+2}' for i in range(len(fields)))})
             on conflict (job_id) do update set
-                status = excluded.status,
-                error = excluded.error,
-                result = excluded.result,
-                diagnostics = excluded.diagnostics,
-                warnings = excluded.warnings,
-                progress = excluded.progress
-            """,
-            job_id, status, error,
-            json.dumps(result) if result is not None else None,
-            json.dumps(diagnostics) if diagnostics is not None else None,
-            json.dumps(warnings) if warnings is not None else None,
-            progress
-        )
+                {', '.join(set_clauses)}
+        """
+        await conn.execute(sql, job_id, *values)
     finally:
         await conn.close()
 
@@ -465,6 +465,9 @@ async def run_calibration_job(job: CalibrationJobRequest, job_id: str):
                 return
             # Bias subtraction logic after download
             frame_type = infer_frame_type(local_files)
+            # If frame_type is unknown and job.frame_type is set, use it
+            if frame_type == 'unknown' and getattr(job, 'frame_type', None):
+                frame_type = job.frame_type
             bias_subtraction = job.settings.get('biasSubtraction', False)
             master_bias_path = job.settings.get('masterBiasPath')
             master_bias_local = None
@@ -605,6 +608,31 @@ async def run_calibration_job(job: CalibrationJobRequest, job_id: str):
                 la_cosmic_params=la_cosmic_params,
                 bad_pixel_map=bad_pixel_map
             )
+            # --- Compute diagnostics/stats for master frame ---
+            master_stats = {
+                'n_frames': len(valid_files),
+                'stacking_method': method,
+                'sigma_threshold': sigma if method in ['sigma', 'winsorized'] else None,
+                'mean': float(np.mean(master)),
+                'median': float(np.median(master)),
+                'std': float(np.std(master)),
+                'min': float(np.min(master)),
+                'max': float(np.max(master)),
+            }
+            # Outlier count: pixels > 5 sigma from mean
+            mean = np.mean(master)
+            std = np.std(master)
+            outlier_count = int(np.sum(np.abs(master - mean) > 5 * std))
+            total_pixels = master.size
+            outlier_ratio = outlier_count / total_pixels if total_pixels > 0 else 0
+            master_stats['outlier_count'] = outlier_count
+            master_stats['outlier_ratio'] = outlier_ratio
+            # Histogram (list of bin counts)
+            hist, bin_edges = np.histogram(master, bins=64)
+            master_stats['histogram'] = hist.tolist()
+            master_stats['histogram_bins'] = bin_edges.tolist()
+            # Add stacking recommendation reason
+            master_stats['recommendation'] = reason
             # Cancellation check after stacking
             job_status = await get_job(job_id)
             if job_status and job_status.get("status") == "cancelled":
@@ -657,8 +685,16 @@ async def run_calibration_job(job: CalibrationJobRequest, job_id: str):
             print(f"[{datetime.utcnow().isoformat()}] [BG] Preview PNG uploaded to: {png_storage_path}")
             print(f"[{datetime.utcnow().isoformat()}] [BG] Preview public URL: {preview_url}")
             await update_job_progress(job_id, 98)
-            # Mark job as success for the frontend as soon as preview is ready
-            await insert_job(job_id, status="success", result={"preview_url": preview_url, "preview_png_path": png_storage_path}, diagnostics=stats, warnings=[], error=None, progress=100)
+            # --- Mark job as success for the frontend as soon as preview is ready ---
+            # Always include project_id, user_id, and frameType in result JSON
+            base_result = {
+                "projectId": job.project_id,
+                "userId": job.user_id,
+                "frameType": frame_type,
+                "preview_url": preview_url,
+                "preview_png_path": png_storage_path
+            }
+            await insert_job(job_id, status="success", result=base_result, diagnostics=stats, warnings=[], error=None, progress=100)
             print(f"[{datetime.utcnow().isoformat()}] [BG] Notified frontend of preview availability.")
             # Now upload the FITS file in the background (does not block user)
             def upload_fits_bg():
@@ -670,7 +706,12 @@ async def run_calibration_job(job: CalibrationJobRequest, job_id: str):
                     import asyncio
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
-                    loop.run_until_complete(insert_job(job_id, status="success", result={"preview_url": preview_url, "fits_path": fits_storage_path, "preview_png_path": png_storage_path}, diagnostics=stats, warnings=[], error=None, progress=100))
+                    fits_result = {
+                        **base_result,
+                        "fits_path": fits_storage_path
+                    }
+                    print(f"[LOG] Background thread updating result for job {job_id} (not overwriting diagnostics)", flush=True)
+                    loop.run_until_complete(insert_job(job_id, status="success", result=fits_result, diagnostics=None, warnings=[], error=None, progress=100))
                     loop.close()
                 except Exception as e:
                     print(f"[{datetime.utcnow().isoformat()}] [ERROR] (background) Failed to upload FITS: {e}")
@@ -685,11 +726,15 @@ async def run_calibration_job(job: CalibrationJobRequest, job_id: str):
                 **current_result,
                 'used': len(valid_files),
                 'rejected': len(rejected_files),
-                'rejected_details': rejected_files
+                'rejected_details': rejected_files,
+                'master_stats': master_stats,
+                "projectId": job.project_id,
+                "userId": job.user_id,
+                "frameType": frame_type
             }
-            await insert_job(job_id, status="success", progress=100, result=final_result)
-            print(f"[{datetime.utcnow().isoformat()}] [DEBUG] Stacking/master frame creation complete.", flush=True)
-            print(f"[{datetime.utcnow().isoformat()}] [DEBUG] Post-processing complete.", flush=True)
+            print(f"[LOG] Final master_stats for job {job_id}: {json.dumps(master_stats)}", flush=True)
+            await insert_job(job_id, status="success", progress=100, result=final_result, diagnostics=master_stats)
+            print(f"[LOG] Final insert_job called for job {job_id} with diagnostics.", flush=True)
     except Exception as e:
         print(f"[{datetime.utcnow().isoformat()}] [FATAL ERROR] Unexpected error in run_calibration_job: {e}", flush=True)
         traceback.print_exc()
