@@ -11,6 +11,26 @@ import {
 } from './ui/dialog';
 import { supabase } from '../lib/supabaseClient';
 import Image from 'next/image';
+import FileManagementPanel from './FileManagementPanel';
+import { useProjects } from '@/src/hooks/useProjects';
+import { getFilesByType, uploadRawFrame, validateFitsFile } from '@/src/utils/storage';
+import { useUserStore } from '@/src/store/user';
+import { createBrowserClient } from '@/src/lib/supabase';
+import { supabaseUrl, supabaseAnonKey } from '@/src/lib/supabase';
+
+// Add type definition at the top of the file
+interface FileMetadata {
+  path: string;
+  type: string;
+  metadata: {
+    INSTRUME?: string;
+    XBINNING?: number;
+    YBINNING?: number;
+    GAIN?: number;
+    'CCD-TEMP'?: number;
+    EXPTIME?: number;
+  };
+}
 
 const FRAME_TYPES = [
   { key: 'bias', label: 'Master Bias' },
@@ -107,6 +127,37 @@ function getProgressMessage(progress: number) {
   return "Calibration complete!";
 }
 
+// Add a mapping of stacking method to tooltip/description
+const STACKING_METHOD_TOOLTIPS: Record<string, string> = {
+  adaptive: 'Auto-stacking: Analyzes your frames and picks the best method for you. Recommended for most users.',
+  median: 'Median: Robust to outliers and hot pixels. Good for most calibration frames.',
+  mean: 'Mean: Averages all frames. Sensitive to outliers, but can reduce noise if all frames are clean.',
+  winsorized: 'Winsorized Sigma Clipping: Reduces the effect of outliers by limiting extreme values. Useful for frames with some bad pixels.',
+  linear_fit: 'Linear Fit Clipping: Fits a line to pixel values and rejects outliers. Advanced, for experienced users.',
+  superbias: 'Superbias (PCA modeling): Uses principal component analysis to model and remove bias structure. Advanced, for bias frames only.'
+};
+
+// Move groupByMatchingFrames to the module level, above the component
+function groupByMatchingFrames(frames: Array<{ name: string; camera: string; binning: string; gain: string | number; temp: string | number; path: string; }>) {
+  // Group by camera, binning, gain, and temp (rounded to nearest int)
+  const groups: Record<string, typeof frames> = {};
+  for (const f of frames) {
+    const key = [f.camera, f.binning, f.gain, Math.round(Number(f.temp))].join('|');
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(f);
+  }
+  // Find the largest group
+  let bestKey: string | null = null;
+  let bestGroup: typeof frames = [];
+  for (const [key, group] of Object.entries(groups)) {
+    if (group.length > bestGroup.length) {
+      bestGroup = group;
+      bestKey = key;
+    }
+  }
+  return { groups, bestKey, bestGroup };
+}
+
 const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = ({ projectId, userId }) => {
   const [selectedType, setSelectedType] = useState<MasterType>('bias');
   const [tabState, setTabState] = useState({
@@ -127,6 +178,9 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
       customRejection: '',
       pixelRejectionAlgorithm: 'sigma',
       badPixelMapPath: '',
+      darkOptimization: false,
+      useSuperdark: false,
+      superdarkPath: '',
     },
     flat: {
       advanced: false,
@@ -193,6 +247,84 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [masterStats, setMasterStats] = useState<any>(null);
+  // At the top of the component, add state for skip dialog
+  const [showSkipDialog, setShowSkipDialog] = useState(false);
+  // --- Preset Saving/Loading Logic ---
+  const [presets, setPresets] = useState<{ [K in MasterType]: Record<string, any> }>({ dark: {}, flat: {}, bias: {} });
+  const [showPresetMenu, setShowPresetMenu] = useState(false);
+  const [presetNameInput, setPresetNameInput] = useState('');
+  // Add state to track dropdown direction
+  const [presetMenuDirection, setPresetMenuDirection] = useState<'down' | 'up'>('down');
+  const presetBtnRef = useRef<HTMLButtonElement>(null);
+  const [showSuperdarkModal, setShowSuperdarkModal] = useState(false);
+  const [superdarkFiles, setSuperdarkFiles] = useState<string[]>([]);
+  const [superdarkUploads, setSuperdarkUploads] = useState<File[]>([]);
+  const [superdarkProject, setSuperdarkProject] = useState<string>(projectId);
+  const [superdarkName, setSuperdarkName] = useState('');
+  const [superdarkStacking, setSuperdarkStacking] = useState('median');
+  const [superdarkSigma, setSuperdarkSigma] = useState('3.0');
+  const [superdarkMetadata, setSuperdarkMetadata] = useState<any[]>([]);
+  const [superdarkWarnings, setSuperdarkWarnings] = useState<string[]>([]);
+  const [isCreatingSuperdark, setIsCreatingSuperdark] = useState(false);
+  const { user } = useUserStore();
+  const { projects, isLoading: projectsLoading, fetchProjects } = useProjects(user?.id, !!user);
+  // Add state for available darks in selected project
+  const [availableDarks, setAvailableDarks] = useState<{ name: string, path: string }[]>([]);
+  const [selectedDarkPaths, setSelectedDarkPaths] = useState<string[]>([]);
+
+  // Load presets from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('calibrationPresets_v1');
+    if (saved) {
+      try {
+        setPresets(JSON.parse(saved));
+      } catch {}
+    }
+  }, []);
+  // Save presets to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem('calibrationPresets_v1', JSON.stringify(presets));
+  }, [presets]);
+
+  const handleSavePreset = () => {
+    setPresetNameInput('');
+    // Auto-detect direction
+    setTimeout(() => {
+      if (presetBtnRef.current) {
+        const rect = presetBtnRef.current.getBoundingClientRect();
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const spaceAbove = rect.top;
+        if (spaceBelow < 300 && spaceAbove > spaceBelow) {
+          setPresetMenuDirection('up');
+        } else {
+          setPresetMenuDirection('down');
+        }
+      }
+    }, 0);
+    setShowPresetMenu(true);
+  };
+  const confirmSavePreset = () => {
+    if (!presetNameInput.trim()) return;
+    setPresets(prev => ({
+      ...prev,
+      [selectedType]: {
+        ...prev[selectedType],
+        [presetNameInput.trim()]: { ...tabState[selectedType] }
+      }
+    }));
+    setShowPresetMenu(false);
+  };
+  const handleLoadPreset = (name: string) => {
+    setTabState(prev => ({ ...prev, [selectedType]: { ...presets[selectedType][name] } }));
+    setShowPresetMenu(false);
+  };
+  const handleDeletePreset = (name: string) => {
+    setPresets(prev => {
+      const updated = { ...prev[selectedType] };
+      delete updated[name];
+      return { ...prev, [selectedType]: updated };
+    });
+  };
 
   // Add this effect after state declarations
   useEffect(() => {
@@ -341,6 +473,9 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
       customRejection: '',
       pixelRejectionAlgorithm: 'sigma',
       badPixelMapPath: '',
+      darkOptimization: false,
+      useSuperdark: false,
+      superdarkPath: '',
     },
     flat: {
       advanced: false,
@@ -372,10 +507,6 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
   // Reset all tabs
   const handleResetAll = () => {
     setTabState({ ...defaultTabState });
-  };
-  // Save preset (UI only)
-  const handleSavePreset = () => {
-    alert('Preset saved! (UI only, not persisted)');
   };
 
   // Helper to submit calibration job
@@ -415,6 +546,8 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
         selectedType, // <-- add this line
         // ...add other required fields
         ...(tabState.bias.badPixelMapPath && { badPixelMapPath: tabState.bias.badPixelMapPath }),
+        darkOptimization: tabState.dark.darkOptimization,
+        superdarkPath: tabState.dark.superdarkPath,
       };
       const res = await fetch(`/api/projects/${projectId}/calibration-jobs/submit`, {
         method: 'POST',
@@ -649,6 +782,9 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
           customRejection: '',
           pixelRejectionAlgorithm: 'sigma',
           badPixelMapPath: '',
+          darkOptimization: false,
+          useSuperdark: false,
+          superdarkPath: '',
         };
       case 'flat':
         return {
@@ -853,6 +989,266 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
     return 'not_started';
   }
 
+  // Add handleBack and handleNextStep handlers if not present:
+  // function handleBack() { /* navigate to previous step */ }
+  // function handleNextStep() { /* navigate to light stacking step */ }
+
+  // Add above the return statement, after state declarations:
+  const requiredTypes: MasterType[] = ['bias', 'dark', 'flat'];
+  const missingTypes = requiredTypes.filter(type => !previewUrls[type]);
+  const allCalibrationsReady = missingTypes.length === 0;
+
+  function handleBack() {
+    // TODO: Implement navigation to previous step
+  }
+  function handleNextStep() {
+    // TODO: Implement navigation to light stacking step
+  }
+
+  // Helper to open modal
+  const openSuperdarkModal = () => {
+    console.log('[DEBUG] openSuperdarkModal called');
+    setShowSuperdarkModal(true);
+    setSuperdarkFiles([]);
+    setSuperdarkUploads([]);
+    setSuperdarkProject(projectId);
+    setSuperdarkName('');
+    setSuperdarkStacking('median');
+    setSuperdarkSigma('3.0');
+    setSuperdarkMetadata([]);
+    setSuperdarkWarnings([]);
+  };
+
+  // Helper to handle file selection/upload and metadata extraction (pseudo, to be implemented)
+  const handleSuperdarkFileSelect = (files: string[]) => {
+    setSuperdarkFiles(files);
+    // TODO: Fetch metadata for each file and setSuperdarkMetadata([...])
+  };
+  const handleSuperdarkUpload = async (files: File[]) => {
+    if (!superdarkProject || !user?.id) return;
+    const uploadedPaths: string[] = [];
+    for (const file of files) {
+      try {
+        // Validate FITS file
+        const valid = await validateFitsFile(file, superdarkProject, user.id, 'dark');
+        if (!valid || valid.valid === false) continue;
+        // Upload
+        const path = await uploadRawFrame(file, superdarkProject, 'dark');
+        uploadedPaths.push(path);
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        // If duplicate file error, warn and skip, but do not stop the process
+        if (errorMsg.includes('already exists in this project')) {
+          setSuperdarkWarnings(prev => [...prev, errorMsg]);
+          continue;
+        } else {
+          setSuperdarkWarnings(prev => [...prev, errorMsg]);
+        }
+      }
+    }
+    setSelectedDarkPaths(prev => [...prev, ...uploadedPaths]);
+  };
+
+  // Helper to validate selected files (pseudo, to be implemented)
+  const validateSuperdarkFiles = () => {
+    // TODO: Check camera, size, binning, temp, exposure, gain
+    // If mismatches, setSuperdarkWarnings([...])
+  };
+
+  // Helper to submit Superdark creation job
+  const submitSuperdarkJob = async () => {
+    setIsCreatingSuperdark(true);
+    try {
+      if (!user?.id) throw new Error('User not authenticated');
+
+      // First verify all files exist in storage
+      const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
+      const storageFiles = await supabase.storage
+        .from('raw-frames')
+        .list(`${user.id}/${superdarkProject}/dark`);
+
+      if (!storageFiles.data) {
+        throw new Error('Failed to fetch storage files');
+      }
+
+      // Create a Set of existing filenames for quick lookup
+      const existingFiles = new Set(storageFiles.data.map((f: { name: string }) => f.name));
+
+      // Filter selected paths to only include existing files
+      const validPaths = selectedDarkPaths.filter(path => {
+        const fileName = path.split('/').pop();
+        return existingFiles.has(fileName || '');
+      });
+
+      if (validPaths.length === 0) {
+        throw new Error('No valid files selected. Please ensure files exist in storage.');
+      }
+
+      if (validPaths.length !== selectedDarkPaths.length) {
+        setSuperdarkWarnings([`Warning: ${selectedDarkPaths.length - validPaths.length} selected files were not found in storage and will be skipped.`]);
+      }
+
+      const payload = {
+        userId: user.id,
+        superdarkName,
+        input_paths: validPaths,
+        stackingMethod: superdarkStacking,
+        sigma: superdarkSigma,
+        projectId: superdarkProject,
+        input_bucket: 'raw-frames',
+        output_bucket: 'superdarks',
+      };
+
+      console.log('[DEBUG] Submitting Superdark payload:', payload);
+      const res = await fetch('http://localhost:8000/superdark/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const resBody = await res.json().catch(() => ({}));
+      console.log('[DEBUG] Superdark response status:', res.status, 'body:', resBody);
+      
+      if (!res.ok) throw new Error(resBody.error || 'Failed to create Superdark');
+      
+      // Success - clear the modal
+      setShowSuperdarkModal(false);
+      setSelectedDarkPaths([]);
+      setSuperdarkName('');
+      setSuperdarkMetadata([]);
+      setSuperdarkWarnings([]);
+    } catch (e) {
+      const err = e as Error;
+      setSuperdarkWarnings([err.message || 'Failed to create Superdark']);
+    } finally {
+      setIsCreatingSuperdark(false);
+    }
+  };
+
+  // Fetch darks when project changes
+  useEffect(() => {
+    if (!superdarkProject) return;
+    getFilesByType(superdarkProject).then(filesByType => {
+      const darks = filesByType.dark || [];
+      setAvailableDarks(darks.map(f => ({ name: f.name, path: f.path })));
+    });
+  }, [superdarkProject, showSuperdarkModal]);
+
+  // Handle dark selection
+  const handleDarkCheckbox = (path: string, checked: boolean) => {
+    setSelectedDarkPaths(prev => checked ? [...prev, path] : prev.filter(p => p !== path));
+  };
+
+  // Fetch metadata for selected files
+  useEffect(() => {
+    async function fetchProjectFiles() {
+      if (!superdarkProject || !user?.id) return;
+      try {
+        // First, get the list of files that actually exist in storage
+        const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
+        const storageFiles = await supabase.storage
+          .from('raw-frames')
+          .list(`${user.id}/${superdarkProject}/dark`);
+
+        if (!storageFiles.data) {
+          throw new Error('Failed to fetch storage files');
+        }
+
+        // Create a Set of existing filenames for quick lookup
+        const existingFiles = new Set(storageFiles.data.map(f => f.name));
+
+        // Now fetch metadata and filter based on storage existence
+        const res = await fetch(`http://localhost:8000/list-files?project_id=${superdarkProject}&user_id=${user.id}`);
+        const data = await res.json();
+        
+        if (data.files) {
+          // Filter for dark frames AND verify they exist in storage
+          const darks = data.files
+            .filter((f: FileMetadata) => {
+              const fileName = f.path.split('/').pop();
+              return f.type === 'dark' && existingFiles.has(fileName || '');
+            })
+            .map((f: FileMetadata) => ({
+              name: f.path.split('/').pop() || '',
+              path: f.path,
+              camera: f.metadata?.INSTRUME || 'Unknown',
+              binning: `${f.metadata?.XBINNING || 1}x${f.metadata?.YBINNING || 1}`,
+              gain: f.metadata?.GAIN || 'Unknown',
+              temp: f.metadata?.['CCD-TEMP'] !== undefined ? Number(f.metadata['CCD-TEMP']).toFixed(1) : 'Unknown',
+              exposure: f.metadata?.EXPTIME !== undefined ? Number(f.metadata.EXPTIME).toFixed(1) : 'Unknown'
+            }));
+          
+          setAvailableDarks(darks);
+          setSuperdarkMetadata(darks);
+        }
+      } catch (error) {
+        console.error('Error fetching project files:', error);
+      }
+    }
+    fetchProjectFiles();
+  }, [superdarkProject, user?.id, showSuperdarkModal]);
+
+  // Add a useEffect to reset modal state when it is opened
+  useEffect(() => {
+    if (showSuperdarkModal) {
+      setSelectedDarkPaths([]);
+      setSuperdarkName('');
+      setSuperdarkWarnings([]);
+      setSuperdarkMetadata([]);
+      setAvailableDarks([]); // Reset available darks
+      // Trigger a fresh fetch of files
+      if (superdarkProject && user?.id) {
+        fetchProjectFiles(superdarkProject, user.id);
+      }
+    }
+  }, [showSuperdarkModal, superdarkProject, user?.id]);
+
+  // Helper function to fetch project files
+  const fetchProjectFiles = async (projectId: string, userId: string) => {
+    try {
+      // First, get the list of files that actually exist in storage
+      const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
+      const storageFiles = await supabase.storage
+        .from('raw-frames')
+        .list(`${userId}/${projectId}/dark`);
+
+      if (!storageFiles.data) {
+        throw new Error('Failed to fetch storage files');
+      }
+
+      // Create a Set of existing filenames for quick lookup
+      const existingFiles = new Set(storageFiles.data.map((f: { name: string }) => f.name));
+
+      // Now fetch metadata and filter based on storage existence
+      const res = await fetch(`http://localhost:8000/list-files?project_id=${projectId}&user_id=${userId}`);
+      const data = await res.json();
+      
+      if (data.files) {
+        // Filter for dark frames AND verify they exist in storage
+        const darks = data.files
+          .filter((f: FileMetadata) => {
+            const fileName = f.path.split('/').pop();
+            return f.type === 'dark' && existingFiles.has(fileName || '');
+          })
+          .map((f: FileMetadata) => ({
+            name: f.path.split('/').pop() || '',
+            path: f.path,
+            camera: f.metadata?.INSTRUME || 'Unknown',
+            binning: `${f.metadata?.XBINNING || 1}x${f.metadata?.YBINNING || 1}`,
+            gain: f.metadata?.GAIN || 'Unknown',
+            temp: f.metadata?.['CCD-TEMP'] !== undefined ? Number(f.metadata['CCD-TEMP']).toFixed(1) : 'Unknown',
+            exposure: f.metadata?.EXPTIME !== undefined ? Number(f.metadata.EXPTIME).toFixed(1) : 'Unknown'
+          }));
+
+        setAvailableDarks(darks.map(f => ({ name: f.name, path: f.path })));
+        setSuperdarkMetadata(darks);
+      }
+    } catch (e) {
+      console.error('Error fetching files:', e);
+      setSuperdarkWarnings(['Failed to fetch dark frame metadata']);
+    }
+  };
+
   return (
     <TooltipProvider>
       <div className="flex flex-col h-full bg-[#0a0d13]/80 rounded-2xl shadow-2xl border border-[#232946]/60 p-6 backdrop-blur-md">
@@ -1010,28 +1406,35 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                     <span className="font-medium text-blue-200">Advanced</span>
                   </div>
                   {/* Beginner mode: only show stacking method (Median, Mean) */}
-                  {!tabState.bias.advanced && (
+                  {selectedType === 'bias' && !tabState.bias.advanced && (
                     <div className="mb-4">
                       <label className="block font-medium mb-1 text-blue-100">Stacking Method</label>
                       <div className="flex flex-col gap-2">
                         {BEGINNER_BIAS_STACKING_METHODS.map(m => (
-                          <label key={m.value} className="flex items-center gap-2 text-blue-200">
-                            <input
-                              type="radio"
-                              name="biasStackingMethod"
-                              value={m.value}
-                              checked={tabState.bias.stackingMethod === m.value}
-                              onChange={() => setTabState(prev => ({
-                                ...prev,
-                                bias: {
-                                  ...prev.bias,
-                                  stackingMethod: m.value,
-                                }
-                              }))}
-                              className="accent-blue-600"
-                            />
-                            <span>{m.label}</span>
-                          </label>
+                          <Tooltip key={m.value}>
+                            <TooltipTrigger asChild>
+                              <label className="flex items-center gap-2 text-blue-200 cursor-pointer">
+                                <input
+                                  type="radio"
+                                  name="biasStackingMethod"
+                                  value={m.value}
+                                  checked={tabState.bias.stackingMethod === m.value}
+                                  onChange={() => setTabState(prev => ({
+                                    ...prev,
+                                    bias: {
+                                      ...prev.bias,
+                                      stackingMethod: m.value,
+                                    }
+                                  }))}
+                                  className="accent-blue-600"
+                                />
+                                <span>{m.label}</span>
+                              </label>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" sideOffset={4} className="max-w-xs text-sm">
+                              {STACKING_METHOD_TOOLTIPS[m.value]}
+                            </TooltipContent>
+                          </Tooltip>
                         ))}
                       </div>
                     </div>
@@ -1043,26 +1446,30 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                         <label className="block font-medium mb-1 text-blue-100">Stacking Method</label>
                         <div className="flex flex-col gap-2">
                           {ADVANCED_BIAS_STACKING_METHODS.map(m => (
-                            <label key={m.value} className="flex items-center gap-2 text-blue-200">
-                              <input
-                                type="radio"
-                                name="biasStackingMethod"
-                                value={m.value}
-                                checked={tabState.bias.stackingMethod === m.value}
-                                onChange={() => setTabState(prev => ({
-                                  ...prev,
-                                  bias: {
-                                    ...prev.bias,
-                                    stackingMethod: m.value,
-                                  }
-                                }))}
-                                className="accent-blue-600"
-                              />
-                              <span>{m.label}</span>
-                              {m.value === 'superbias' && (
-                                <span className="text-xs text-blue-300 ml-2">Principal component analysis (PCA) modeling for bias frames. For advanced users.</span>
-                              )}
-                            </label>
+                            <Tooltip key={m.value}>
+                              <TooltipTrigger asChild>
+                                <label className="flex items-center gap-2 text-blue-200 cursor-pointer">
+                                  <input
+                                    type="radio"
+                                    name="biasStackingMethod"
+                                    value={m.value}
+                                    checked={tabState.bias.stackingMethod === m.value}
+                                    onChange={() => setTabState(prev => ({
+                                      ...prev,
+                                      bias: {
+                                        ...prev.bias,
+                                        stackingMethod: m.value,
+                                      }
+                                    }))}
+                                    className="accent-blue-600"
+                                  />
+                                  <span>{m.label}</span>
+                                </label>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" sideOffset={4} className="max-w-xs text-sm">
+                                {STACKING_METHOD_TOOLTIPS[m.value]}
+                              </TooltipContent>
+                            </Tooltip>
                           ))}
                         </div>
                       </div>
@@ -1096,54 +1503,6 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                             </div>
                           )}
                           <span className="text-xs text-blue-400">Advanced: Upload a FITS bad pixel map. Bad pixels will be replaced with local median.</span>
-                        </div>
-                      )}
-                      {/* Cosmetic Correction (optional) */}
-                      <div className="mb-4 flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          id="cosmeticCorrectionBias"
-                          checked={tabState.bias.cosmeticCorrection}
-                          onChange={e => setTabState(prev => ({ ...prev, bias: { ...prev.bias, cosmeticCorrection: e.target.checked } }))}
-                          className="mr-2 accent-blue-600"
-                        />
-                        <label htmlFor="cosmeticCorrectionBias" className="font-medium text-blue-100 flex items-center gap-2">
-                          Cosmetic Correction
-                        </label>
-                      </div>
-                      {tabState.bias.cosmeticCorrection && (
-                        <div className="mb-4">
-                          <label className="block font-medium mb-1 text-blue-100">Correction Method</label>
-                          <select
-                            className="bg-[#181c23] text-white border border-[#232946] rounded px-3 py-2 mt-1"
-                            value={tabState.bias.cosmeticMethod}
-                            onChange={e => setTabState(prev => ({ ...prev, bias: { ...prev.bias, cosmeticMethod: e.target.value } }))}
-                          >
-                            {COSMETIC_METHODS.map((m: { value: string; label: string }) => (
-                              <option key={m.value} value={m.value}>{m.label}</option>
-                            ))}
-                          </select>
-                          <div className="mt-4">
-                            <label className="block font-medium mb-1 text-blue-100">Threshold</label>
-                            <input
-                              type="range"
-                              min="0"
-                              max="1"
-                              step="0.01"
-                              value={tabState.bias.cosmeticThreshold}
-                              onChange={e => setTabState(prev => ({ ...prev, bias: { ...prev.bias, cosmeticThreshold: Number(e.target.value) } }))}
-                              className="w-40 accent-blue-600"
-                            />
-                            <input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              max="1"
-                              value={tabState.bias.cosmeticThreshold}
-                              onChange={e => setTabState(prev => ({ ...prev, bias: { ...prev.bias, cosmeticThreshold: Number(e.target.value) } }))}
-                              className="border rounded px-2 py-1 w-20 bg-[#181c23] text-white border-[#232946] ml-2"
-                            />
-                          </div>
                         </div>
                       )}
                       {/* Custom Rejection Expression (optional) */}
@@ -1216,28 +1575,29 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                     <span className="font-medium text-blue-200">Advanced</span>
                   </div>
                   {/* Beginner mode: only show stacking method (Median, Mean) */}
-                  {!tabState.dark.advanced && (
+                  {selectedType === 'dark' && !tabState.dark.advanced && (
                     <div className="mb-4">
                       <label className="block font-medium mb-1 text-blue-100">Stacking Method</label>
                       <div className="flex flex-col gap-2">
-                        {BEGINNER_DARK_STACKING_METHODS.map(m => (
-                          <label key={m.value} className="flex items-center gap-2 text-blue-200">
-                            <input
-                              type="radio"
-                              name="darkStackingMethod"
-                              value={m.value}
-                              checked={tabState.dark.stackingMethod === m.value}
-                              onChange={() => setTabState(prev => ({
-                                ...prev,
-                                dark: {
-                                  ...prev.dark,
-                                  stackingMethod: m.value,
-                                }
-                              }))}
-                              className="accent-blue-600"
-                            />
-                            <span>{m.label}</span>
-                          </label>
+                        {BEGINNER_DARK_STACKING_METHODS.map(bsm => (
+                          <Tooltip key={bsm.value}>
+                            <TooltipTrigger asChild>
+                              <label className="flex items-center gap-2 text-blue-200 cursor-pointer">
+                                <input
+                                  type="radio"
+                                  name="darkStackingMethod"
+                                  value={bsm.value}
+                                  checked={tabState.dark.stackingMethod === bsm.value}
+                                  onChange={() => setTabState(prev => ({ ...prev, dark: { ...prev.dark, stackingMethod: bsm.value } }))}
+                                  className="accent-blue-600"
+                                />
+                                <span>{bsm.label}</span>
+                              </label>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" sideOffset={4} className="max-w-xs text-sm">
+                              {STACKING_METHOD_TOOLTIPS[bsm.value]}
+                            </TooltipContent>
+                          </Tooltip>
                         ))}
                       </div>
                     </div>
@@ -1249,23 +1609,30 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                         <label className="block font-medium mb-1 text-blue-100">Stacking Method</label>
                         <div className="flex flex-col gap-2">
                           {ADVANCED_DARK_STACKING_METHODS.map(m => (
-                            <label key={m.value} className="flex items-center gap-2 text-blue-200">
-                              <input
-                                type="radio"
-                                name="darkStackingMethod"
-                                value={m.value}
-                                checked={tabState.dark.stackingMethod === m.value}
-                                onChange={() => setTabState(prev => ({
-                                  ...prev,
-                                  dark: {
-                                    ...prev.dark,
-                                    stackingMethod: m.value,
-                                  }
-                                }))}
-                                className="accent-blue-600"
-                              />
-                              <span>{m.label}</span>
-                            </label>
+                            <Tooltip key={m.value}>
+                              <TooltipTrigger asChild>
+                                <label className="flex items-center gap-2 text-blue-200 cursor-pointer">
+                                  <input
+                                    type="radio"
+                                    name="darkStackingMethod"
+                                    value={m.value}
+                                    checked={tabState.dark.stackingMethod === m.value}
+                                    onChange={() => setTabState(prev => ({
+                                      ...prev,
+                                      dark: {
+                                        ...prev.dark,
+                                        stackingMethod: m.value,
+                                      }
+                                    }))}
+                                    className="accent-blue-600"
+                                  />
+                                  <span>{m.label}</span>
+                                </label>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" sideOffset={4} className="max-w-xs text-sm">
+                                {STACKING_METHOD_TOOLTIPS[m.value]}
+                              </TooltipContent>
+                            </Tooltip>
                           ))}
                         </div>
                       </div>
@@ -1413,6 +1780,113 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                           placeholder="e.g. value > 5000"
                         />
                       </div>
+                      {/* In the Advanced Dark tab, add after dark scaling options: */}
+                      <div className="mb-4 flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          id="darkOptimization"
+                          checked={tabState.dark.darkOptimization || false}
+                          onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, darkOptimization: e.target.checked } }))}
+                          className="mr-2 accent-blue-600"
+                        />
+                        <label htmlFor="darkOptimization" className="font-medium text-blue-100 flex items-center gap-2">
+                          Optimize darks (per-light scaling)
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="ml-1 px-1 py-0.5 text-[10px] bg-blue-700 text-blue-100 rounded cursor-help">?</span>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" sideOffset={4} className="max-w-xs text-sm">
+                                Automatically scales the master dark to best match each light frame. Recommended for advanced users.
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </label>
+                      </div>
+                      {tabState.dark.useSuperdark && (
+                        <div className="mb-4">
+                          <label className="block font-medium mb-1 text-blue-100">Superdark FITS File</label>
+                          <input
+                            type="file"
+                            accept=".fits,.fit,.fts"
+                            onChange={async (e) => {
+                              if (e.target.files && e.target.files[0]) {
+                                const file = e.target.files[0];
+                                // TODO: Replace with your upload logic
+                                // For now, just set the file name as a placeholder
+                                setTabState(prev => ({ ...prev, dark: { ...prev.dark, superdarkPath: file.name } }));
+                              }
+                            }}
+                            className="block w-full text-sm text-blue-100 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-700 file:text-blue-100 hover:file:bg-blue-800"
+                          />
+                          {tabState.dark.superdarkPath && (
+                            <div className="flex items-center gap-2 mt-2">
+                              <span className="text-xs text-blue-300">Selected: {tabState.dark.superdarkPath}</span>
+                              <button
+                                type="button"
+                                className="text-xs text-red-400 underline"
+                                onClick={() => setTabState(prev => ({ ...prev, dark: { ...prev.dark, superdarkPath: '' } }))}
+                              >Clear</button>
+                            </div>
+                          )}
+                          <span className="text-xs text-blue-400">Superdark will be used instead of stacking session darks.</span>
+                        </div>
+                      )}
+                      {/* Disable regular dark stacking options when useSuperdark is true: */}
+                      { !tabState.dark.useSuperdark && (
+                        <>
+                          <div className="mb-4">
+                            <label className="block font-medium mb-1 text-blue-100">Select Superdark (optional)</label>
+                            <select
+                              className="bg-[#181c23] text-white border border-[#232946] rounded px-3 py-2 mt-1 w-full"
+                              value={selectedMasterBias}
+                              onChange={e => setSelectedMasterBias(e.target.value)}
+                            >
+                              <option value="">Auto-select (recommended)</option>
+                              {masterBiasOptions.map(opt => (
+                                <option key={opt.path} value={opt.path}>{opt.name}</option>
+                              ))}
+                            </select>
+                            {masterBiasOptions.length === 0 && <div className="text-xs text-blue-300 mt-1">No master bias frames found for this project. Auto-select will fail if none exist.</div>}
+                          </div>
+                          <div className="mb-4">
+                            <label className="block font-medium mb-1 text-blue-100">Superdark FITS File</label>
+                            <input
+                              type="file"
+                              accept=".fits,.fit,.fts"
+                              onChange={async (e) => {
+                                if (e.target.files && e.target.files[0]) {
+                                  const file = e.target.files[0];
+                                  // TODO: Replace with your upload logic
+                                  // For now, just set the file name as a placeholder
+                                  setTabState(prev => ({ ...prev, dark: { ...prev.dark, superdarkPath: file.name } }));
+                                }
+                              }}
+                              className="block w-full text-sm text-blue-100 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-700 file:text-blue-100 hover:file:bg-blue-800"
+                            />
+                            {tabState.dark.superdarkPath && (
+                              <div className="flex items-center gap-2 mt-2">
+                                <span className="text-xs text-blue-300">Selected: {tabState.dark.superdarkPath}</span>
+                                <button
+                                  type="button"
+                                  className="text-xs text-red-400 underline"
+                                  onClick={() => setTabState(prev => ({ ...prev, dark: { ...prev.dark, superdarkPath: '' } }))}
+                                >Clear</button>
+                              </div>
+                            )}
+                            <span className="text-xs text-blue-400">Superdark will be used instead of stacking session darks.</span>
+                          </div>
+                        </>
+                      )}
+                      {/* In the calibration job request, include 'superdarkPath: tabState.dark.superdarkPath' if set. */}
+                      <div className="mb-4">
+                        <button
+                          className="px-4 py-2 bg-blue-700 text-white rounded-lg shadow hover:bg-blue-800 font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+                          onClick={openSuperdarkModal}
+                        >
+                          + Create Superdark
+                        </button>
+                      </div>
                     </>
                   )}
                 </>
@@ -1433,28 +1907,29 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                     <span className="font-medium text-blue-200">Advanced</span>
                   </div>
                   {/* Beginner mode: only show stacking method (Median, Mean) */}
-                  {!tabState.flat.advanced && (
+                  {selectedType === 'flat' && !tabState.flat.advanced && (
                     <div className="mb-4">
                       <label className="block font-medium mb-1 text-blue-100">Stacking Method</label>
                       <div className="flex flex-col gap-2">
-                        {BEGINNER_FLAT_STACKING_METHODS.map(m => (
-                          <label key={m.value} className="flex items-center gap-2 text-blue-200">
-                            <input
-                              type="radio"
-                              name="flatStackingMethod"
-                              value={m.value}
-                              checked={tabState.flat.stackingMethod === m.value}
-                              onChange={() => setTabState(prev => ({
-                                ...prev,
-                                flat: {
-                                  ...prev.flat,
-                                  stackingMethod: m.value,
-                                }
-                              }))}
-                              className="accent-blue-600"
-                            />
-                            <span>{m.label}</span>
-                          </label>
+                        {BEGINNER_FLAT_STACKING_METHODS.map(bsm => (
+                          <Tooltip key={bsm.value}>
+                            <TooltipTrigger asChild>
+                              <label className="flex items-center gap-2 text-blue-200 cursor-pointer">
+                                <input
+                                  type="radio"
+                                  name="flatStackingMethod"
+                                  value={bsm.value}
+                                  checked={tabState.flat.stackingMethod === bsm.value}
+                                  onChange={() => setTabState(prev => ({ ...prev, flat: { ...prev.flat, stackingMethod: bsm.value } }))}
+                                  className="accent-blue-600"
+                                />
+                                <span>{bsm.label}</span>
+                              </label>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" sideOffset={4} className="max-w-xs text-sm">
+                              {STACKING_METHOD_TOOLTIPS[bsm.value]}
+                            </TooltipContent>
+                          </Tooltip>
                         ))}
                       </div>
                     </div>
@@ -1466,23 +1941,30 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                         <label className="block font-medium mb-1 text-blue-100">Stacking Method</label>
                         <div className="flex flex-col gap-2">
                           {ADVANCED_DARK_STACKING_METHODS.map(m => (
-                            <label key={m.value} className="flex items-center gap-2 text-blue-200">
-                              <input
-                                type="radio"
-                                name="flatStackingMethod"
-                                value={m.value}
-                                checked={tabState.flat.stackingMethod === m.value}
-                                onChange={() => setTabState(prev => ({
-                                  ...prev,
-                                  flat: {
-                                    ...prev.flat,
-                                    stackingMethod: m.value,
-                                  }
-                                }))}
-                                className="accent-blue-600"
-                              />
-                              <span>{m.label}</span>
-                            </label>
+                            <Tooltip key={m.value}>
+                              <TooltipTrigger asChild>
+                                <label className="flex items-center gap-2 text-blue-200 cursor-pointer">
+                                  <input
+                                    type="radio"
+                                    name="flatStackingMethod"
+                                    value={m.value}
+                                    checked={tabState.flat.stackingMethod === m.value}
+                                    onChange={() => setTabState(prev => ({
+                                      ...prev,
+                                      flat: {
+                                        ...prev.flat,
+                                        stackingMethod: m.value,
+                                      }
+                                    }))}
+                                    className="accent-blue-600"
+                                  />
+                                  <span>{m.label}</span>
+                                </label>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" sideOffset={4} className="max-w-xs text-sm">
+                                {STACKING_METHOD_TOOLTIPS[m.value]}
+                              </TooltipContent>
+                            </Tooltip>
                           ))}
                         </div>
                       </div>
@@ -1627,16 +2109,65 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <button
-                    className="p-2 rounded-full hover:bg-blue-900 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
-                    onClick={handleSavePreset}
-                    aria-label="Save current settings as preset"
-                  >
-                    <Star className="w-5 h-5 text-blue-200" />
-                  </button>
+                  <div className="relative">
+                    <button
+                      ref={presetBtnRef}
+                      className="p-2 rounded-full hover:bg-blue-900 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+                      onClick={handleSavePreset}
+                      aria-label="Save current settings as preset"
+                    >
+                      <Star className="w-5 h-5 text-blue-200" />
+                    </button>
+                    {/* Preset menu dropdown with auto direction */}
+                    {showPresetMenu && (
+                      <div className={`absolute z-50 right-0 w-64 bg-[#181c23] border border-[#232946]/60 rounded-lg shadow-lg p-4 animate-fade-in ${presetMenuDirection === 'down' ? 'mt-2 top-full' : 'mb-2 bottom-full'}`}>
+                        <div className="mb-2 font-semibold text-blue-100">Presets for {FRAME_TYPES.find(f => f.key === selectedType)?.label}</div>
+                        <div className="flex gap-2 mb-2">
+                          <input
+                            type="text"
+                            className="border rounded px-2 py-1 w-full bg-[#232946] text-white border-[#232946]"
+                            placeholder="Preset name"
+                            value={presetNameInput}
+                            onChange={e => setPresetNameInput(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') confirmSavePreset(); }}
+                            autoFocus
+                          />
+                          <button
+                            className="px-3 py-1 bg-blue-700 text-white rounded hover:bg-blue-800"
+                            onClick={confirmSavePreset}
+                            disabled={!presetNameInput.trim()}
+                          >Save</button>
+                        </div>
+                        <div className="max-h-40 overflow-y-auto">
+                          {Object.keys(presets[selectedType] || {}).length === 0 ? (
+                            <div className="text-blue-300 text-sm">No presets saved yet.</div>
+                          ) : (
+                            <ul>
+                              {Object.keys(presets[selectedType]).map(name => (
+                                <li key={name} className="flex items-center justify-between py-1 group">
+                                  <button
+                                    className="text-blue-200 hover:underline text-left flex-1"
+                                    onClick={() => handleLoadPreset(name)}
+                                  >{name}</button>
+                                  <button
+                                    className="ml-2 text-xs text-red-400 opacity-0 group-hover:opacity-100 hover:underline"
+                                    onClick={() => handleDeletePreset(name)}
+                                  >Delete</button>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                        <button
+                          className="mt-3 w-full px-3 py-1 bg-gray-700 text-blue-100 rounded hover:bg-gray-600"
+                          onClick={() => setShowPresetMenu(false)}
+                        >Close</button>
+                      </div>
+                    )}
+                  </div>
                 </TooltipTrigger>
                 <TooltipContent side="bottom" className="animate-fade-in">
-                  Save current settings as preset
+                  Save/load calibration preset
                 </TooltipContent>
               </Tooltip>
             </div>
@@ -1681,6 +2212,23 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                 {/* Main image preview, relative for overlay */}
                 <div className="relative flex-grow flex justify-center">
                   <img src={previewUrl} alt="Master preview" className="rounded-lg shadow-lg max-w-full max-h-96" />
+                  {/* Score & Recommendations Box */}
+                  {masterStats?.score !== undefined && (
+                    <div className="absolute left-1/2 -translate-x-1/2 top-full mt-4 w-full max-w-md bg-gradient-to-r from-blue-900 via-blue-800 to-blue-900 border border-blue-500/40 rounded-xl shadow-lg p-4 flex flex-col items-center z-20 animate-fade-in">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Star className="w-6 h-6 text-yellow-400 drop-shadow" />
+                        <span className="text-2xl font-bold text-white">{masterStats.score} / 10</span>
+                        <span className="ml-2 text-blue-200 text-sm font-medium">Calibration Score</span>
+                      </div>
+                      {Array.isArray(masterStats.recommendations) && masterStats.recommendations.length > 0 && (
+                        <ul className="mt-1 text-blue-100 text-sm list-disc list-inside w-full">
+                          {masterStats.recommendations.map((rec: string, idx: number) => (
+                            <li key={idx} className="mb-1">{rec}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
                   {/* Histogram overlay */}
                   {showHistogram && masterStats?.histogram && (
                     <svg className="absolute left-0 bottom-0 w-full h-32 pointer-events-none z-10" viewBox="0 0 400 80">
@@ -1728,35 +2276,59 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
         </div>
         {/* Action Buttons */}
         <div className="flex justify-end gap-4 mt-8">
-          <button className="px-6 py-2 bg-[#232946] text-white rounded shadow hover:bg-[#181c23]">Back</button>
-          <button className="px-6 py-2 bg-[#183153] text-white rounded shadow-md hover:bg-[#102040]">Save Settings</button>
+          <button className="px-6 py-2 bg-[#232946] text-white rounded shadow hover:bg-[#181c23]" onClick={handleBack}>Back</button>
+          <button
+            className="px-6 py-2 bg-blue-600 text-white rounded shadow-md hover:bg-blue-700"
+            onClick={() => {
+              if (allCalibrationsReady) {
+                handleNextStep();
+              } else {
+                setShowSkipDialog(true);
+              }
+            }}
+          >
+            Next: Light Frame Calibration & Stacking
+          </button>
+          {showSkipDialog && (
+            <Dialog open={showSkipDialog} onOpenChange={setShowSkipDialog}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Proceed Without All Calibration Frames?</DialogTitle>
+                  <DialogDescription>
+                    You don't have {missingTypes.join(', ')} calibration frame{missingTypes.length > 1 ? 's' : ''}.<br />
+                    Skipping calibration may result in suboptimal results. Are you sure you want to continue?
+                  </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                  <button className="px-4 py-2 bg-blue-600 text-white rounded" onClick={() => { setShowSkipDialog(false); handleNextStep(); }}>Proceed Anyway</button>
+                  <button className="px-4 py-2 bg-gray-600 text-white rounded" onClick={() => setShowSkipDialog(false)}>Go Back</button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          )}
         </div>
         {recommendationDialog && (
-          <Dialog open onOpenChange={open => !open && setRecommendationDialog(null)}>
+          <Dialog open={!!recommendationDialog} onOpenChange={() => setRecommendationDialog(null)}>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Stellar Astro Recommendation</DialogTitle>
+                <DialogTitle>Stacking Recommendation</DialogTitle>
                 <DialogDescription>
-                  We analyzed your frames and recommend using <b>{recommendationDialog.recommendation.method}</b>
-                  {recommendationDialog.recommendation.sigma && <> (sigma={recommendationDialog.recommendation.sigma})</>}
-                  instead of your choice (<b>{recommendationDialog.userMethod}</b>
-                  {recommendationDialog.userSigma && <> (sigma={recommendationDialog.userSigma})</>}).<br />
-                  <span className="block mt-2 text-blue-400">{recommendationDialog.recommendation.reason}</span>
+                  {recommendationDialog?.recommendation?.reason}
                 </DialogDescription>
               </DialogHeader>
+              <div className="flex flex-col gap-2 mt-2">
+                <div><b>Recommended Method:</b> {recommendationDialog?.recommendation?.method}</div>
+                {recommendationDialog?.recommendation?.sigma && (
+                  <div><b>Recommended Sigma:</b> {recommendationDialog?.recommendation?.sigma}</div>
+                )}
+                <div><b>Your Choice:</b> {recommendationDialog?.userMethod}</div>
+                {recommendationDialog?.userSigma && (
+                  <div><b>Your Sigma:</b> {recommendationDialog?.userSigma}</div>
+                )}
+              </div>
               <DialogFooter>
-                <button
-                  className="px-4 py-2 bg-blue-700 text-white rounded shadow hover:bg-blue-800"
-                  onClick={recommendationDialog.onAccept}
-                >
-                  Use Recommendation
-                </button>
-                <button
-                  className="px-4 py-2 bg-gray-700 text-white rounded shadow hover:bg-gray-800"
-                  onClick={recommendationDialog.onDecline}
-                >
-                  Proceed with My Choice
-                </button>
+                <button className="px-4 py-2 bg-blue-600 text-white rounded" onClick={recommendationDialog?.onAccept}>Accept Recommendation</button>
+                <button className="px-4 py-2 bg-gray-600 text-white rounded" onClick={recommendationDialog?.onDecline}>Keep My Choice</button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -1768,6 +2340,199 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
           </div>
         )}
       </div>
+      {/* Superdark Creation Modal */}
+      {showSuperdarkModal && (
+        <Dialog open={showSuperdarkModal} onOpenChange={setShowSuperdarkModal}>
+          <DialogContent className="max-w-5xl w-full p-8 rounded-2xl shadow-2xl border border-[#232946]/60 bg-[#10131a]" style={{ maxHeight: '80vh', overflow: 'auto' }}>
+            <DialogHeader>
+              <DialogTitle className="text-2xl">Create Superdark</DialogTitle>
+              <DialogDescription className="text-base text-blue-200">
+                Combine dark frames from any project or upload new darks to create a reusable Superdark.
+              </DialogDescription>
+            </DialogHeader>
+            {/* Project selector and file picker */}
+            <div className="mb-4">
+              <label className="block font-medium mb-1 text-blue-100">Select Project</label>
+              {/* TODO: Replace with real project list */}
+              <select
+                className="bg-[#181c23] text-white border border-[#232946] rounded px-3 py-2 mt-1 w-full"
+                value={superdarkProject}
+                onChange={e => setSuperdarkProject(e.target.value)}
+              >
+                {projects.map(p => (
+                  <option key={p.id} value={p.id}>{p.title}</option>
+                ))}
+              </select>
+            </div>
+            {/* Table of available darks with metadata and best group highlighting */}
+            <div className="mb-4">
+              <label className="block font-medium mb-2 text-blue-100 flex items-center gap-2 text-lg">
+                Select Dark Frames
+                <span className="ml-1 text-xs text-blue-300 cursor-pointer" title="Frames must match on camera, binning, gain, and be within ±1°C for temperature. The largest matching group is highlighted.">
+                  <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="#60a5fa" strokeWidth="2" fill="#232946" /><text x="12" y="16" textAnchor="middle" fontSize="12" fill="#60a5fa">i</text></svg>
+                </span>
+              </label>
+              <div className="overflow-x-auto rounded-lg border border-[#232946]/60 bg-[#181c23]" style={{ maxHeight: '45vh', overflowY: 'auto' }}>
+                <table className="min-w-full text-sm text-blue-100">
+                  <thead className="sticky top-0 z-10 bg-[#232946]/90">
+                    <tr>
+                      <th className="px-3 py-2">Select</th>
+                      <th className="px-3 py-2">File</th>
+                      <th className="px-3 py-2">Camera</th>
+                      <th className="px-3 py-2">Binning</th>
+                      <th className="px-3 py-2">Gain</th>
+                      <th className="px-3 py-2">Temp (°C)</th>
+                      <th className="px-3 py-2">Exposure (s)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {availableDarks.map((f, idx) => {
+                      const meta = superdarkMetadata.find(m => m.name === f.name) || {};
+                      const { bestGroup } = groupByMatchingFrames(superdarkMetadata);
+                      const isBest = bestGroup.some(bg => bg.name === f.name);
+                      return (
+                        <tr key={f.path} className={isBest ? 'bg-green-800/70' : 'bg-[#181c23]'} style={{ fontSize: '1rem' }}>
+                          <td className="px-3 py-2 text-center">
+                            <input
+                              type="checkbox"
+                              checked={selectedDarkPaths.includes(f.path)}
+                              onChange={e => handleDarkCheckbox(f.path, e.target.checked)}
+                              disabled={!isBest && bestGroup.length > 0}
+                              title={!isBest ? 'Does not match best group (camera, binning, gain, temp)' : ''}
+                            />
+                          </td>
+                          <td className="px-3 py-2 font-mono truncate max-w-[180px]">{f.name}</td>
+                          <td className="px-3 py-2">{meta.camera}</td>
+                          <td className="px-3 py-2">{meta.binning}</td>
+                          <td className="px-3 py-2">{meta.gain}</td>
+                          <td className="px-3 py-2">{meta.temp}</td>
+                          <td className="px-3 py-2">{meta.exposure}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <button
+                className="mt-3 px-4 py-2 bg-green-700 text-white rounded shadow hover:bg-green-800 font-semibold text-base"
+                onClick={() => {
+                  const { bestGroup } = groupByMatchingFrames(superdarkMetadata);
+                  setSelectedDarkPaths(bestGroup.map(f => f.path));
+                }}
+                disabled={groupByMatchingFrames(superdarkMetadata).bestGroup.length === 0}
+                title="Auto-select the largest matching group"
+              >
+                Select Best Group ({groupByMatchingFrames(superdarkMetadata).bestGroup.length} frames)
+              </button>
+              <button
+                className="mt-3 ml-3 px-4 py-2 bg-red-700 text-white rounded shadow hover:bg-red-800 font-semibold text-base"
+                onClick={() => {
+                  setSelectedDarkPaths([]);
+                  setSuperdarkMetadata([]);
+                  setSuperdarkWarnings([]);
+                }}
+                title="Clear all selected files"
+              >
+                Clear Selection
+              </button>
+              {selectedDarkPaths.length > 0 && selectedDarkPaths.some(p => !groupByMatchingFrames(superdarkMetadata).bestGroup.map(f => f.path).includes(p)) && (
+                <div className="mt-2 text-yellow-300 text-sm font-semibold">
+                  Warning: Some selected frames do not match the best group (camera, binning, gain, temp). Superdark creation may fail.
+                </div>
+              )}
+            </div>
+            <div className="mb-4">
+              <label className="block font-medium mb-1 text-blue-100">Upload Additional Dark FITS Files</label>
+              <input
+                type="file"
+                accept=".fits,.fit,.fts"
+                multiple
+                onChange={e => {
+                  if (e.target.files) handleSuperdarkUpload(Array.from(e.target.files));
+                }}
+                className="block w-full text-sm text-blue-100 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-700 file:text-blue-100 hover:file:bg-blue-800"
+              />
+            </div>
+            {/* Metadata table and warnings */}
+            {superdarkMetadata.length > 0 && (
+              <div className="mb-4">
+                <label className="block font-medium mb-1 text-blue-100">Selected File Metadata</label>
+                <table className="w-full text-xs bg-[#181c23] border border-[#232946] rounded">
+                  <thead>
+                    <tr>
+                      <th>File</th><th>Camera</th><th>Size</th><th>Binning</th><th>Temp</th><th>Exposure</th><th>Gain</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {superdarkMetadata.map((meta, i) => (
+                      <tr key={i}>
+                        <td>{meta.name}</td><td>{meta.camera}</td><td>{meta.size}</td><td>{meta.binning}</td><td>{meta.temp}</td><td>{meta.exposure}</td><td>{meta.gain}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {superdarkWarnings.length > 0 && (
+              <div className="mb-4 text-red-400 text-xs">
+                {superdarkWarnings.map((w, i) => <div key={i}>{w}</div>)}
+              </div>
+            )}
+            {/* Stacking settings and name */}
+            <div className="mb-4 flex gap-4">
+              <div className="flex-1">
+                <label className="block font-medium mb-1 text-blue-100">Superdark Name</label>
+                <input
+                  type="text"
+                  className="border rounded px-3 py-2 w-full bg-[#181c23] text-white border-[#232946]"
+                  value={superdarkName}
+                  onChange={e => setSuperdarkName(e.target.value)}
+                  placeholder="e.g. Superdark Winter 2024"
+                />
+              </div>
+              <div className="flex-1">
+                <label className="block font-medium mb-1 text-blue-100">Stacking Method</label>
+                <select
+                  className="bg-[#181c23] text-white border border-[#232946] rounded px-3 py-2 mt-1 w-full"
+                  value={superdarkStacking}
+                  onChange={e => setSuperdarkStacking(e.target.value)}
+                >
+                  {ADVANCED_DARK_STACKING_METHODS.map(m => (
+                    <option key={m.value} value={m.value}>{m.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex-1">
+                <label className="block font-medium mb-1 text-blue-100">Sigma/Kappa Threshold</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="1.5"
+                  max="5"
+                  value={superdarkSigma}
+                  onChange={e => setSuperdarkSigma(e.target.value)}
+                  className="border rounded px-2 py-1 w-full bg-[#181c23] text-white border-[#232946]"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <button
+                className="px-4 py-2 bg-blue-700 text-white rounded-lg shadow hover:bg-blue-800 font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+                onClick={submitSuperdarkJob}
+                disabled={isCreatingSuperdark || !superdarkName || selectedDarkPaths.length === 0 || superdarkWarnings.length > 0 || selectedDarkPaths.some(p => !groupByMatchingFrames(superdarkMetadata).bestGroup.map(f => f.path).includes(p))}
+              >
+                {isCreatingSuperdark ? 'Creating...' : 'Create Superdark'}
+              </button>
+              <button
+                className="ml-2 px-4 py-2 bg-gray-700 text-white rounded-lg shadow hover:bg-gray-800 font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+                onClick={() => setShowSuperdarkModal(false)}
+              >
+                Cancel
+              </button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </TooltipProvider>
   );
 };

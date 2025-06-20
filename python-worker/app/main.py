@@ -32,6 +32,7 @@ import uuid
 from datetime import datetime
 import glob
 from concurrent.futures import ThreadPoolExecutor
+from fastapi import APIRouter
 
 logger = logging.getLogger(__name__)
 
@@ -404,12 +405,6 @@ async def cancel_job(payload: CancelJobRequest):
     return {"job_id": job_id, "status": "cancelled"}
 
 async def run_calibration_job(job: CalibrationJobRequest, job_id: str):
-    # Check for cancellation before starting
-    job_status = await get_job(job_id)
-    if job_status and job_status.get("status") == "cancelled":
-        print(f"[CANCEL] Job {job_id} was cancelled before starting.")
-        return
-    print(f"[{datetime.utcnow().isoformat()}] [BG] Starting calibration job: {job.dict()} (job_id={job_id})", flush=True)
     try:
         await insert_job(job_id, status="running", progress=0)
         fits_input_paths = [p for p in job.input_paths if p.lower().endswith((".fit", ".fits"))]
@@ -529,6 +524,37 @@ async def run_calibration_job(job: CalibrationJobRequest, job_id: str):
             if job_status and job_status.get("status") == "cancelled":
                 print(f"[{datetime.utcnow().isoformat()}] [CANCEL] Job {job_id} cancelled after bias subtraction.")
                 return
+            # --- Temperature/Exposure Matching for Dark Frames ---
+            if frame_type == 'dark':
+                temp_matching = job.settings.get('tempMatching', False)
+                exposure_matching = job.settings.get('exposureMatching', False)
+                # Only filter if at least one is enabled and light frames are available
+                if (temp_matching or exposure_matching) and local_light_files:
+                    # Get reference temp/exptime from first light frame
+                    with fits.open(local_light_files[0]) as hdul:
+                        light_header = hdul[0].header
+                        ref_temp = light_header.get('CCD-TEMP')
+                        ref_exptime = light_header.get('EXPTIME')
+                    filtered_files = []
+                    for f in local_files:
+                        try:
+                            with fits.open(f) as hdul:
+                                header = hdul[0].header
+                                temp_ok = True
+                                exptime_ok = True
+                                if temp_matching and ref_temp is not None and header.get('CCD-TEMP') is not None:
+                                    temp_ok = abs(header.get('CCD-TEMP') - ref_temp) <= 1.0
+                                if exposure_matching and ref_exptime is not None and header.get('EXPTIME') is not None:
+                                    exptime_ok = abs(header.get('EXPTIME') - ref_exptime) <= 0.1
+                                if temp_ok and exptime_ok:
+                                    filtered_files.append(f)
+                        except Exception as e:
+                            print(f"[WARN] Failed to read FITS for temp/exptime matching: {f}: {e}")
+                    if filtered_files:
+                        print(f"[MATCH] Using {len(filtered_files)} darks after temp/exptime matching (of {len(local_files)})")
+                        local_files = filtered_files
+                    else:
+                        print(f"[WARN] No darks matched temp/exptime criteria; using all {len(local_files)} darks.")
             # --- Frame validation before stacking ---
             print(f"[{datetime.utcnow().isoformat()}] [DEBUG] Validating frames...", flush=True)
             valid_files = []
@@ -553,6 +579,7 @@ async def run_calibration_job(job: CalibrationJobRequest, job_id: str):
                     traceback.print_exc()
                     rejected_files.append({'file': os.path.basename(f), 'reason': f'Error reading FITS: {e}'})
             if not valid_files:
+                print(f"[FAIL] No valid frames for stacking. All frames rejected. job_id={job_id}, frame_type={frame_type}")
                 await insert_job(job_id, status="failed", error="No valid frames for stacking. All frames rejected.", progress=100, result={
                     'used': 0,
                     'rejected': len(rejected_files),
@@ -580,10 +607,27 @@ async def run_calibration_job(job: CalibrationJobRequest, job_id: str):
                 except Exception as e:
                     print(f"[ERROR] Failed to load bad pixel map: {e}", flush=True)
                     bad_pixel_map = None
+            # --- Superdark support ---
+            superdark_used = False
+            if frame_type == 'dark' and job.settings.get('superdarkPath'):
+                superdark_path = job.settings['superdarkPath']
+                print(f"[SUPERDARK] Using Superdark: {superdark_path}")
+                superdark_local = os.path.join(tmpdir, 'superdark.fits')
+                try:
+                    download_file(job.input_bucket, superdark_path, superdark_local)
+                    with fits.open(superdark_local) as hdul:
+                        master = hdul[0].data.astype(np.float32)
+                    valid_files = [superdark_local]  # For stats/diagnostics
+                    superdark_used = True
+                except Exception as e:
+                    tb = traceback.format_exc()
+                    print(f"[ERROR] Failed to download or load Superdark: {e}\n{tb}")
+                    await insert_job(job_id, status="failed", error=f"Superdark download/load failed: {e}", progress=0)
+                    return
+                print(f"[SUPERDARK] Superdark loaded and will be used as master dark for calibration.")
             # --- Proceed with stacking only valid files ---
             print(f"[{datetime.utcnow().isoformat()}] [BG] {len(valid_files)} valid frames, {len(rejected_files)} rejected.")
             stats = analyze_frames(valid_files)
-            # --- FIX: Define method and sigma from job.settings ---
             method = job.settings.get('stackingMethod', 'median')
             sigma = float(job.settings.get('sigmaThreshold', 3.0))
             cosmetic = job.settings.get('cosmetic', None)
@@ -593,11 +637,11 @@ async def run_calibration_job(job: CalibrationJobRequest, job_id: str):
             if cosmetic_method == 'la_cosmic':
                 la_cosmic_params = job.settings.get('laCosmicParams', None)
             rec_method, rec_sigma, reason = recommend_stacking(stats, method, sigma)
-            # Cancellation check before stacking
             job_status = await get_job(job_id)
             if job_status and job_status.get("status") == "cancelled":
                 print(f"[{datetime.utcnow().isoformat()}] [CANCEL] Job {job_id} cancelled before stacking.")
                 return
+            if not superdark_used:
             master = create_master_frame(
                 valid_files,
                 method=method,
@@ -605,9 +649,9 @@ async def run_calibration_job(job: CalibrationJobRequest, job_id: str):
                 cosmetic=cosmetic,
                 cosmetic_method=cosmetic_method,
                 cosmetic_threshold=cosmetic_threshold,
-                la_cosmic_params=la_cosmic_params,
-                bad_pixel_map=bad_pixel_map
-            )
+                    la_cosmic_params=la_cosmic_params,
+                    bad_pixel_map=bad_pixel_map
+                )
             # --- Compute diagnostics/stats for master frame ---
             master_stats = {
                 'n_frames': len(valid_files),
@@ -633,6 +677,75 @@ async def run_calibration_job(job: CalibrationJobRequest, job_id: str):
             master_stats['histogram_bins'] = bin_edges.tolist()
             # Add stacking recommendation reason
             master_stats['recommendation'] = reason
+
+            # --- Calibration Scoring Logic (per frame type) ---
+            score = 10
+            recommendations = []
+            ft = (frame_type or '').lower()
+            if ft == 'bias':
+                # Bias: low std, no negatives, narrow histogram
+                if master_stats['std'] > 15:
+                    score -= 2
+                    recommendations.append(f"High noise in bias (std={master_stats['std']:.1f}): Check for electronic interference or unstable power.")
+                if master_stats['min'] < 0:
+                    score -= 1
+                    recommendations.append(f"Negative pixel values detected (min={master_stats['min']:.1f}): Check for readout issues.")
+                if master_stats['n_frames'] < 20:
+                    score -= 2
+                    recommendations.append(f"Low number of bias frames ({master_stats['n_frames']}): More frames improve master bias quality.")
+                if master_stats['max'] > 60000:
+                    score -= 1
+                    recommendations.append(f"Saturated pixels detected (max={master_stats['max']:.1f}): Avoid overexposure.")
+            elif ft == 'dark':
+                # Dark: low outlier ratio, low std, no hot pixels
+                if outlier_ratio > 0.005:
+                    score -= 3
+                    recommendations.append(f"Too many hot pixels in dark (outlier ratio {outlier_ratio:.2%}): Try lower temperature or more frames.")
+                if master_stats['std'] > 30:
+                    score -= 2
+                    recommendations.append(f"High noise in dark (std={master_stats['std']:.1f}): Consider more frames or check cooling.")
+                if master_stats['min'] < 0:
+                    score -= 1
+                    recommendations.append(f"Negative pixel values detected (min={master_stats['min']:.1f}): Check for calibration or readout issues.")
+                if master_stats['n_frames'] < 15:
+                    score -= 2
+                    recommendations.append(f"Low number of dark frames ({master_stats['n_frames']}): More frames improve master dark quality.")
+            elif ft == 'flat':
+                # Flat: even illumination, no clipping, centered histogram
+                if master_stats['min'] < 1000:
+                    score -= 1
+                    recommendations.append(f"Flat frame underexposed (min={master_stats['min']:.1f}): Increase flat exposure.")
+                if master_stats['max'] > 60000:
+                    score -= 2
+                    recommendations.append(f"Flat frame overexposed (max={master_stats['max']:.1f}): Decrease flat exposure.")
+                if master_stats['std'] < 100:
+                    score -= 1
+                    recommendations.append(f"Flat frame has very low variation (std={master_stats['std']:.1f}): Check for even illumination.")
+                if master_stats['n_frames'] < 10:
+                    score -= 2
+                    recommendations.append(f"Low number of flat frames ({master_stats['n_frames']}): More frames improve master flat quality.")
+            else:
+                # Generic fallback (for unknown types)
+                if outlier_ratio > 0.01:
+                    score -= 3
+                    recommendations.append(f"High outlier ratio ({outlier_ratio:.2%}): Check for dust, hot pixels, or cosmic rays.")
+                if master_stats['std'] > 500:
+                    score -= 2
+                    recommendations.append(f"High noise (std={master_stats['std']:.1f}): Consider more frames or better calibration.")
+                if master_stats['min'] < 0:
+                    score -= 1
+                    recommendations.append(f"Negative pixel values detected (min={master_stats['min']:.1f}): Check calibration frames for issues.")
+                if master_stats['max'] > 60000:
+                    score -= 1
+                    recommendations.append(f"Saturated pixels detected (max={master_stats['max']:.1f}): Avoid overexposure.")
+                if master_stats['n_frames'] < 10:
+                    score -= 2
+                    recommendations.append(f"Low number of frames ({master_stats['n_frames']}): More frames improve calibration quality.")
+            # Clamp score
+            score = max(0, min(10, score))
+            master_stats['score'] = score
+            master_stats['recommendations'] = recommendations
+
             # Cancellation check after stacking
             job_status = await get_job(job_id)
             if job_status and job_status.get("status") == "cancelled":
@@ -642,10 +755,15 @@ async def run_calibration_job(job: CalibrationJobRequest, job_id: str):
             if frame_type == 'dark' and dark_scaling:
                 from .calibration_worker import estimate_dark_scaling_factor
                 try:
+                    if superdark_used:
+                        print(f"[SUPERDARK] Dark scaling will be applied to Superdark master.")
+                        darks_for_scaling = [superdark_local]
+                    else:
                     print(f"[{datetime.utcnow().isoformat()}] [BG] Calling estimate_dark_scaling_factor with {len(local_files)} darks and {len(local_light_files)} lights...")
+                        darks_for_scaling = local_files
                     if job.settings.get('darkScalingAuto', True):
                         await update_job_progress(job_id, 50)
-                        scaling_factor = estimate_dark_scaling_factor(local_files, local_light_files if local_light_files else None)
+                        scaling_factor = estimate_dark_scaling_factor(darks_for_scaling, local_light_files if local_light_files else None)
                         print(f"[{datetime.utcnow().isoformat()}] [BG] Auto-estimated dark scaling factor: {scaling_factor:.4f}")
                     else:
                         scaling_factor = float(job.settings.get('darkScalingFactor', 1.0))
@@ -694,7 +812,7 @@ async def run_calibration_job(job: CalibrationJobRequest, job_id: str):
                 "preview_url": preview_url,
                 "preview_png_path": png_storage_path
             }
-            await insert_job(job_id, status="success", result=base_result, diagnostics=stats, warnings=[], error=None, progress=100)
+            await insert_job(job_id, status="success", result=base_result, diagnostics=master_stats, warnings=[], error=None, progress=100)
             print(f"[{datetime.utcnow().isoformat()}] [BG] Notified frontend of preview availability.")
             # Now upload the FITS file in the background (does not block user)
             def upload_fits_bg():
@@ -735,10 +853,48 @@ async def run_calibration_job(job: CalibrationJobRequest, job_id: str):
             print(f"[LOG] Final master_stats for job {job_id}: {json.dumps(master_stats)}", flush=True)
             await insert_job(job_id, status="success", progress=100, result=final_result, diagnostics=master_stats)
             print(f"[LOG] Final insert_job called for job {job_id} with diagnostics.", flush=True)
+            # --- Per-light Dark Optimization ---
+            if frame_type == 'dark' and job.settings.get('darkOptimization', False) and local_light_files:
+                print(f"[OPT] Per-light dark optimization enabled. Matching each light to master dark.")
+                # Load master dark (already stacked)
+                master_dark = master
+                optimized_lights = []
+                scaling_factors = []
+                for light_path in local_light_files:
+                    with fits.open(light_path) as hdul:
+                        light_data = hdul[0].data.astype(np.float32)
+                    # Compute scaling factor (median ratio)
+                    median_light = np.median(light_data)
+                    median_dark = np.median(master_dark)
+                    scaling = median_light / median_dark if median_dark != 0 else 1.0
+                    scaling = max(0.5, min(2.0, scaling))
+                    scaled_dark = master_dark * scaling
+                    optimized = light_data - scaled_dark
+                    optimized_lights.append(optimized)
+                    scaling_factors.append(scaling)
+                print(f"[OPT] Used scaling factors for each light: {scaling_factors}")
+                # Stack optimized lights using the selected method
+                arr = np.stack(optimized_lights, axis=0)
+                if method == 'median':
+                    master = np.median(arr, axis=0)
+                elif method == 'mean':
+                    master = np.mean(arr, axis=0)
+                elif method == 'sigma':
+                    if sigma is None:
+                        sigma = 3.0
+                    med = np.median(arr, axis=0)
+                    std = np.std(arr, axis=0)
+                    mask = np.abs(arr - med) < (sigma * std)
+                    master = np.mean(np.where(mask, arr, np.nan), axis=0)
+                    master = np.nan_to_num(master)
+                else:
+                    master = np.median(arr, axis=0)  # fallback
+                print(f"[OPT] Per-light dark optimization complete. Stacked {len(optimized_lights)} optimized lights.")
     except Exception as e:
-        print(f"[{datetime.utcnow().isoformat()}] [FATAL ERROR] Unexpected error in run_calibration_job: {e}", flush=True)
-        traceback.print_exc()
-        return { 'status': 'failed', 'progress': 0, 'error': str(e) }
+        tb = traceback.format_exc()
+        print(f"[FAIL] Calibration job failed: job_id={job_id}, frame_type={getattr(job, 'frame_type', 'unknown')}, error={e}\n{tb}", flush=True)
+        await insert_job(job_id, status="failed", error=f"Calibration job failed: {e}", progress=100)
+        return
 
 @app.post("/jobs/submit")
 async def submit_job(job: CalibrationJobRequest, request: Request, background_tasks: BackgroundTasks):
@@ -829,6 +985,94 @@ def generate_png_preview(fits_path, png_path, downsample_to=512):
 #     # Upload PNG to Supabase at the same path but with .png extension
 #     preview_path = file_path.rsplit('.', 1)[0] + '.png'
 #     upload_file("raw-frames", preview_path, local_png, public=False)
+
+@app.post("/superdark/create")
+async def create_superdark(request: Request):
+    data = await request.json()
+    user_id = data.get('userId')
+    superdark_name = data.get('superdarkName')
+    input_paths = data.get('input_paths', [])
+    stacking_method = data.get('stackingMethod', 'median')
+    sigma = float(data.get('sigma', 3.0))
+    project_id = data.get('projectId', None)
+    input_bucket = data.get('input_bucket', 'raw-frames')
+    output_bucket = data.get('output_bucket', 'superdarks')
+    # Validate input
+    if not user_id or not superdark_name or not input_paths:
+        return JSONResponse(status_code=400, content={"error": "Missing required fields."})
+    # Download all files to tempdir
+    import tempfile, os
+    from .supabase_io import download_file, upload_file
+    from .fits_analysis import analyze_fits_headers
+    from .calibration_worker import create_master_frame
+    from astropy.io import fits
+    import numpy as np
+    with tempfile.TemporaryDirectory() as tmpdir:
+        local_files = []
+        metadata_list = []
+        for i, spath in enumerate(input_paths):
+            local_path = os.path.join(tmpdir, f"input_{i}.fits")
+            try:
+                download_file(input_bucket, spath, local_path)
+                local_files.append(local_path)
+                with fits.open(local_path) as hdul:
+                    header = hdul[0].header
+                    analysis = analyze_fits_headers(header)
+                    meta = {
+                        'name': os.path.basename(spath),
+                        'camera': header.get('INSTRUME'),
+                        'size': hdul[0].data.shape,
+                        'binning': f"{header.get('XBINNING', 1)}x{header.get('YBINNING', 1)}",
+                        'temp': header.get('CCD-TEMP'),
+                        'exposure': header.get('EXPTIME'),
+                        'gain': header.get('GAIN'),
+                    }
+                    metadata_list.append(meta)
+            except Exception as e:
+                return JSONResponse(status_code=400, content={"error": f"Failed to download or read FITS: {spath}, {e}"})
+        # Validate metadata: all must match (with tolerance for temp)
+        def all_equal(lst):
+            return all(x == lst[0] for x in lst)
+        cameras = [m['camera'] for m in metadata_list]
+        sizes = [m['size'] for m in metadata_list]
+        binnings = [m['binning'] for m in metadata_list]
+        exposures = [m['exposure'] for m in metadata_list]
+        gains = [m['gain'] for m in metadata_list]
+        temps = [m['temp'] for m in metadata_list if m['temp'] is not None]
+        if not all_equal(cameras):
+            return JSONResponse(status_code=400, content={"error": "All files must be from the same camera."})
+        if not all_equal(sizes):
+            return JSONResponse(status_code=400, content={"error": "All files must have the same image size."})
+        if not all_equal(binnings):
+            return JSONResponse(status_code=400, content={"error": "All files must have the same binning."})
+        # Exposure time can vary for superdarks; just record the range
+        if not all_equal(gains):
+            return JSONResponse(status_code=400, content={"error": "All files must have the same gain."})
+        if temps and (max(temps) - min(temps) > 1.0):
+            return JSONResponse(status_code=400, content={"error": "All files must have similar temperature (±1°C)."})
+        # Stack files
+        master = create_master_frame(
+            local_files,
+            method=stacking_method,
+            sigma_clip=sigma if stacking_method in ['sigma', 'winsorized'] else None,
+            cosmetic=None,
+            cosmetic_method=None,
+            cosmetic_threshold=None,
+            la_cosmic_params=None,
+            bad_pixel_map=None
+        )
+        # Save Superdark
+        from datetime import datetime
+        fits_path = os.path.join(tmpdir, 'superdark.fits')
+        fits.PrimaryHDU(master).writeto(fits_path, overwrite=True)
+        storage_path = f"{user_id}/{superdark_name.replace(' ', '_')}_{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}.fits"
+        try:
+            upload_file(output_bucket, storage_path, fits_path, public=True)
+        except Exception as e:
+            return JSONResponse(status_code=500, content={"error": f"Failed to upload Superdark: {e}"})
+        # Add exposure range to metadata
+        exposure_range = [min(exposures), max(exposures)] if exposures else [None, None]
+        return {"superdarkPath": storage_path, "bucket": output_bucket, "metadata": metadata_list, "exposure_range": exposure_range}
 
 if __name__ == "__main__":
     # Force port 8000 and prevent port changes

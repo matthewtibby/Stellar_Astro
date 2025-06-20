@@ -499,41 +499,40 @@ export async function getFitsFileUrl(filePath: string): Promise<string> {
     console.log('[getFitsFileUrl] Getting URL for file:', filePath);
     const client = checkSupabase();
 
+    // Log the directory we're checking
+    const directory = filePath.split('/').slice(0, -1).join('/');
+    const fileName = filePath.split('/').pop();
+    console.log('[getFitsFileUrl] Directory:', directory);
+    console.log('[getFitsFileUrl] Filename:', fileName);
+
     // Check if the file exists first
     const { data: fileExists, error: checkError } = await client.storage
       .from(STORAGE_BUCKETS.RAW_FRAMES)
-      .list(filePath.split('/').slice(0, -1).join('/'));
+      .list(directory);
 
     if (checkError) {
       console.error('[getFitsFileUrl] Error checking file existence:', checkError);
       throw checkError;
     }
 
-    const fileName = filePath.split('/').pop();
-    const exists = fileExists?.some(file => file.name === fileName);
+    console.log('[getFitsFileUrl] Files in directory:', fileExists);
 
-    if (!exists) {
-      console.error('[getFitsFileUrl] File not found in bucket:', filePath);
-      throw new Error('File not found in bucket');
-    }
+    // Check if our file is in the list
+    const fileInList = fileExists?.find(f => f.name === fileName);
+    console.log('[getFitsFileUrl] File found in list?', !!fileInList);
 
-    // Get the signed URL
-    const { data, error } = await client.storage
+    // Get the URL
+    const { data: url } = await client.storage
       .from(STORAGE_BUCKETS.RAW_FRAMES)
-      .createSignedUrl(filePath, 3600); // URL expires in 1 hour
+      .createSignedUrl(filePath, 3600);
 
-    if (error) {
-      console.error('[getFitsFileUrl] Error creating signed URL:', error);
-      throw error;
-    }
-
-    if (!data?.signedUrl) {
-      console.error('[getFitsFileUrl] No signed URL returned');
+    console.log('[getFitsFileUrl] Generated URL:', url);
+    
+    if (!url?.signedUrl) {
       throw new Error('Failed to generate signed URL');
     }
 
-    console.log('[getFitsFileUrl] Successfully generated signed URL');
-    return data.signedUrl;
+    return url.signedUrl;
   } catch (error) {
     console.error('[getFitsFileUrl] Error:', error);
     throw error;
