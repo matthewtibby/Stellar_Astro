@@ -17,12 +17,32 @@ import { getFilesByType, uploadRawFrame, validateFitsFile } from '@/src/utils/st
 import { useUserStore } from '@/src/store/user';
 import { createBrowserClient } from '@/src/lib/supabase';
 import { supabaseUrl, supabaseAnonKey } from '@/src/lib/supabase';
+import CreateSuperdarkUI from './CreateSuperdarkUI';
+import { useSuperdarks } from '@/src/hooks/useSuperdarks';
+
+interface DarkFileWithMetadata {
+  name: string;
+  path: string;
+  project: string;
+  projectId: string;
+  camera: string;
+  binning: string;
+  gain: string | number;
+  temp: string | number;
+  exposure: string | number;
+}
 
 // Add type definition at the top of the file
 interface FileMetadata {
   path: string;
   type: string;
   metadata: {
+    instrument?: string;
+    binning?: string;
+    gain?: number;
+    temperature?: number;
+    exposure_time?: number;
+    // Keep the old fields for backward compatibility
     INSTRUME?: string;
     XBINNING?: number;
     YBINNING?: number;
@@ -31,6 +51,68 @@ interface FileMetadata {
     EXPTIME?: number;
   };
 }
+
+const fetchAllProjectDarks = async (
+  projects: { id: string; title: string }[],
+  userId: string
+): Promise<DarkFileWithMetadata[]> => {
+  if (!userId || !projects) return [];
+
+  const allDarks: DarkFileWithMetadata[] = [];
+  const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
+
+  for (const project of projects) {
+    try {
+      const storageFiles = await supabase.storage
+        .from('raw-frames')
+        .list(`${userId}/${project.id}/dark`);
+
+      if (!storageFiles.data) continue;
+
+      const existingFiles = new Set(storageFiles.data.map((f) => f.name));
+
+      const res = await fetch(
+        `http://localhost:8000/list-files?project_id=${project.id}&user_id=${userId}`
+      );
+      const data = await res.json();
+
+      if (data.files) {
+        const darks = data.files
+          .filter((f: FileMetadata) => {
+            const fileName = f.path.split('/').pop();
+            return f.type === 'dark' && existingFiles.has(fileName || '');
+          })
+          .map(
+            (f: FileMetadata): DarkFileWithMetadata => ({
+              name: f.path.split('/').pop() || '',
+              path: f.path,
+              project: project.title,
+              projectId: project.id,
+              camera: f.metadata?.instrument || f.metadata?.INSTRUME || 'Unknown',
+              binning: f.metadata?.binning || `${f.metadata?.XBINNING || 1}x${f.metadata?.YBINNING || 1}`,
+              gain: f.metadata?.gain || f.metadata?.GAIN || 'Unknown',
+              temp:
+                f.metadata?.temperature !== undefined
+                  ? Number(f.metadata.temperature).toFixed(1)
+                  : f.metadata?.['CCD-TEMP'] !== undefined
+                  ? Number(f.metadata['CCD-TEMP']).toFixed(1)
+                  : 'Unknown',
+              exposure:
+                f.metadata?.exposure_time !== undefined
+                  ? Number(f.metadata.exposure_time).toFixed(1)
+                  : f.metadata?.EXPTIME !== undefined
+                  ? Number(f.metadata.EXPTIME).toFixed(1)
+                  : 'Unknown',
+            })
+          );
+        allDarks.push(...darks);
+      }
+    } catch (error) {
+      console.error(`Error fetching darks for project ${project.id}:`, error);
+    }
+  }
+  return allDarks;
+};
 
 const FRAME_TYPES = [
   { key: 'bias', label: 'Master Bias' },
@@ -259,7 +341,6 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
   const [showSuperdarkModal, setShowSuperdarkModal] = useState(false);
   const [superdarkFiles, setSuperdarkFiles] = useState<string[]>([]);
   const [superdarkUploads, setSuperdarkUploads] = useState<File[]>([]);
-  const [superdarkProject, setSuperdarkProject] = useState<string>(projectId);
   const [superdarkName, setSuperdarkName] = useState('');
   const [superdarkStacking, setSuperdarkStacking] = useState('median');
   const [superdarkSigma, setSuperdarkSigma] = useState('3.0');
@@ -268,9 +349,14 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
   const [isCreatingSuperdark, setIsCreatingSuperdark] = useState(false);
   const { user } = useUserStore();
   const { projects, isLoading: projectsLoading, fetchProjects } = useProjects(user?.id, !!user);
+  const { superdarks, isLoading: superdarksLoading, error: superdarksError, refresh: refreshSuperdarks } = useSuperdarks(user?.id);
+  const [selectedSuperdarkPath, setSelectedSuperdarkPath] = useState<string>('');
+  const [superdarkPreviewUrl, setSuperdarkPreviewUrl] = useState<string>('');
   // Add state for available darks in selected project
-  const [availableDarks, setAvailableDarks] = useState<{ name: string, path: string }[]>([]);
+  const [availableDarks, setAvailableDarks] = useState<DarkFileWithMetadata[]>([]);
   const [selectedDarkPaths, setSelectedDarkPaths] = useState<string[]>([]);
+  const [superdarkRefetchTrigger, setSuperdarkRefetchTrigger] = useState(0);
+
 
   // Load presets from localStorage on mount
   useEffect(() => {
@@ -285,6 +371,39 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
   useEffect(() => {
     localStorage.setItem('calibrationPresets_v1', JSON.stringify(presets));
   }, [presets]);
+
+  useEffect(() => {
+    if (selectedSuperdarkPath) {
+      const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
+      
+      // First check if the preview file exists before generating the URL
+      const checkPreviewExists = async () => {
+        try {
+          const previewPath = `${selectedSuperdarkPath}_preview.png`;
+          const { data: fileExists, error } = await supabase.storage
+            .from('superdarks')
+            .list('', { search: previewPath });
+          
+          if (!error && fileExists && fileExists.length > 0) {
+            // Preview exists, generate the public URL
+            const { data } = supabase.storage.from('superdarks').getPublicUrl(previewPath);
+            setSuperdarkPreviewUrl(data.publicUrl);
+          } else {
+            // Preview doesn't exist, clear the URL to prevent 400 errors
+            console.log(`[Superdark] Preview not found for: ${previewPath}`);
+            setSuperdarkPreviewUrl('');
+          }
+        } catch (error) {
+          console.error('[Superdark] Error checking preview existence:', error);
+          setSuperdarkPreviewUrl('');
+        }
+      };
+      
+      checkPreviewExists();
+    } else {
+      setSuperdarkPreviewUrl('');
+    }
+  }, [selectedSuperdarkPath]);
 
   const handleSavePreset = () => {
     setPresetNameInput('');
@@ -547,7 +666,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
         // ...add other required fields
         ...(tabState.bias.badPixelMapPath && { badPixelMapPath: tabState.bias.badPixelMapPath }),
         darkOptimization: tabState.dark.darkOptimization,
-        superdarkPath: tabState.dark.superdarkPath,
+        superdarkPath: selectedSuperdarkPath,
       };
       const res = await fetch(`/api/projects/${projectId}/calibration-jobs/submit`, {
         method: 'POST',
@@ -724,12 +843,18 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
   useEffect(() => {
     async function fetchMasterBiases() {
       if (selectedType === 'dark' && tabState.dark.biasSubtraction) {
-        const prefix = `${userId}/${projectId}/master-bias/`;
-        const { data, error } = await supabase.storage.from('raw-frames').list(prefix);
+        const prefix = `${userId}/${projectId}/bias/`;
+        const { data, error } = await supabase.storage.from('calibrated-frames').list(prefix);
         if (!error && data) {
-          const fits = data.filter((f: any) => f.name.toLowerCase().endsWith('.fits') || f.name.toLowerCase().endsWith('.fit'));
+          // Filter for FITS files only (not PNG duplicates)
+          const fits = data.filter((f: any) => 
+            (f.name.toLowerCase().endsWith('.fits') || f.name.toLowerCase().endsWith('.fit')) &&
+            !f.name.toLowerCase().endsWith('.png')
+          );
           setMasterBiasOptions(fits.map((f: any) => ({ path: prefix + f.name, name: f.name })));
+          console.log(`[Master Bias] Found ${fits.length} bias frames in calibrated-frames/${prefix}:`, fits.map(f => f.name));
         } else {
+          console.log(`[Master Bias] Error or no data from calibrated-frames/${prefix}:`, error);
           setMasterBiasOptions([]);
         }
       } else {
@@ -1009,244 +1134,6 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
   const openSuperdarkModal = () => {
     console.log('[DEBUG] openSuperdarkModal called');
     setShowSuperdarkModal(true);
-    setSuperdarkFiles([]);
-    setSuperdarkUploads([]);
-    setSuperdarkProject(projectId);
-    setSuperdarkName('');
-    setSuperdarkStacking('median');
-    setSuperdarkSigma('3.0');
-    setSuperdarkMetadata([]);
-    setSuperdarkWarnings([]);
-  };
-
-  // Helper to handle file selection/upload and metadata extraction (pseudo, to be implemented)
-  const handleSuperdarkFileSelect = (files: string[]) => {
-    setSuperdarkFiles(files);
-    // TODO: Fetch metadata for each file and setSuperdarkMetadata([...])
-  };
-  const handleSuperdarkUpload = async (files: File[]) => {
-    if (!superdarkProject || !user?.id) return;
-    const uploadedPaths: string[] = [];
-    for (const file of files) {
-      try {
-        // Validate FITS file
-        const valid = await validateFitsFile(file, superdarkProject, user.id, 'dark');
-        if (!valid || valid.valid === false) continue;
-        // Upload
-        const path = await uploadRawFrame(file, superdarkProject, 'dark');
-        uploadedPaths.push(path);
-      } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : String(err);
-        // If duplicate file error, warn and skip, but do not stop the process
-        if (errorMsg.includes('already exists in this project')) {
-          setSuperdarkWarnings(prev => [...prev, errorMsg]);
-          continue;
-        } else {
-          setSuperdarkWarnings(prev => [...prev, errorMsg]);
-        }
-      }
-    }
-    setSelectedDarkPaths(prev => [...prev, ...uploadedPaths]);
-  };
-
-  // Helper to validate selected files (pseudo, to be implemented)
-  const validateSuperdarkFiles = () => {
-    // TODO: Check camera, size, binning, temp, exposure, gain
-    // If mismatches, setSuperdarkWarnings([...])
-  };
-
-  // Helper to submit Superdark creation job
-  const submitSuperdarkJob = async () => {
-    setIsCreatingSuperdark(true);
-    try {
-      if (!user?.id) throw new Error('User not authenticated');
-
-      // First verify all files exist in storage
-      const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
-      const storageFiles = await supabase.storage
-        .from('raw-frames')
-        .list(`${user.id}/${superdarkProject}/dark`);
-
-      if (!storageFiles.data) {
-        throw new Error('Failed to fetch storage files');
-      }
-
-      // Create a Set of existing filenames for quick lookup
-      const existingFiles = new Set(storageFiles.data.map((f: { name: string }) => f.name));
-
-      // Filter selected paths to only include existing files
-      const validPaths = selectedDarkPaths.filter(path => {
-        const fileName = path.split('/').pop();
-        return existingFiles.has(fileName || '');
-      });
-
-      if (validPaths.length === 0) {
-        throw new Error('No valid files selected. Please ensure files exist in storage.');
-      }
-
-      if (validPaths.length !== selectedDarkPaths.length) {
-        setSuperdarkWarnings([`Warning: ${selectedDarkPaths.length - validPaths.length} selected files were not found in storage and will be skipped.`]);
-      }
-
-      const payload = {
-        userId: user.id,
-        superdarkName,
-        input_paths: validPaths,
-        stackingMethod: superdarkStacking,
-        sigma: superdarkSigma,
-        projectId: superdarkProject,
-        input_bucket: 'raw-frames',
-        output_bucket: 'superdarks',
-      };
-
-      console.log('[DEBUG] Submitting Superdark payload:', payload);
-      const res = await fetch('http://localhost:8000/superdark/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-
-      const resBody = await res.json().catch(() => ({}));
-      console.log('[DEBUG] Superdark response status:', res.status, 'body:', resBody);
-      
-      if (!res.ok) throw new Error(resBody.error || 'Failed to create Superdark');
-      
-      // Success - clear the modal
-      setShowSuperdarkModal(false);
-      setSelectedDarkPaths([]);
-      setSuperdarkName('');
-      setSuperdarkMetadata([]);
-      setSuperdarkWarnings([]);
-    } catch (e) {
-      const err = e as Error;
-      setSuperdarkWarnings([err.message || 'Failed to create Superdark']);
-    } finally {
-      setIsCreatingSuperdark(false);
-    }
-  };
-
-  // Fetch darks when project changes
-  useEffect(() => {
-    if (!superdarkProject) return;
-    getFilesByType(superdarkProject).then(filesByType => {
-      const darks = filesByType.dark || [];
-      setAvailableDarks(darks.map((f: { name: string, path: string }) => ({ name: f.name, path: f.path })));
-    });
-  }, [superdarkProject, showSuperdarkModal]);
-
-  // Handle dark selection
-  const handleDarkCheckbox = (path: string, checked: boolean) => {
-    setSelectedDarkPaths(prev => checked ? [...prev, path] : prev.filter(p => p !== path));
-  };
-
-  // Fetch metadata for selected files
-  useEffect(() => {
-    async function fetchProjectFiles() {
-      if (!superdarkProject || !user?.id) return;
-      try {
-        // First, get the list of files that actually exist in storage
-        const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
-        const storageFiles = await supabase.storage
-          .from('raw-frames')
-          .list(`${user.id}/${superdarkProject}/dark`);
-
-        if (!storageFiles.data) {
-          throw new Error('Failed to fetch storage files');
-        }
-
-        // Create a Set of existing filenames for quick lookup
-        const existingFiles = new Set(storageFiles.data.map(f => f.name));
-
-        // Now fetch metadata and filter based on storage existence
-        const res = await fetch(`http://localhost:8000/list-files?project_id=${superdarkProject}&user_id=${user.id}`);
-        const data = await res.json();
-        
-        if (data.files) {
-          // Filter for dark frames AND verify they exist in storage
-          const darks = data.files
-            .filter((f: FileMetadata) => {
-              const fileName = f.path.split('/').pop();
-              return f.type === 'dark' && existingFiles.has(fileName || '');
-            })
-            .map((f: FileMetadata) => ({
-              name: f.path.split('/').pop() || '',
-              path: f.path,
-              camera: f.metadata?.INSTRUME || 'Unknown',
-              binning: `${f.metadata?.XBINNING || 1}x${f.metadata?.YBINNING || 1}`,
-              gain: f.metadata?.GAIN || 'Unknown',
-              temp: f.metadata?.['CCD-TEMP'] !== undefined ? Number(f.metadata['CCD-TEMP']).toFixed(1) : 'Unknown',
-              exposure: f.metadata?.EXPTIME !== undefined ? Number(f.metadata.EXPTIME).toFixed(1) : 'Unknown'
-            }));
-          
-          setAvailableDarks(darks);
-          setSuperdarkMetadata(darks);
-        }
-      } catch (error) {
-        console.error('Error fetching project files:', error);
-      }
-    }
-    fetchProjectFiles();
-  }, [superdarkProject, user?.id, showSuperdarkModal]);
-
-  // Add a useEffect to reset modal state when it is opened
-  useEffect(() => {
-    if (showSuperdarkModal) {
-      setSelectedDarkPaths([]);
-      setSuperdarkName('');
-      setSuperdarkWarnings([]);
-      setSuperdarkMetadata([]);
-      setAvailableDarks([]); // Reset available darks
-      // Trigger a fresh fetch of files
-      if (superdarkProject && user?.id) {
-        fetchProjectFiles(superdarkProject, user.id);
-      }
-    }
-  }, [showSuperdarkModal, superdarkProject, user?.id]);
-
-  // Helper function to fetch project files
-  const fetchProjectFiles = async (projectId: string, userId: string) => {
-    try {
-      // First, get the list of files that actually exist in storage
-      const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
-      const storageFiles = await supabase.storage
-        .from('raw-frames')
-        .list(`${userId}/${projectId}/dark`);
-
-      if (!storageFiles.data) {
-        throw new Error('Failed to fetch storage files');
-      }
-
-      // Create a Set of existing filenames for quick lookup
-      const existingFiles = new Set(storageFiles.data.map((f: { name: string }) => f.name));
-
-      // Now fetch metadata and filter based on storage existence
-      const res = await fetch(`http://localhost:8000/list-files?project_id=${projectId}&user_id=${userId}`);
-      const data = await res.json();
-      
-      if (data.files) {
-        // Filter for dark frames AND verify they exist in storage
-        const darks = data.files
-          .filter((f: FileMetadata) => {
-            const fileName = f.path.split('/').pop();
-            return f.type === 'dark' && existingFiles.has(fileName || '');
-          })
-          .map((f: FileMetadata) => ({
-            name: f.path.split('/').pop() || '',
-            path: f.path,
-            camera: f.metadata?.INSTRUME || 'Unknown',
-            binning: `${f.metadata?.XBINNING || 1}x${f.metadata?.YBINNING || 1}`,
-            gain: f.metadata?.GAIN || 'Unknown',
-            temp: f.metadata?.['CCD-TEMP'] !== undefined ? Number(f.metadata['CCD-TEMP']).toFixed(1) : 'Unknown',
-            exposure: f.metadata?.EXPTIME !== undefined ? Number(f.metadata.EXPTIME).toFixed(1) : 'Unknown'
-          }));
-
-        setAvailableDarks(darks);
-        setSuperdarkMetadata(darks);
-      }
-    } catch (e) {
-      console.error('Error fetching files:', e);
-      setSuperdarkWarnings(['Failed to fetch dark frame metadata']);
-    }
   };
 
   return (
@@ -1706,6 +1593,29 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                           </div>
                         )}
                       </div>
+                      {/* Select Superdark */}
+                      <div className="mb-4">
+                        <label className="block font-medium mb-1 text-blue-100">Select Superdark (optional)</label>
+                        <select
+                          className="bg-[#181c23] text-white border border-[#232946] rounded px-3 py-2 mt-1 w-full"
+                          value={selectedSuperdarkPath}
+                          onChange={e => setSelectedSuperdarkPath(e.target.value)}
+                          disabled={superdarksLoading}
+                        >
+                          <option value="">Do not use a Superdark</option>
+                          {superdarks.map(sd => (
+                            <option key={sd.path} value={sd.path}>{sd.name}</option>
+                          ))}
+                        </select>
+                        {superdarksLoading && <div className="text-xs text-blue-300 mt-1">Loading superdarks...</div>}
+                        {superdarksError && <div className="text-xs text-red-400 mt-1">Error loading superdarks.</div>}
+                      </div>
+                      {superdarkPreviewUrl && (
+                        <div className="mb-4">
+                          <label className="block font-medium mb-1 text-blue-100">Superdark Preview</label>
+                          <Image src={superdarkPreviewUrl} alt="Superdark preview" width={200} height={200} className="rounded-lg" />
+                        </div>
+                      )}
                       {/* Amp Glow Suppression */}
                       <div className="mb-4">
                         <label className="block font-medium mb-1 text-blue-100">Amp Glow Suppression</label>
@@ -1780,7 +1690,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                           placeholder="e.g. value > 5000"
                         />
                       </div>
-                      {/* In the Advanced Dark tab, add after dark scaling options: */}
+                      {/* Dark Optimization */}
                       <div className="mb-4 flex items-center gap-2">
                         <input
                           type="checkbox"
@@ -1803,82 +1713,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                           </TooltipProvider>
                         </label>
                       </div>
-                      {tabState.dark.useSuperdark && (
-                        <div className="mb-4">
-                          <label className="block font-medium mb-1 text-blue-100">Superdark FITS File</label>
-                          <input
-                            type="file"
-                            accept=".fits,.fit,.fts"
-                            onChange={async (e) => {
-                              if (e.target.files && e.target.files[0]) {
-                                const file = e.target.files[0];
-                                // TODO: Replace with your upload logic
-                                // For now, just set the file name as a placeholder
-                                setTabState(prev => ({ ...prev, dark: { ...prev.dark, superdarkPath: file.name } }));
-                              }
-                            }}
-                            className="block w-full text-sm text-blue-100 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-700 file:text-blue-100 hover:file:bg-blue-800"
-                          />
-                          {tabState.dark.superdarkPath && (
-                            <div className="flex items-center gap-2 mt-2">
-                              <span className="text-xs text-blue-300">Selected: {tabState.dark.superdarkPath}</span>
-                              <button
-                                type="button"
-                                className="text-xs text-red-400 underline"
-                                onClick={() => setTabState(prev => ({ ...prev, dark: { ...prev.dark, superdarkPath: '' } }))}
-                              >Clear</button>
-                            </div>
-                          )}
-                          <span className="text-xs text-blue-400">Superdark will be used instead of stacking session darks.</span>
-                        </div>
-                      )}
-                      {/* Disable regular dark stacking options when useSuperdark is true: */}
-                      { !tabState.dark.useSuperdark && (
-                        <>
-                          <div className="mb-4">
-                            <label className="block font-medium mb-1 text-blue-100">Select Superdark (optional)</label>
-                            <select
-                              className="bg-[#181c23] text-white border border-[#232946] rounded px-3 py-2 mt-1 w-full"
-                              value={selectedMasterBias}
-                              onChange={e => setSelectedMasterBias(e.target.value)}
-                            >
-                              <option value="">Auto-select (recommended)</option>
-                              {masterBiasOptions.map(opt => (
-                                <option key={opt.path} value={opt.path}>{opt.name}</option>
-                              ))}
-                            </select>
-                            {masterBiasOptions.length === 0 && <div className="text-xs text-blue-300 mt-1">No master bias frames found for this project. Auto-select will fail if none exist.</div>}
-                          </div>
-                          <div className="mb-4">
-                            <label className="block font-medium mb-1 text-blue-100">Superdark FITS File</label>
-                            <input
-                              type="file"
-                              accept=".fits,.fit,.fts"
-                              onChange={async (e) => {
-                                if (e.target.files && e.target.files[0]) {
-                                  const file = e.target.files[0];
-                                  // TODO: Replace with your upload logic
-                                  // For now, just set the file name as a placeholder
-                                  setTabState(prev => ({ ...prev, dark: { ...prev.dark, superdarkPath: file.name } }));
-                                }
-                              }}
-                              className="block w-full text-sm text-blue-100 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-700 file:text-blue-100 hover:file:bg-blue-800"
-                            />
-                            {tabState.dark.superdarkPath && (
-                              <div className="flex items-center gap-2 mt-2">
-                                <span className="text-xs text-blue-300">Selected: {tabState.dark.superdarkPath}</span>
-                                <button
-                                  type="button"
-                                  className="text-xs text-red-400 underline"
-                                  onClick={() => setTabState(prev => ({ ...prev, dark: { ...prev.dark, superdarkPath: '' } }))}
-                                >Clear</button>
-                              </div>
-                            )}
-                            <span className="text-xs text-blue-400">Superdark will be used instead of stacking session darks.</span>
-                          </div>
-                        </>
-                      )}
-                      {/* In the calibration job request, include 'superdarkPath: tabState.dark.superdarkPath' if set. */}
+                      {/* Create Superdark Button */}
                       <div className="mb-4">
                         <button
                           className="px-4 py-2 bg-blue-700 text-white rounded-lg shadow hover:bg-blue-800 font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
@@ -2341,198 +2176,13 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
         )}
       </div>
       {/* Superdark Creation Modal */}
-      {showSuperdarkModal && (
-        <Dialog open={showSuperdarkModal} onOpenChange={setShowSuperdarkModal}>
-          <DialogContent className="max-w-5xl w-full p-8 rounded-2xl shadow-2xl border border-[#232946]/60 bg-[#10131a]" style={{ maxHeight: '80vh', overflow: 'auto' }}>
-            <DialogHeader>
-              <DialogTitle className="text-2xl">Create Superdark</DialogTitle>
-              <DialogDescription className="text-base text-blue-200">
-                Combine dark frames from any project or upload new darks to create a reusable Superdark.
-              </DialogDescription>
-            </DialogHeader>
-            {/* Project selector and file picker */}
-            <div className="mb-4">
-              <label className="block font-medium mb-1 text-blue-100">Select Project</label>
-              {/* TODO: Replace with real project list */}
-              <select
-                className="bg-[#181c23] text-white border border-[#232946] rounded px-3 py-2 mt-1 w-full"
-                value={superdarkProject}
-                onChange={e => setSuperdarkProject(e.target.value)}
-              >
-                {projects.map(p => (
-                  <option key={p.id} value={p.id}>{p.title}</option>
-                ))}
-              </select>
-            </div>
-            {/* Table of available darks with metadata and best group highlighting */}
-            <div className="mb-4">
-              <label className="block font-medium mb-2 text-blue-100 flex items-center gap-2 text-lg">
-                Select Dark Frames
-                <span className="ml-1 text-xs text-blue-300 cursor-pointer" title="Frames must match on camera, binning, gain, and be within ±1°C for temperature. The largest matching group is highlighted.">
-                  <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="#60a5fa" strokeWidth="2" fill="#232946" /><text x="12" y="16" textAnchor="middle" fontSize="12" fill="#60a5fa">i</text></svg>
-                </span>
-              </label>
-              <div className="overflow-x-auto rounded-lg border border-[#232946]/60 bg-[#181c23]" style={{ maxHeight: '45vh', overflowY: 'auto' }}>
-                <table className="min-w-full text-sm text-blue-100">
-                  <thead className="sticky top-0 z-10 bg-[#232946]/90">
-                    <tr>
-                      <th className="px-3 py-2">Select</th>
-                      <th className="px-3 py-2">File</th>
-                      <th className="px-3 py-2">Camera</th>
-                      <th className="px-3 py-2">Binning</th>
-                      <th className="px-3 py-2">Gain</th>
-                      <th className="px-3 py-2">Temp (°C)</th>
-                      <th className="px-3 py-2">Exposure (s)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {availableDarks.map((f, idx) => {
-                      const meta = superdarkMetadata.find(m => m.name === f.name) || {};
-                      const { bestGroup } = groupByMatchingFrames(superdarkMetadata);
-                      const isBest = bestGroup.some(bg => bg.name === f.name);
-                      return (
-                        <tr key={f.path} className={isBest ? 'bg-green-800/70' : 'bg-[#181c23]'} style={{ fontSize: '1rem' }}>
-                          <td className="px-3 py-2 text-center">
-                            <input
-                              type="checkbox"
-                              checked={selectedDarkPaths.includes(f.path)}
-                              onChange={e => handleDarkCheckbox(f.path, e.target.checked)}
-                              disabled={!isBest && bestGroup.length > 0}
-                              title={!isBest ? 'Does not match best group (camera, binning, gain, temp)' : ''}
-                            />
-                          </td>
-                          <td className="px-3 py-2 font-mono truncate max-w-[180px]">{f.name}</td>
-                          <td className="px-3 py-2">{meta.camera}</td>
-                          <td className="px-3 py-2">{meta.binning}</td>
-                          <td className="px-3 py-2">{meta.gain}</td>
-                          <td className="px-3 py-2">{meta.temp}</td>
-                          <td className="px-3 py-2">{meta.exposure}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              <button
-                className="mt-3 px-4 py-2 bg-green-700 text-white rounded shadow hover:bg-green-800 font-semibold text-base"
-                onClick={() => {
-                  const { bestGroup } = groupByMatchingFrames(superdarkMetadata);
-                  setSelectedDarkPaths(bestGroup.map(f => f.path));
-                }}
-                disabled={groupByMatchingFrames(superdarkMetadata).bestGroup.length === 0}
-                title="Auto-select the largest matching group"
-              >
-                Select Best Group ({groupByMatchingFrames(superdarkMetadata).bestGroup.length} frames)
-              </button>
-              <button
-                className="mt-3 ml-3 px-4 py-2 bg-red-700 text-white rounded shadow hover:bg-red-800 font-semibold text-base"
-                onClick={() => {
-                  setSelectedDarkPaths([]);
-                  setSuperdarkMetadata([]);
-                  setSuperdarkWarnings([]);
-                }}
-                title="Clear all selected files"
-              >
-                Clear Selection
-              </button>
-              {selectedDarkPaths.length > 0 && selectedDarkPaths.some(p => !groupByMatchingFrames(superdarkMetadata).bestGroup.map(f => f.path).includes(p)) && (
-                <div className="mt-2 text-yellow-300 text-sm font-semibold">
-                  Warning: Some selected frames do not match the best group (camera, binning, gain, temp). Superdark creation may fail.
-                </div>
-              )}
-            </div>
-            <div className="mb-4">
-              <label className="block font-medium mb-1 text-blue-100">Upload Additional Dark FITS Files</label>
-              <input
-                type="file"
-                accept=".fits,.fit,.fts"
-                multiple
-                onChange={e => {
-                  if (e.target.files) handleSuperdarkUpload(Array.from(e.target.files));
-                }}
-                className="block w-full text-sm text-blue-100 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-700 file:text-blue-100 hover:file:bg-blue-800"
-              />
-            </div>
-            {/* Metadata table and warnings */}
-            {superdarkMetadata.length > 0 && (
-              <div className="mb-4">
-                <label className="block font-medium mb-1 text-blue-100">Selected File Metadata</label>
-                <table className="w-full text-xs bg-[#181c23] border border-[#232946] rounded">
-                  <thead>
-                    <tr>
-                      <th>File</th><th>Camera</th><th>Size</th><th>Binning</th><th>Temp</th><th>Exposure</th><th>Gain</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {superdarkMetadata.map((meta, i) => (
-                      <tr key={i}>
-                        <td>{meta.name}</td><td>{meta.camera}</td><td>{meta.size}</td><td>{meta.binning}</td><td>{meta.temp}</td><td>{meta.exposure}</td><td>{meta.gain}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            {superdarkWarnings.length > 0 && (
-              <div className="mb-4 text-red-400 text-xs">
-                {superdarkWarnings.map((w, i) => <div key={i}>{w}</div>)}
-              </div>
-            )}
-            {/* Stacking settings and name */}
-            <div className="mb-4 flex gap-4">
-              <div className="flex-1">
-                <label className="block font-medium mb-1 text-blue-100">Superdark Name</label>
-                <input
-                  type="text"
-                  className="border rounded px-3 py-2 w-full bg-[#181c23] text-white border-[#232946]"
-                  value={superdarkName}
-                  onChange={e => setSuperdarkName(e.target.value)}
-                  placeholder="e.g. Superdark Winter 2024"
-                />
-              </div>
-              <div className="flex-1">
-                <label className="block font-medium mb-1 text-blue-100">Stacking Method</label>
-                <select
-                  className="bg-[#181c23] text-white border border-[#232946] rounded px-3 py-2 mt-1 w-full"
-                  value={superdarkStacking}
-                  onChange={e => setSuperdarkStacking(e.target.value)}
-                >
-                  {ADVANCED_DARK_STACKING_METHODS.map(m => (
-                    <option key={m.value} value={m.value}>{m.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex-1">
-                <label className="block font-medium mb-1 text-blue-100">Sigma/Kappa Threshold</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  min="1.5"
-                  max="5"
-                  value={superdarkSigma}
-                  onChange={e => setSuperdarkSigma(e.target.value)}
-                  className="border rounded px-2 py-1 w-full bg-[#181c23] text-white border-[#232946]"
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <button
-                className="px-4 py-2 bg-blue-700 text-white rounded-lg shadow hover:bg-blue-800 font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
-                onClick={submitSuperdarkJob}
-                disabled={isCreatingSuperdark || !superdarkName || selectedDarkPaths.length === 0 || superdarkWarnings.length > 0 || selectedDarkPaths.some(p => !groupByMatchingFrames(superdarkMetadata).bestGroup.map(f => f.path).includes(p))}
-              >
-                {isCreatingSuperdark ? 'Creating...' : 'Create Superdark'}
-              </button>
-              <button
-                className="ml-2 px-4 py-2 bg-gray-700 text-white rounded-lg shadow hover:bg-gray-800 font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
-                onClick={() => setShowSuperdarkModal(false)}
-              >
-                Cancel
-              </button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
+      <CreateSuperdarkUI
+        showSuperdarkModal={showSuperdarkModal}
+        setShowSuperdarkModal={setShowSuperdarkModal}
+        userId={userId}
+        projectId={projectId}
+        onSuperdarkCreated={refreshSuperdarks}
+      />
     </TooltipProvider>
   );
 };

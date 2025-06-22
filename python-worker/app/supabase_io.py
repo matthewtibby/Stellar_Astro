@@ -36,4 +36,14 @@ def list_files(bucket: str, prefix: str):
     print(f"[DEBUG] Listing files in bucket '{bucket}' with prefix '{prefix}'")
     files = supabase.storage.from_(bucket).list(prefix)
     print(f"[DEBUG] Found files: {[f['name'] for f in files]}")
-    return files 
+    return files
+
+def delete_file(bucket: str, path: str):
+    """Delete a file from Supabase storage."""
+    try:
+        result = supabase.storage.from_(bucket).remove([path])
+        print(f"[DEBUG] Delete result for {path}: {result}")
+        return True
+    except Exception as e:
+        print(f"[ERROR] Failed to delete file {path} from bucket {bucket}: {e}")
+        return False 

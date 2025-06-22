@@ -160,9 +160,23 @@ KNOWN_CAMERAS = {
         max_gain=600,
         has_cooling=True
     ),
+    'ZWO ASI294MM Pro': CameraInfo(
+        name='ZWO ASI294MM Pro',
+        is_color=False,
+        pixel_size=4.63,
+        max_gain=600,
+        has_cooling=True
+    ),
     'ZWO ASI533MC Pro': CameraInfo(
         name='ZWO ASI533MC Pro',
         is_color=True,
+        pixel_size=3.76,
+        max_gain=300,
+        has_cooling=True
+    ),
+    'ZWO ASI533MM Pro': CameraInfo(
+        name='ZWO ASI533MM Pro',
+        is_color=False,
         pixel_size=3.76,
         max_gain=300,
         has_cooling=True
@@ -173,6 +187,48 @@ KNOWN_CAMERAS = {
         pixel_size=3.76,
         max_gain=300,
         has_cooling=True
+    ),
+    'ZWO ASI2600MM Pro': CameraInfo(
+        name='ZWO ASI2600MM Pro',
+        is_color=False,
+        pixel_size=3.76,
+        max_gain=300,
+        has_cooling=True
+    ),
+    'ZWO ASI183MC Pro': CameraInfo(
+        name='ZWO ASI183MC Pro',
+        is_color=True,
+        pixel_size=2.4,
+        max_gain=300,
+        has_cooling=True
+    ),
+    'ZWO ASI183MM Pro': CameraInfo(
+        name='ZWO ASI183MM Pro',
+        is_color=False,
+        pixel_size=2.4,
+        max_gain=300,
+        has_cooling=True
+    ),
+    'ZWO ASI1600MC Pro': CameraInfo(
+        name='ZWO ASI1600MC Pro',
+        is_color=True,
+        pixel_size=3.8,
+        max_gain=300,
+        has_cooling=True
+    ),
+    'ZWO ASI1600MM Pro': CameraInfo(
+        name='ZWO ASI1600MM Pro',
+        is_color=False,
+        pixel_size=3.8,
+        max_gain=300,
+        has_cooling=True
+    ),
+    'ZWO ASI120MM Mini': CameraInfo(
+        name='ZWO ASI120MM Mini',
+        is_color=False,
+        pixel_size=3.75,
+        max_gain=100,  # Guide camera, lower gain range
+        has_cooling=False
     ),
     # Add more cameras as needed
 }
@@ -948,16 +1004,18 @@ def analyze_fits_headers(header: fits.header.Header) -> FitsAnalysisResult:
         except Exception:
             pass
 
-    # Warn for unusual gain (applies to all frame types)
+    # Check gain
     gain = header.get('GAIN')
     if gain is not None:
-        try:
-            if float(gain) <= 0:
-                result.warnings.append("Gain is zero or negative")
-            elif float(gain) > 100:
-                result.warnings.append("Gain is unusually high")
-        except Exception:
-            pass
+        if gain <= 0:
+            result.warnings.append("Gain is zero or negative")
+        elif result.camera_info and hasattr(result.camera_info, 'max_gain'):
+            # Use camera-specific max gain if available
+            if gain > result.camera_info.max_gain:
+                result.warnings.append(f"Gain ({gain}) exceeds camera maximum ({result.camera_info.max_gain})")
+        elif gain > 1000:
+            # Conservative threshold for unknown cameras (many astro cameras go up to 600+)
+            result.warnings.append("Gain is unusually high (>1000)")
 
     result.confidence = confidence
     
@@ -994,14 +1052,6 @@ def check_common_issues(header: fits.header.Header, result: FitsAnalysisResult) 
     if temp is not None:
         if abs(temp) > 50:
             result.warnings.append(f"Unusual CCD temperature: {temp}°C")
-    
-    # Check gain
-    gain = header.get('GAIN')
-    if gain is not None:
-        if gain <= 0:
-            result.warnings.append("Gain is zero or negative")
-        elif gain > 100:
-            result.warnings.append("Gain is unusually high")
     
     # Check for potential calibration issues
     if result.type == 'light':

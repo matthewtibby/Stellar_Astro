@@ -23,7 +23,7 @@ from .db import init_db, get_db
 from contextlib import asynccontextmanager
 import random
 import string
-from .fits_analysis import analyze_fits_headers
+from .fits_analysis import analyze_fits_headers, detect_camera, KNOWN_CAMERAS
 from .calibration_worker import create_master_frame, save_master_frame, save_master_preview, analyze_frames, recommend_stacking, infer_frame_type
 from .supabase_io import download_file, upload_file
 from pydantic import BaseModel
@@ -97,6 +97,12 @@ def get_frame_type_from_header(header: fits.header.Header) -> str:
     
     return analysis.type
 
+def get_camera_max_gain(camera_name: str) -> int:
+    """Get the maximum gain for a known camera."""
+    if camera_name in KNOWN_CAMERAS:
+        return KNOWN_CAMERAS[camera_name].max_gain
+    return 0  # Unknown camera
+
 def extract_metadata(header: fits.header.Header) -> dict:
     """Extract comprehensive metadata from FITS header."""
     # Prefer GAIN, fallback to EGAIN if present
@@ -139,6 +145,49 @@ def extract_metadata(header: fits.header.Header) -> dict:
 @app.get("/test")
 async def test_endpoint():
     return {"status": "ok", "message": "Python worker is running"}
+
+@app.post("/test-camera-detection")
+async def test_camera_detection(request: Request):
+    """Test camera detection and gain validation."""
+    try:
+        body = await request.json()
+        
+        # Create a mock header that behaves like a FITS header
+        class MockHeader:
+            def __init__(self, data):
+                self.data = data
+            
+            def get(self, key, default=None):
+                return self.data.get(key, default)
+            
+            def __contains__(self, key):
+                return key in self.data
+            
+            def __iter__(self):
+                return iter(self.data)
+            
+            def __getitem__(self, key):
+                return self.data[key]
+        
+        header = MockHeader(body)
+        
+        # Test camera detection
+        camera_info = detect_camera(header)
+        
+        # Test full analysis
+        result = analyze_fits_headers(header)
+        
+        return {
+            "success": True,
+            "camera_detected": camera_info.name if camera_info else None,
+            "camera_max_gain": camera_info.max_gain if camera_info else None,
+            "gain_value": body.get("GAIN"),
+            "warnings": result.warnings,
+            "validation_result": "PASS" if not any("Gain" in w for w in result.warnings) else "FAIL"
+        }
+        
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 @app.post("/validate-fits")
 async def validate_fits_file(
@@ -642,16 +691,17 @@ async def run_calibration_job(job: CalibrationJobRequest, job_id: str):
                 print(f"[{datetime.utcnow().isoformat()}] [CANCEL] Job {job_id} cancelled before stacking.")
                 return
             if not superdark_used:
-            master = create_master_frame(
-                valid_files,
-                method=method,
-                sigma_clip=sigma if method in ['sigma', 'winsorized'] else None,
-                cosmetic=cosmetic,
-                cosmetic_method=cosmetic_method,
-                cosmetic_threshold=cosmetic_threshold,
+                master = create_master_frame(
+                    valid_files,
+                    method=method,
+                    sigma_clip=sigma if method in ['sigma', 'winsorized'] else None,
+                    cosmetic=cosmetic,
+                    cosmetic_method=cosmetic_method,
+                    cosmetic_threshold=cosmetic_threshold,
                     la_cosmic_params=la_cosmic_params,
                     bad_pixel_map=bad_pixel_map
                 )
+
             # --- Compute diagnostics/stats for master frame ---
             master_stats = {
                 'n_frames': len(valid_files),
@@ -759,7 +809,7 @@ async def run_calibration_job(job: CalibrationJobRequest, job_id: str):
                         print(f"[SUPERDARK] Dark scaling will be applied to Superdark master.")
                         darks_for_scaling = [superdark_local]
                     else:
-                    print(f"[{datetime.utcnow().isoformat()}] [BG] Calling estimate_dark_scaling_factor with {len(local_files)} darks and {len(local_light_files)} lights...")
+                        print(f"[{datetime.utcnow().isoformat()}] [BG] Calling estimate_dark_scaling_factor with {len(local_files)} darks and {len(local_light_files)} lights...")
                         darks_for_scaling = local_files
                     if job.settings.get('darkScalingAuto', True):
                         await update_job_progress(job_id, 50)
@@ -997,9 +1047,12 @@ async def create_superdark(request: Request):
     project_id = data.get('projectId', None)
     input_bucket = data.get('input_bucket', 'raw-frames')
     output_bucket = data.get('output_bucket', 'superdarks')
+    temp_files = data.get('tempFiles', [])  # List of temp files to clean up
+    
     # Validate input
     if not user_id or not superdark_name or not input_paths:
         return JSONResponse(status_code=400, content={"error": "Missing required fields."})
+    
     # Download all files to tempdir
     import tempfile, os
     from .supabase_io import download_file, upload_file
@@ -1007,72 +1060,285 @@ async def create_superdark(request: Request):
     from .calibration_worker import create_master_frame
     from astropy.io import fits
     import numpy as np
-    with tempfile.TemporaryDirectory() as tmpdir:
-        local_files = []
-        metadata_list = []
-        for i, spath in enumerate(input_paths):
-            local_path = os.path.join(tmpdir, f"input_{i}.fits")
+    
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            local_files = []
+            metadata_list = []
+            for i, spath in enumerate(input_paths):
+                local_path = os.path.join(tmpdir, f"input_{i}.fits")
+                try:
+                    download_file(input_bucket, spath, local_path)
+                    local_files.append(local_path)
+                    with fits.open(local_path) as hdul:
+                        header = hdul[0].header
+                        analysis = analyze_fits_headers(header)
+                        meta = {
+                            'name': os.path.basename(spath),
+                            'camera': header.get('INSTRUME'),
+                            'size': hdul[0].data.shape,
+                            'binning': f"{header.get('XBINNING', 1)}x{header.get('YBINNING', 1)}",
+                            'temp': header.get('CCD-TEMP'),
+                            'exposure': header.get('EXPTIME'),
+                            'gain': header.get('GAIN'),
+                        }
+                        metadata_list.append(meta)
+                except Exception as e:
+                    return JSONResponse(status_code=400, content={"error": f"Failed to download or read FITS: {spath}, {e}"})
+            
+            # Validate metadata: all must match (with tolerance for temp)
+            def all_equal(lst):
+                return all(x == lst[0] for x in lst)
+            
+            cameras = [m['camera'] for m in metadata_list]
+            sizes = [m['size'] for m in metadata_list]
+            binnings = [m['binning'] for m in metadata_list]
+            exposures = [m['exposure'] for m in metadata_list]
+            gains = [m['gain'] for m in metadata_list]
+            temps = [m['temp'] for m in metadata_list if m['temp'] is not None]
+            
+            if not all_equal(cameras):
+                return JSONResponse(status_code=400, content={"error": "All files must be from the same camera."})
+            if not all_equal(sizes):
+                return JSONResponse(status_code=400, content={"error": "All files must have the same image size."})
+            if not all_equal(binnings):
+                return JSONResponse(status_code=400, content={"error": "All files must have the same binning."})
+            # Exposure time can vary for superdarks; just record the range
+            if not all_equal(gains):
+                return JSONResponse(status_code=400, content={"error": "All files must have the same gain."})
+            if temps and (max(temps) - min(temps) > 1.0):
+                return JSONResponse(status_code=400, content={"error": "All files must have similar temperature (±1°C)."})
+            
+            # Stack files
+            master = create_master_frame(
+                local_files,
+                method=stacking_method,
+                sigma_clip=sigma if stacking_method in ['sigma', 'winsorized'] else None,
+                cosmetic=None,
+                cosmetic_method=None,
+                cosmetic_threshold=None,
+                la_cosmic_params=None,
+                bad_pixel_map=None
+            )
+            
+            # Save Superdark
+            from datetime import datetime
+            fits_path = os.path.join(tmpdir, 'superdark.fits')
+            fits.PrimaryHDU(master).writeto(fits_path, overwrite=True)
+            storage_path = f"{user_id}/{superdark_name.replace(' ', '_')}_{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}.fits"
+            
             try:
-                download_file(input_bucket, spath, local_path)
-                local_files.append(local_path)
-                with fits.open(local_path) as hdul:
-                    header = hdul[0].header
-                    analysis = analyze_fits_headers(header)
-                    meta = {
-                        'name': os.path.basename(spath),
-                        'camera': header.get('INSTRUME'),
-                        'size': hdul[0].data.shape,
-                        'binning': f"{header.get('XBINNING', 1)}x{header.get('YBINNING', 1)}",
-                        'temp': header.get('CCD-TEMP'),
-                        'exposure': header.get('EXPTIME'),
-                        'gain': header.get('GAIN'),
-                    }
-                    metadata_list.append(meta)
+                upload_file(output_bucket, storage_path, fits_path, public=True)
+                
+                # Generate and upload preview
+                png_path = os.path.join(tmpdir, 'superdark_preview.png')
+                generate_png_preview(fits_path, png_path)
+                preview_storage_path = storage_path.replace('.fits', '_preview.png')
+                upload_file(output_bucket, preview_storage_path, png_path, public=True)
+                
             except Exception as e:
-                return JSONResponse(status_code=400, content={"error": f"Failed to download or read FITS: {spath}, {e}"})
-        # Validate metadata: all must match (with tolerance for temp)
-        def all_equal(lst):
-            return all(x == lst[0] for x in lst)
-        cameras = [m['camera'] for m in metadata_list]
-        sizes = [m['size'] for m in metadata_list]
-        binnings = [m['binning'] for m in metadata_list]
-        exposures = [m['exposure'] for m in metadata_list]
-        gains = [m['gain'] for m in metadata_list]
-        temps = [m['temp'] for m in metadata_list if m['temp'] is not None]
-        if not all_equal(cameras):
-            return JSONResponse(status_code=400, content={"error": "All files must be from the same camera."})
-        if not all_equal(sizes):
-            return JSONResponse(status_code=400, content={"error": "All files must have the same image size."})
-        if not all_equal(binnings):
-            return JSONResponse(status_code=400, content={"error": "All files must have the same binning."})
-        # Exposure time can vary for superdarks; just record the range
-        if not all_equal(gains):
-            return JSONResponse(status_code=400, content={"error": "All files must have the same gain."})
-        if temps and (max(temps) - min(temps) > 1.0):
-            return JSONResponse(status_code=400, content={"error": "All files must have similar temperature (±1°C)."})
-        # Stack files
-        master = create_master_frame(
-            local_files,
-            method=stacking_method,
-            sigma_clip=sigma if stacking_method in ['sigma', 'winsorized'] else None,
-            cosmetic=None,
-            cosmetic_method=None,
-            cosmetic_threshold=None,
-            la_cosmic_params=None,
-            bad_pixel_map=None
-        )
-        # Save Superdark
-        from datetime import datetime
-        fits_path = os.path.join(tmpdir, 'superdark.fits')
-        fits.PrimaryHDU(master).writeto(fits_path, overwrite=True)
-        storage_path = f"{user_id}/{superdark_name.replace(' ', '_')}_{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}.fits"
-        try:
-            upload_file(output_bucket, storage_path, fits_path, public=True)
-        except Exception as e:
-            return JSONResponse(status_code=500, content={"error": f"Failed to upload Superdark: {e}"})
+                return JSONResponse(status_code=500, content={"error": f"Failed to upload Superdark: {e}"})
+        
+        # Clean up temporary files after successful superdark creation
+        if temp_files:
+            logger.info(f"[Superdark] Cleaning up {len(temp_files)} temporary files...")
+            cleanup_errors = []
+            
+            for temp_file in temp_files:
+                try:
+                    from .supabase_io import delete_file
+                    delete_success = delete_file(input_bucket, temp_file)
+                    if delete_success:
+                        logger.info(f"[Superdark] Successfully deleted temp file: {temp_file}")
+                    else:
+                        logger.warning(f"[Superdark] Failed to delete temp file: {temp_file}")
+                        cleanup_errors.append(temp_file)
+                except Exception as e:
+                    logger.error(f"[Superdark] Error deleting temp file {temp_file}: {e}")
+                    cleanup_errors.append(temp_file)
+            
+            if cleanup_errors:
+                logger.warning(f"[Superdark] Failed to clean up some temp files: {cleanup_errors}")
+        
         # Add exposure range to metadata
         exposure_range = [min(exposures), max(exposures)] if exposures else [None, None]
-        return {"superdarkPath": storage_path, "bucket": output_bucket, "metadata": metadata_list, "exposure_range": exposure_range}
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "superdarkPath": storage_path, 
+                "bucket": output_bucket, 
+                "metadata": metadata_list, 
+                "exposure_range": exposure_range,
+                "previewPath": preview_storage_path if 'preview_storage_path' in locals() else None,
+                "tempFilesCleanedUp": len(temp_files) if temp_files else 0
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"[Superdark] Error creating superdark: {e}")
+        
+        # Clean up temp files even if superdark creation failed
+        if temp_files:
+            logger.info(f"[Superdark] Cleaning up {len(temp_files)} temp files due to error...")
+            for temp_file in temp_files:
+                try:
+                    from .supabase_io import delete_file
+                    delete_file(input_bucket, temp_file)
+                    logger.info(f"[Superdark] Cleaned up temp file after error: {temp_file}")
+                except Exception as cleanup_err:
+                    logger.error(f"[Superdark] Failed to clean up temp file {temp_file}: {cleanup_err}")
+        
+        return JSONResponse(
+            status_code=500, 
+            content={"error": f"Failed to create superdark: {str(e)}"}
+        )
+
+@app.post("/analyze-temp-file")
+async def analyze_temp_file(request: Request):
+    """Analyze a temporary file for metadata validation and compatibility checking."""
+    try:
+        body = await request.json()
+        temp_path = body.get('tempPath')
+        user_id = body.get('userId')
+        bucket = body.get('bucket', 'raw-frames')
+        
+        if not temp_path or not user_id:
+            raise HTTPException(status_code=400, detail="Missing tempPath or userId")
+        
+        # Create a local temporary file for analysis
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.fits') as temp_file:
+            temp_file_path = temp_file.name
+        
+        try:
+            # Download the temp file from Supabase to local temp file
+            from .supabase_io import download_file
+            download_file(bucket, temp_path, temp_file_path)
+            
+            # Open and analyze the FITS file
+            with fits.open(temp_file_path) as hdul:
+                header = hdul[0].header
+                
+                # Extract metadata
+                metadata = extract_metadata(header)
+                
+                # Determine frame type
+                frame_type = get_frame_type_from_header(header)
+                
+                # Validate required metadata for superdark creation
+                validation_results = {
+                    "has_required_metadata": True,
+                    "missing_fields": [],
+                    "warnings": [],
+                    "quality_score": 100
+                }
+                
+                # Check for critical metadata fields
+                required_fields = {
+                    'instrument': metadata.get('instrument'),
+                    'binning': metadata.get('binning'),
+                    'gain': metadata.get('gain'),
+                    'temperature': metadata.get('temperature'),
+                    'exposure_time': metadata.get('exposure_time')
+                }
+                
+                for field, value in required_fields.items():
+                    if value is None or value == '':
+                        validation_results["missing_fields"].append(field)
+                        validation_results["has_required_metadata"] = False
+                        validation_results["quality_score"] -= 20
+                
+                # Check for frame type consistency
+                if frame_type != 'dark':
+                    validation_results["warnings"].append(f"Frame type detected as '{frame_type}', expected 'dark'")
+                    validation_results["quality_score"] -= 10
+                
+                # Check for reasonable temperature range (-50°C to +50°C)
+                temp = metadata.get('temperature')
+                if temp is not None:
+                    if temp < -50 or temp > 50:
+                        validation_results["warnings"].append(f"Unusual temperature: {temp}°C (expected -50°C to +50°C)")
+                        validation_results["quality_score"] -= 5
+                
+                # Check for reasonable gain values using camera-aware validation
+                gain = metadata.get('gain')
+                if gain is not None:
+                    camera_name = metadata.get('instrument', '')
+                    max_gain = get_camera_max_gain(camera_name)
+                    
+                    if max_gain > 0:
+                        # Camera-specific validation
+                        if gain > max_gain:
+                            validation_results["warnings"].append(f"Gain ({gain}) exceeds camera maximum ({max_gain})")
+                            validation_results["quality_score"] -= 5
+                        elif gain < 0.1:
+                            validation_results["warnings"].append(f"Gain ({gain}) is unusually low (minimum ~0.1)")
+                            validation_results["quality_score"] -= 5
+                    else:
+                        # Unknown camera - use generous threshold
+                        if gain > 1000:
+                            validation_results["warnings"].append(f"Gain ({gain}) is unusually high (>1000)")
+                            validation_results["quality_score"] -= 5
+                        elif gain < 0.1:
+                            validation_results["warnings"].append(f"Gain ({gain}) is unusually low (minimum ~0.1)")
+                            validation_results["quality_score"] -= 5
+                
+                # Check for reasonable exposure time (1s to 3600s for darks)
+                exp_time = metadata.get('exposure_time')
+                if exp_time is not None:
+                    if exp_time < 1 or exp_time > 3600:
+                        validation_results["warnings"].append(f"Unusual exposure time: {exp_time}s (expected 1s to 3600s)")
+                        validation_results["quality_score"] -= 5
+                
+                # Check image dimensions
+                if len(hdul[0].data.shape) != 2:
+                    validation_results["warnings"].append("Image is not 2D")
+                    validation_results["quality_score"] -= 15
+                else:
+                    height, width = hdul[0].data.shape
+                    if height < 100 or width < 100:
+                        validation_results["warnings"].append(f"Very small image: {width}x{height}")
+                        validation_results["quality_score"] -= 10
+                    elif height > 10000 or width > 10000:
+                        validation_results["warnings"].append(f"Very large image: {width}x{height}")
+                        validation_results["quality_score"] -= 5
+                
+                # Get file size from the downloaded temp file
+                file_size_mb = round(os.path.getsize(temp_file_path) / 1024 / 1024, 2)
+                
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "success": True,
+                        "type": frame_type,
+                        "metadata": metadata,
+                        "path": temp_path,
+                        "validation": validation_results,
+                        "file_size_mb": file_size_mb,
+                        "image_dimensions": list(hdul[0].data.shape) if len(hdul[0].data.shape) == 2 else None
+                    }
+                )
+        except Exception as e:
+            logger.error(f"Error processing temp file {temp_path}: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Failed to process file: {str(e)}")
+        finally:
+            # Clean up local temp file
+            try:
+                os.unlink(temp_file_path)
+            except:
+                pass
+                
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error analyzing temp file: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "error": str(e)
+            }
+        )
 
 if __name__ == "__main__":
     # Force port 8000 and prevent port changes
