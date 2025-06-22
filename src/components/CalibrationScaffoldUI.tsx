@@ -1130,7 +1130,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
     if (!superdarkProject) return;
     getFilesByType(superdarkProject).then(filesByType => {
       const darks = filesByType.dark || [];
-      setAvailableDarks(darks.map(f => ({ name: f.name, path: f.path })));
+      setAvailableDarks(darks.map((f: { name: string, path: string }) => ({ name: f.name, path: f.path })));
     });
   }, [superdarkProject, showSuperdarkModal]);
 
@@ -1240,7 +1240,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
             exposure: f.metadata?.EXPTIME !== undefined ? Number(f.metadata.EXPTIME).toFixed(1) : 'Unknown'
           }));
 
-        setAvailableDarks(darks.map(f => ({ name: f.name, path: f.path })));
+        setAvailableDarks(darks);
         setSuperdarkMetadata(darks);
       }
     } catch (e) {
