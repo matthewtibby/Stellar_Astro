@@ -1125,7 +1125,7 @@ async def create_superdark(request: Request):
             from datetime import datetime
             fits_path = os.path.join(tmpdir, 'superdark.fits')
             fits.PrimaryHDU(master).writeto(fits_path, overwrite=True)
-            storage_path = f"{user_id}/{superdark_name.replace(' ', '_')}_{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}.fits"
+            storage_path = f"{user_id}/{project_id}/{superdark_name.replace(' ', '_')}_{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}.fits"
             
             try:
                 upload_file(output_bucket, storage_path, fits_path, public=True)
@@ -1338,6 +1338,169 @@ async def analyze_temp_file(request: Request):
                 "success": False,
                 "error": str(e)
             }
+        )
+
+@app.post("/analyze-superdark")
+async def analyze_superdark(request: Request):
+    """Analyze a superdark FITS file and provide quality score."""
+    try:
+        body = await request.json()
+        superdark_path = body.get('superdark_path')
+        bucket = body.get('bucket', 'superdarks')
+        
+        if not superdark_path:
+            raise HTTPException(status_code=400, detail="Missing superdark_path")
+        
+        # Download the superdark file to local temp file
+        with tempfile.NamedTemporaryFile(suffix='.fits', delete=False) as temp_file:
+            local_temp_path = temp_file.name
+            
+        try:
+            # Download from Supabase storage
+            download_file(bucket, superdark_path, local_temp_path)
+            
+            # Analyze the FITS file
+            with fits.open(local_temp_path) as hdul:
+                header = hdul[0].header
+                data = hdul[0].data
+                
+                if data is None:
+                    return JSONResponse(
+                        status_code=400,
+                        content={'success': False, 'error': 'No image data found in superdark'}
+                    )
+                
+                # Calculate comprehensive statistics
+                mean_val = float(np.mean(data))
+                median_val = float(np.median(data))
+                std_val = float(np.std(data))
+                min_val = float(np.min(data))
+                max_val = float(np.max(data))
+                
+                # Calculate quality metrics
+                recommendations = []
+                score = 10.0  # Start with perfect score
+                
+                # 1. Check for proper dark signal level
+                if mean_val < 100:
+                    recommendations.append("Very low dark signal - excellent thermal performance")
+                elif mean_val < 500:
+                    recommendations.append("Good dark signal level for calibration")
+                elif mean_val < 1000:
+                    recommendations.append("Moderate dark signal - consider cooling")
+                    score -= 1.0
+                else:
+                    recommendations.append("High dark signal - improved cooling recommended")
+                    score -= 2.0
+                
+                # 2. Check noise characteristics
+                noise_ratio = std_val / mean_val if mean_val > 0 else float('inf')
+                if noise_ratio < 0.1:
+                    recommendations.append("Excellent noise characteristics")
+                elif noise_ratio < 0.2:
+                    recommendations.append("Good noise performance")
+                elif noise_ratio < 0.4:
+                    recommendations.append("Moderate noise levels")
+                    score -= 0.5
+                else:
+                    recommendations.append("High noise levels detected")
+                    score -= 1.5
+                
+                # 3. Check for saturation
+                saturation_threshold = 60000  # Conservative threshold
+                saturated_pixels = np.sum(data >= saturation_threshold)
+                total_pixels = data.size
+                saturation_percent = (saturated_pixels / total_pixels) * 100
+                
+                if saturation_percent == 0:
+                    recommendations.append("No saturated pixels - excellent exposure")
+                elif saturation_percent < 0.1:
+                    recommendations.append("Minimal saturation - good exposure time")
+                elif saturation_percent < 1.0:
+                    recommendations.append("Some saturation detected - consider shorter exposure")
+                    score -= 1.0
+                else:
+                    recommendations.append("Significant saturation - reduce exposure time")
+                    score -= 2.0
+                
+                # 4. Check for uniformity (standard deviation across the frame)
+                # Sample different regions to check for amp glow or gradients
+                h, w = data.shape
+                regions = [
+                    data[h//4:3*h//4, w//4:3*w//4],  # Center
+                    data[:h//4, :w//4],               # Top-left
+                    data[:h//4, 3*w//4:],             # Top-right
+                    data[3*h//4:, :w//4],             # Bottom-left
+                    data[3*h//4:, 3*w//4:]            # Bottom-right
+                ]
+                
+                region_means = [np.mean(region) for region in regions]
+                uniformity = np.std(region_means) / np.mean(region_means) if np.mean(region_means) > 0 else 0
+                
+                if uniformity < 0.05:
+                    recommendations.append("Excellent frame uniformity")
+                elif uniformity < 0.15:
+                    recommendations.append("Good frame uniformity")
+                elif uniformity < 0.3:
+                    recommendations.append("Some non-uniformity detected")
+                    score -= 0.5
+                else:
+                    recommendations.append("Poor uniformity - check for amp glow")
+                    score -= 1.5
+                
+                # 5. Check for hot pixels
+                hot_pixel_threshold = mean_val + 5 * std_val
+                hot_pixels = np.sum(data > hot_pixel_threshold)
+                hot_pixel_percent = (hot_pixels / total_pixels) * 100
+                
+                if hot_pixel_percent < 0.01:
+                    recommendations.append("Very few hot pixels detected")
+                elif hot_pixel_percent < 0.1:
+                    recommendations.append("Low hot pixel count")
+                elif hot_pixel_percent < 0.5:
+                    recommendations.append("Moderate hot pixel count")
+                    score -= 0.5
+                else:
+                    recommendations.append("High hot pixel count - consider dark optimization")
+                    score -= 1.0
+                
+                # Ensure score is within bounds
+                score = max(0.0, min(10.0, score))
+                score = round(score, 1)
+                
+                # Generate histogram for display
+                hist, bins = np.histogram(data.flatten(), bins=100, range=(min_val, max_val))
+                
+                return {
+                    'success': True,
+                    'score': score,
+                    'recommendations': recommendations,
+                    'stats': {
+                        'min': min_val,
+                        'max': max_val,
+                        'mean': mean_val,
+                        'median': median_val,
+                        'std': std_val
+                    },
+                    'metrics': {
+                        'noise_ratio': round(noise_ratio, 3),
+                        'saturation_percent': round(saturation_percent, 3),
+                        'uniformity': round(uniformity, 3),
+                        'hot_pixel_percent': round(hot_pixel_percent, 3)
+                    },
+                    'histogram': hist.tolist()
+                }
+        
+        finally:
+            # Clean up temp file
+            if os.path.exists(local_temp_path):
+                os.unlink(local_temp_path)
+    
+    except Exception as e:
+        logger.error(f"Error analyzing superdark {superdark_path}: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={'success': False, 'error': str(e)}
         )
 
 if __name__ == "__main__":

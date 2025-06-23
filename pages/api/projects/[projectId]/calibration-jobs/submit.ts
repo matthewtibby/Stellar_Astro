@@ -33,6 +33,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       ...(req.body.selectedType ? { frame_type: req.body.selectedType } : {})
     };
 
+    // Include superdark path in settings if provided
+    if (req.body.superdarkPath) {
+      payload.settings.superdarkPath = req.body.superdarkPath;
+      console.log('[API] Including superdark in job submission:', req.body.superdarkPath);
+    }
+
     console.log('[API] Submitting calibration job to Python worker:', payload);
     // Forward to Python worker
     const response = await fetch('http://localhost:8000/jobs/submit', {

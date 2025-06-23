@@ -18,37 +18,108 @@ export default async function handler(
     return res.status(405).end(`Method ${req.method} Not Allowed`);
   }
 
-  const { userId } = req.query;
-
-  if (!userId || typeof userId !== 'string') {
-    return res.status(400).json({ error: 'User ID is required' });
-  }
-
   try {
-    // Superdarks are not project-specific, they are user-specific.
-    // The folder path is simply the userId.
-    const path = `${userId}/`;
-    console.log(`[API Diagnostics] Listing files in superdarks bucket for path: ${path}`);
+    // List all files in the superdarks bucket (recursive view)
+    console.log(`[API Diagnostics] Listing entire superdarks bucket structure...`);
 
-    const { data, error } = await supabaseAdmin.storage
+    // First, list root level to see if there are any files in wrong location
+    const { data: rootData, error: rootError } = await supabaseAdmin.storage
       .from('superdarks')
-      .list(path, {
-        limit: 100,
+      .list('', {
+        limit: 1000,
         offset: 0,
-        sortBy: { column: 'name', order: 'asc' },
       });
 
-    if (error) {
-      console.error('[API Diagnostics] Supabase admin storage error:', error);
-      return res.status(500).json({ error: error.message, details: error });
+    if (rootError) {
+      console.error('[API Diagnostics] Supabase admin storage error:', rootError);
+      return res.status(500).json({ error: rootError.message, details: rootError });
     }
 
-    console.log(`[API Diagnostics] Found ${data?.length || 0} superdark files.`);
+    // Separate files from folders
+    const rootFiles = rootData?.filter(item => 
+      (item.name.endsWith('.fits') || item.name.endsWith('.fit') || item.name.endsWith('.png'))
+    ) || [];
     
-    // The frontend expects an array of objects with a 'name' property.
-    const files = data?.map(file => ({ name: file.name, path: `${path}${file.name}` })) || [];
+    const userFolders = rootData?.filter(item => 
+      !item.name.includes('.') && item.id === null
+    ) || [];
 
-    return res.status(200).json(files);
+    // Now check each user folder for proper project structure
+    const folderContents: any[] = [];
+    
+    for (const userFolder of userFolders) {
+      try {
+        const { data: userFiles, error: userError } = await supabaseAdmin.storage
+          .from('superdarks')
+          .list(userFolder.name, { limit: 100 });
+        
+        if (!userError && userFiles) {
+          // Check if files are directly in user folder (old structure) or in project subfolders (new structure)
+          const directFiles = userFiles.filter(item => 
+            (item.name.endsWith('.fits') || item.name.endsWith('.fit') || item.name.endsWith('.png'))
+          );
+          
+          const projectFolders = userFiles.filter(item => 
+            !item.name.includes('.') && item.id === null
+          );
+
+          folderContents.push({
+            userId: userFolder.name,
+            structure: {
+              directFiles: directFiles.length,
+              projectFolders: projectFolders.length,
+              files: directFiles.map(f => f.name),
+              projects: projectFolders.map(p => p.name)
+            }
+          });
+
+          // If there are project folders, check their contents too
+          for (const projectFolder of projectFolders) {
+            try {
+              const { data: projectFiles, error: projectError } = await supabaseAdmin.storage
+                .from('superdarks')
+                .list(`${userFolder.name}/${projectFolder.name}`, { limit: 100 });
+              
+              if (!projectError && projectFiles) {
+                const projectSuperdarkFiles = projectFiles.filter(item => 
+                  (item.name.endsWith('.fits') || item.name.endsWith('.fit') || item.name.endsWith('.png'))
+                );
+                
+                folderContents.push({
+                  userId: userFolder.name,
+                  projectId: projectFolder.name,
+                  structure: {
+                    files: projectSuperdarkFiles.map(f => f.name),
+                    fileCount: projectSuperdarkFiles.length
+                  }
+                });
+              }
+            } catch (e) {
+              // Ignore individual project folder errors
+            }
+          }
+        }
+      } catch (e) {
+        // Ignore individual user folder errors
+      }
+    }
+
+    const summary = {
+      totalRootFiles: rootFiles.length,
+      totalUserFolders: userFolders.length,
+      filesInWrongLocation: rootFiles.length,
+      recommendation: rootFiles.length > 0 
+        ? "Some files are in the root of the bucket. They should be moved to userId/projectId/ structure."
+        : "Bucket structure looks correct."
+    };
+
+    console.log(`[API Diagnostics] Bucket analysis complete:`, summary);
+    
+    return res.status(200).json({
+      summary,
+      rootFiles: rootFiles.map(f => ({ name: f.name, size: f.metadata?.size, lastModified: f.updated_at })),
+      folderStructure: folderContents
+    });
   } catch (e: any) {
     console.error('[API Diagnostics] Server error:', e);
     return res.status(500).json({ error: 'Internal Server Error', details: e.message });

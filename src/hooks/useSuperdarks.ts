@@ -8,13 +8,13 @@ interface Superdark {
   // Add any other relevant superdark properties here
 }
 
-export const useSuperdarks = (userId?: string) => {
+export const useSuperdarks = (userId?: string, projectId?: string) => {
   const [superdarks, setSuperdarks] = useState<Superdark[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
   const fetchSuperdarks = useCallback(async () => {
-    if (!userId) {
+    if (!userId || !projectId) {
       setSuperdarks([]);
       return;
     }
@@ -24,7 +24,8 @@ export const useSuperdarks = (userId?: string) => {
 
     try {
       const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
-      const { data, error } = await supabase.storage.from('superdarks').list(userId, {
+      const folderPath = `${userId}/${projectId}`;
+      const { data, error } = await supabase.storage.from('superdarks').list(folderPath, {
         limit: 100,
         offset: 0,
         sortBy: { column: 'name', order: 'asc' },
@@ -39,7 +40,7 @@ export const useSuperdarks = (userId?: string) => {
           .filter(file => file.name.endsWith('.fits') || file.name.endsWith('.fit')) // Only FITS files
           .map((file) => ({
             name: file.name,
-            path: `${userId}/${file.name}`,
+            path: `${folderPath}/${file.name}`,
           }));
         setSuperdarks(superdarkList);
       }
@@ -48,7 +49,7 @@ export const useSuperdarks = (userId?: string) => {
     } finally {
       setIsLoading(false);
     }
-  }, [userId]);
+  }, [userId, projectId]);
 
   useEffect(() => {
     fetchSuperdarks();

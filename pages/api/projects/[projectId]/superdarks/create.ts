@@ -35,21 +35,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Generate unique job ID
     const jobId = `superdark-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     
-    // Verify all selected files exist in storage
+    // Verify all selected files exist in storage by checking if we can get their info
     const fileChecks = await Promise.all(
       selectedDarkPaths.map(async (path) => {
-        // For temp files, check the exact path
-        if (path.startsWith('temp/')) {
+        try {
+          // Try to get file info - this will fail if file doesn't exist
           const { data, error } = await supabase.storage
             .from('raw-frames')
-            .list('', { search: path });
-          return { path, exists: !error && data && data.length > 0 };
-        } else {
-          // For regular files, check by filename
-          const { data, error } = await supabase.storage
-            .from('raw-frames')
-            .list('', { search: path.split('/').pop() });
-          return { path, exists: !error && data && data.length > 0 };
+            .list(path.includes('/') ? path.substring(0, path.lastIndexOf('/')) : '', {
+              search: path.includes('/') ? path.substring(path.lastIndexOf('/') + 1) : path
+            });
+          
+          const exists = !error && data && data.some(file => 
+            path.includes('/') ? file.name === path.substring(path.lastIndexOf('/') + 1) : file.name === path
+          );
+          
+          return { path, exists };
+        } catch (error) {
+          return { path, exists: false };
         }
       })
     );
