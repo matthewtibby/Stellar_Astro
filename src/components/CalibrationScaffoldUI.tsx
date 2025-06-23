@@ -139,8 +139,11 @@ const ADVANCED_DARK_STACKING_METHODS = [
   { value: 'adaptive', label: 'Auto-stacking (recommended)' },
   { value: 'median', label: 'Median' },
   { value: 'mean', label: 'Mean' },
+  { value: 'sigma', label: 'Kappa-Sigma Clipping' },
+  { value: 'percentile_clip', label: 'Percentile Clipping' },
   { value: 'winsorized', label: 'Winsorized Sigma Clipping' },
   { value: 'linear_fit', label: 'Linear Fit Clipping' },
+  { value: 'entropy_weighted', label: 'Entropy-Weighted Averaging' },
 ];
 
 // Add to ADVANCED_DARK_STACKING_METHODS for bias only
@@ -148,8 +151,11 @@ const ADVANCED_BIAS_STACKING_METHODS = [
   { value: 'adaptive', label: 'Auto-stacking (recommended)' },
   { value: 'median', label: 'Median' },
   { value: 'mean', label: 'Mean' },
+  { value: 'sigma', label: 'Kappa-Sigma Clipping' },
+  { value: 'percentile_clip', label: 'Percentile Clipping' },
   { value: 'winsorized', label: 'Winsorized Sigma Clipping' },
   { value: 'linear_fit', label: 'Linear Fit Clipping' },
+  { value: 'entropy_weighted', label: 'Entropy-Weighted Averaging' },
   { value: 'superbias', label: 'Superbias (PCA modeling, advanced)' },
 ];
 
@@ -214,8 +220,11 @@ const STACKING_METHOD_TOOLTIPS: Record<string, string> = {
   adaptive: 'Auto-stacking: Analyzes your frames and picks the best method for you. Recommended for most users.',
   median: 'Median: Robust to outliers and hot pixels. Good for most calibration frames.',
   mean: 'Mean: Averages all frames. Sensitive to outliers, but can reduce noise if all frames are clean.',
+  sigma: 'Kappa-Sigma Clipping: Rejects pixels beyond kappa×sigma from the mean, then averages remaining pixels. Standard robust stacking method.',
+  percentile_clip: 'Percentile Clipping: Rejects pixels outside specified percentile range (e.g., keep middle 60%). One-step algorithm ideal for small datasets (2-6 frames).',
   winsorized: 'Winsorized Sigma Clipping: Reduces the effect of outliers by limiting extreme values. Useful for frames with some bad pixels.',
   linear_fit: 'Linear Fit Clipping: Fits a line to pixel values and rejects outliers. Advanced, for experienced users.',
+  entropy_weighted: 'Entropy-Weighted Averaging: Uses information entropy to weight pixels. Preserves signal while reducing noise. Best for high-quality frames.',
   superbias: 'Superbias (PCA modeling): Uses principal component analysis to model and remove bias structure. Advanced, for bias frames only.'
 };
 
@@ -1404,6 +1413,63 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                           ))}
                         </div>
                       </div>
+                      {/* Sigma/Kappa Threshold for advanced methods */}
+                      {(tabState.bias.stackingMethod === 'sigma' || tabState.bias.stackingMethod === 'winsorized' || tabState.bias.stackingMethod === 'linear_fit') && (
+                        <div className="mb-4">
+                          <label className="block font-medium mb-1 text-blue-100">
+                            Sigma/Kappa Threshold
+                            {tabState.bias.stackingMethod === 'sigma' && (
+                              <span className="ml-2 text-xs text-blue-300">(pixels beyond ±{tabState.bias.sigmaThreshold}σ will be rejected)</span>
+                            )}
+                          </label>
+                          <input
+                            type="range"
+                            min="1.5"
+                            max="5"
+                            step="0.1"
+                            value={tabState.bias.sigmaThreshold}
+                            onChange={e => setTabState(prev => ({ ...prev, bias: { ...prev.bias, sigmaThreshold: e.target.value } }))}
+                            className="w-40 accent-blue-600"
+                          />
+                          <input
+                            type="number"
+                            step="0.1"
+                            min="1.5"
+                            max="5"
+                            value={tabState.bias.sigmaThreshold}
+                            onChange={e => setTabState(prev => ({ ...prev, bias: { ...prev.bias, sigmaThreshold: e.target.value } }))}
+                            className="border rounded px-2 py-1 w-20 bg-[#181c23] text-white border-[#232946] ml-2"
+                          />
+                        </div>
+                      )}
+                      {/* Percentile Range for percentile clipping */}
+                      {tabState.bias.stackingMethod === 'percentile_clip' && (
+                        <div className="mb-4">
+                          <label className="block font-medium mb-1 text-blue-100">
+                            Percentile Range to Keep
+                            <span className="ml-2 text-xs text-blue-300">(keep middle {tabState.bias.sigmaThreshold}%, reject {((100 - parseFloat(tabState.bias.sigmaThreshold)) / 2).toFixed(1)}% from each end)</span>
+                          </label>
+                          <input
+                            type="range"
+                            min="40"
+                            max="90"
+                            step="5"
+                            value={tabState.bias.sigmaThreshold}
+                            onChange={e => setTabState(prev => ({ ...prev, bias: { ...prev.bias, sigmaThreshold: e.target.value } }))}
+                            className="w-40 accent-blue-600"
+                          />
+                          <input
+                            type="number"
+                            step="5"
+                            min="40"
+                            max="90"
+                            value={tabState.bias.sigmaThreshold}
+                            onChange={e => setTabState(prev => ({ ...prev, bias: { ...prev.bias, sigmaThreshold: e.target.value } }))}
+                            className="border rounded px-2 py-1 w-20 bg-[#181c23] text-white border-[#232946] ml-2"
+                          />
+                          <span className="ml-2 text-xs text-blue-300">%</span>
+                        </div>
+                      )}
                       {/* Bad Pixel Map upload UI should be here, not inside the map */}
                       {tabState.bias.cosmeticCorrection && (
                         <div className="mb-4">
@@ -1570,7 +1636,12 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                       {/* Sigma/Kappa Threshold for advanced methods */}
                       {(tabState.dark.stackingMethod === 'sigma' || tabState.dark.stackingMethod === 'winsorized' || tabState.dark.stackingMethod === 'linear_fit') && (
                         <div className="mb-4">
-                          <label className="block font-medium mb-1 text-blue-100">Sigma/Kappa Threshold</label>
+                          <label className="block font-medium mb-1 text-blue-100">
+                            Sigma/Kappa Threshold
+                            {tabState.dark.stackingMethod === 'sigma' && (
+                              <span className="ml-2 text-xs text-blue-300">(pixels beyond ±{tabState.dark.sigmaThreshold}σ will be rejected)</span>
+                            )}
+                          </label>
                           <input
                             type="range"
                             min="1.5"
@@ -1589,6 +1660,34 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                             onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, sigmaThreshold: e.target.value } }))}
                             className="border rounded px-2 py-1 w-20 bg-[#181c23] text-white border-[#232946] ml-2"
                           />
+                        </div>
+                      )}
+                      {/* Percentile Range for percentile clipping */}
+                      {tabState.dark.stackingMethod === 'percentile_clip' && (
+                        <div className="mb-4">
+                          <label className="block font-medium mb-1 text-blue-100">
+                            Percentile Range to Keep
+                            <span className="ml-2 text-xs text-blue-300">(keep middle {tabState.dark.sigmaThreshold}%, reject {((100 - parseFloat(tabState.dark.sigmaThreshold)) / 2).toFixed(1)}% from each end)</span>
+                          </label>
+                          <input
+                            type="range"
+                            min="40"
+                            max="90"
+                            step="5"
+                            value={tabState.dark.sigmaThreshold}
+                            onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, sigmaThreshold: e.target.value } }))}
+                            className="w-40 accent-blue-600"
+                          />
+                          <input
+                            type="number"
+                            step="5"
+                            min="40"
+                            max="90"
+                            value={tabState.dark.sigmaThreshold}
+                            onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, sigmaThreshold: e.target.value } }))}
+                            className="border rounded px-2 py-1 w-20 bg-[#181c23] text-white border-[#232946] ml-2"
+                          />
+                          <span className="ml-2 text-xs text-blue-300">%</span>
                         </div>
                       )}
                       {/* Dark Frame Scaling */}
@@ -1847,6 +1946,63 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                           ))}
                         </div>
                       </div>
+                      {/* Sigma/Kappa Threshold for advanced methods */}
+                      {(tabState.flat.stackingMethod === 'sigma' || tabState.flat.stackingMethod === 'winsorized' || tabState.flat.stackingMethod === 'linear_fit') && (
+                        <div className="mb-4">
+                          <label className="block font-medium mb-1 text-blue-100">
+                            Sigma/Kappa Threshold
+                            {tabState.flat.stackingMethod === 'sigma' && (
+                              <span className="ml-2 text-xs text-blue-300">(pixels beyond ±{tabState.flat.sigmaThreshold}σ will be rejected)</span>
+                            )}
+                          </label>
+                          <input
+                            type="range"
+                            min="1.5"
+                            max="5"
+                            step="0.1"
+                            value={tabState.flat.sigmaThreshold}
+                            onChange={e => setTabState(prev => ({ ...prev, flat: { ...prev.flat, sigmaThreshold: e.target.value } }))}
+                            className="w-40 accent-blue-600"
+                          />
+                          <input
+                            type="number"
+                            step="0.1"
+                            min="1.5"
+                            max="5"
+                            value={tabState.flat.sigmaThreshold}
+                            onChange={e => setTabState(prev => ({ ...prev, flat: { ...prev.flat, sigmaThreshold: e.target.value } }))}
+                            className="border rounded px-2 py-1 w-20 bg-[#181c23] text-white border-[#232946] ml-2"
+                          />
+                        </div>
+                      )}
+                      {/* Percentile Range for percentile clipping */}
+                      {tabState.flat.stackingMethod === 'percentile_clip' && (
+                        <div className="mb-4">
+                          <label className="block font-medium mb-1 text-blue-100">
+                            Percentile Range to Keep
+                            <span className="ml-2 text-xs text-blue-300">(keep middle {tabState.flat.sigmaThreshold}%, reject {((100 - parseFloat(tabState.flat.sigmaThreshold)) / 2).toFixed(1)}% from each end)</span>
+                          </label>
+                          <input
+                            type="range"
+                            min="40"
+                            max="90"
+                            step="5"
+                            value={tabState.flat.sigmaThreshold}
+                            onChange={e => setTabState(prev => ({ ...prev, flat: { ...prev.flat, sigmaThreshold: e.target.value } }))}
+                            className="w-40 accent-blue-600"
+                          />
+                          <input
+                            type="number"
+                            step="5"
+                            min="40"
+                            max="90"
+                            value={tabState.flat.sigmaThreshold}
+                            onChange={e => setTabState(prev => ({ ...prev, flat: { ...prev.flat, sigmaThreshold: e.target.value } }))}
+                            className="border rounded px-2 py-1 w-20 bg-[#181c23] text-white border-[#232946] ml-2"
+                          />
+                          <span className="ml-2 text-xs text-blue-300">%</span>
+                        </div>
+                      )}
                       {/* Cosmetic Correction (optional) */}
                       <div className="mb-4 flex items-center gap-2">
                         <input

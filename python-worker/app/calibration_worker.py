@@ -41,9 +41,11 @@ def load_numpy_list(file_list):
 def stack_frames(file_list: List[str], method: str = 'median', sigma_clip: Optional[float] = None) -> np.ndarray:
     """
     Stack FITS files using the specified method.
-    method: 'mean', 'median', 'sigma', 'winsorized', 'linear_fit', 'minmax', 'adaptive', 'superbias'
+    method: 'mean', 'median', 'sigma', 'winsorized', 'linear_fit', 'minmax', 'adaptive', 'superbias', 'entropy_weighted', 'percentile_clip'
     sigma_clip: threshold for sigma clipping (if used)
     'superbias': PCA-based bias modeling (PixInsight-style)
+    'entropy_weighted': Entropy-weighted averaging for optimal signal preservation
+    'percentile_clip': Percentile-based outlier rejection (ideal for small datasets)
     """
     print(f"[LOG] stack_frames START: {len(file_list)} files, method={method}, sigma_clip={sigma_clip}", flush=True)
     t0 = time.time()
@@ -113,6 +115,82 @@ def stack_frames(file_list: List[str], method: str = 'median', sigma_clip: Optio
         result = stack_frames(file_list, method=rec_method, sigma_clip=rec_sigma)
         print(f"[adaptive] Adaptive stacking complete using method '{rec_method}'", flush=True)
         return result
+    elif method == 'entropy_weighted':
+        # Entropy-Weighted Averaging
+        print(f"[entropy_weighted] Starting entropy-weighted stacking...", flush=True)
+        arr = arr.astype(np.float64)
+        n_frames, height, width = arr.shape
+        
+        # Compute entropy for each pixel across all frames
+        print(f"[entropy_weighted] Computing entropy weights for {n_frames} frames...", flush=True)
+        
+        # For each pixel position, calculate entropy across frames
+        # Entropy = -sum(p * log2(p)) where p is the probability of each value
+        # We'll use normalized histograms to estimate probabilities
+        weights = np.zeros((n_frames, height, width), dtype=np.float64)
+        
+        # Process in chunks to manage memory
+        chunk_size = 1000  # Process 1000 pixels at a time
+        total_pixels = height * width
+        
+        for start_idx in range(0, total_pixels, chunk_size):
+            end_idx = min(start_idx + chunk_size, total_pixels)
+            
+            # Convert to flat indices
+            pixel_indices = np.unravel_index(range(start_idx, end_idx), (height, width))
+            pixel_values = arr[:, pixel_indices[0], pixel_indices[1]]  # Shape: (n_frames, n_pixels_in_chunk)
+            
+            # For each pixel across frames, compute entropy-based weights
+            for i, (y, x) in enumerate(zip(pixel_indices[0], pixel_indices[1])):
+                pixel_series = arr[:, y, x]
+                
+                # Compute entropy using histogram approach
+                # Use fewer bins for noisy data to avoid overestimating entropy
+                bins = min(16, len(np.unique(pixel_series)))
+                if bins < 2:
+                    # All values are the same, equal weights
+                    weights[:, y, x] = 1.0
+                else:
+                    hist, _ = np.histogram(pixel_series, bins=bins)
+                    # Normalize to get probabilities
+                    hist = hist.astype(np.float64)
+                    hist = hist / hist.sum()
+                    # Remove zeros to avoid log(0)
+                    hist = hist[hist > 0]
+                    # Calculate entropy
+                    entropy = -np.sum(hist * np.log2(hist))
+                    
+                    # Convert entropy to weights
+                    # Lower entropy (more consistent) = higher weight
+                    # Higher entropy (more random) = lower weight
+                    max_entropy = np.log2(bins)  # Maximum possible entropy for this number of bins
+                    
+                    # Normalize entropy to [0, 1] and invert so low entropy = high weight
+                    normalized_entropy = entropy / max_entropy if max_entropy > 0 else 0
+                    consistency_score = 1.0 - normalized_entropy
+                    
+                    # Apply weights based on how close each frame's value is to the median
+                    median_val = np.median(pixel_series)
+                    deviations = np.abs(pixel_series - median_val)
+                    max_dev = np.max(deviations) if np.max(deviations) > 0 else 1.0
+                    frame_weights = 1.0 - (deviations / max_dev)
+                    
+                    # Combine consistency score with frame-specific weights
+                    weights[:, y, x] = frame_weights * consistency_score
+        
+        # Ensure weights are positive and normalized per pixel
+        weights = np.maximum(weights, 0.001)  # Minimum weight to avoid division by zero
+        weight_sums = np.sum(weights, axis=0)
+        weight_sums[weight_sums == 0] = 1.0  # Avoid division by zero
+        
+        # Compute weighted average
+        print(f"[entropy_weighted] Computing weighted average...", flush=True)
+        weighted_sum = np.sum(arr * weights, axis=0)
+        result = weighted_sum / weight_sums
+        
+        print(f"[entropy_weighted] Entropy-weighted stacking complete", flush=True)
+        print(f"[entropy_weighted] Weight stats: min={np.min(weights):.4f}, max={np.max(weights):.4f}, mean={np.mean(weights):.4f}", flush=True)
+        return result
     elif method == 'superbias':
         try:
             from sklearn.decomposition import PCA
@@ -134,6 +212,45 @@ def stack_frames(file_list: List[str], method: str = 'median', sigma_clip: Optio
         print(f"[superbias] PCA explained variance ratio: {pca.explained_variance_ratio_}", flush=True)
         print(f"[LOG] stack_frames END (superbias): elapsed {time.time() - t0:.2f}s", flush=True)
         return superbias
+    elif method == 'percentile_clip':
+        # Percentile clipping: reject pixels outside specified percentile range
+        if sigma_clip is None:
+            # Default: keep middle 60% (reject bottom 20% and top 20%)
+            low_percentile = 20.0
+            high_percentile = 80.0
+        else:
+            # Use sigma_clip as percentile range around median
+            # e.g., sigma_clip=30 means keep middle 70% (reject bottom 15% and top 15%)
+            low_percentile = (100.0 - sigma_clip) / 2.0
+            high_percentile = 100.0 - low_percentile
+        
+        print(f"[percentile_clip] Using percentile range: {low_percentile}%-{high_percentile}%", flush=True)
+        
+        n_frames, height, width = arr.shape
+        result = np.zeros((height, width), dtype=np.float64)
+        
+        # For each pixel position, sort values and apply percentile clipping
+        for y in range(height):
+            for x in range(width):
+                pixel_values = arr[:, y, x]
+                
+                # Calculate percentile thresholds
+                p_low = np.percentile(pixel_values, low_percentile)
+                p_high = np.percentile(pixel_values, high_percentile)
+                
+                # Keep only values within percentile range
+                valid_mask = (pixel_values >= p_low) & (pixel_values <= p_high)
+                valid_values = pixel_values[valid_mask]
+                
+                # Average the remaining values
+                if len(valid_values) > 0:
+                    result[y, x] = np.mean(valid_values)
+                else:
+                    # Fallback to median if all values rejected (shouldn't happen normally)
+                    result[y, x] = np.median(pixel_values)
+        
+        print(f"[percentile_clip] Percentile clipping complete", flush=True)
+        return result
     else:
         raise ValueError(f"Unknown stacking method: {method}")
     print(f"[LOG] stack_frames END: method={method}, elapsed {time.time() - t0:.2f}s", flush=True)
@@ -315,7 +432,7 @@ def main():
     parser.add_argument('--input-paths', nargs='+', required=True, help='Supabase storage paths for input FITS files')
     parser.add_argument('--output-bucket', required=True, help='Supabase bucket for output files')
     parser.add_argument('--output-base', required=True, help='Base path (no extension) for output files in Supabase')
-    parser.add_argument('--method', choices=['mean', 'median', 'sigma', 'winsorized', 'linear_fit', 'minmax', 'adaptive', 'superbias'], default='median', help='Stacking method')
+    parser.add_argument('--method', choices=['mean', 'median', 'sigma', 'winsorized', 'linear_fit', 'minmax', 'adaptive', 'superbias', 'entropy_weighted', 'percentile_clip'], default='median', help='Stacking method')
     parser.add_argument('--sigma', type=float, default=3.0, help='Sigma threshold for sigma clipping (if used)')
     parser.add_argument('--cosmetic', action='store_true', help='Enable cosmetic correction')
     parser.add_argument('--cosmetic-method', choices=['hot_pixel_map', 'la_cosmic'], default='hot_pixel_map', help='Cosmetic correction method')
