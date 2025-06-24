@@ -141,6 +141,7 @@ const ADVANCED_DARK_STACKING_METHODS = [
   { value: 'mean', label: 'Mean' },
   { value: 'sigma', label: 'Kappa-Sigma Clipping' },
   { value: 'percentile_clip', label: 'Percentile Clipping' },
+  { value: 'minmax', label: 'MinMax Rejection' },
   { value: 'winsorized', label: 'Winsorized Sigma Clipping' },
   { value: 'linear_fit', label: 'Linear Fit Clipping' },
   { value: 'entropy_weighted', label: 'Entropy-Weighted Averaging' },
@@ -152,10 +153,7 @@ const ADVANCED_BIAS_STACKING_METHODS = [
   { value: 'median', label: 'Median' },
   { value: 'mean', label: 'Mean' },
   { value: 'sigma', label: 'Kappa-Sigma Clipping' },
-  { value: 'percentile_clip', label: 'Percentile Clipping' },
-  { value: 'winsorized', label: 'Winsorized Sigma Clipping' },
-  { value: 'linear_fit', label: 'Linear Fit Clipping' },
-  { value: 'entropy_weighted', label: 'Entropy-Weighted Averaging' },
+  { value: 'minmax', label: 'MinMax Rejection' },
   { value: 'superbias', label: 'Superbias (PCA modeling, advanced)' },
 ];
 
@@ -222,6 +220,7 @@ const STACKING_METHOD_TOOLTIPS: Record<string, string> = {
   mean: 'Mean: Averages all frames. Sensitive to outliers, but can reduce noise if all frames are clean.',
   sigma: 'Kappa-Sigma Clipping: Rejects pixels beyond kappa×sigma from the mean, then averages remaining pixels. Standard robust stacking method.',
   percentile_clip: 'Percentile Clipping: Rejects pixels outside specified percentile range (e.g., keep middle 60%). One-step algorithm ideal for small datasets (2-6 frames).',
+  minmax: 'MinMax Rejection: Removes the minimum and maximum values at each pixel, then averages the rest. Simple and effective for small datasets (3-8 frames).',
   winsorized: 'Winsorized Sigma Clipping: Reduces the effect of outliers by limiting extreme values. Useful for frames with some bad pixels.',
   linear_fit: 'Linear Fit Clipping: Fits a line to pixel values and rejects outliers. Advanced, for experienced users.',
   entropy_weighted: 'Entropy-Weighted Averaging: Uses information entropy to weight pixels. Preserves signal while reducing noise. Best for high-quality frames.',
@@ -1041,8 +1040,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
 
   // Beginner stacking methods for bias, dark, and flat
   const BEGINNER_BIAS_STACKING_METHODS = [
-    { value: 'adaptive', label: 'Auto-stacking (recommended)' },
-    { value: 'median', label: 'Median' },
+    { value: 'median', label: 'Median (recommended)' },
     { value: 'mean', label: 'Mean' },
   ];
   const BEGINNER_DARK_STACKING_METHODS = [

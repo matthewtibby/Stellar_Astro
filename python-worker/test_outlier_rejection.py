@@ -65,6 +65,7 @@ def test_outlier_rejection():
             ('sigma', 2.0),  # More aggressive
             ('percentile_clip', 60),  # Keep middle 60%
             ('percentile_clip', 40),  # More aggressive - keep middle 40%
+            ('minmax', None),  # Simple min/max rejection
             ('winsorized', 3.0),
             ('adaptive', None),
         ]

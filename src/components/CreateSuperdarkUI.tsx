@@ -215,6 +215,7 @@ const ADVANCED_DARK_STACKING_METHODS = [
     { value: 'adaptive', label: 'Auto-stacking (recommended)' },
     { value: 'median', label: 'Median' },
     { value: 'mean', label: 'Mean' },
+    { value: 'minmax', label: 'MinMax Rejection' },
     { value: 'winsorized', label: 'Winsorized Sigma Clipping' },
     { value: 'linear_fit', label: 'Linear Fit Clipping' },
   ];

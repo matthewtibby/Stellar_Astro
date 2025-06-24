@@ -206,7 +206,8 @@ def stack_frames(file_list: List[str], method: str = 'median', sigma_clip: Optio
         pca = PCA(n_components=n_components)
         pca.fit(arr_flat)
         print(f"[superbias] PCA fit complete in {time.time() - t_pca:.2f}s", flush=True)
-        superbias_flat = pca.mean_
+        # Use the mean of the input data as the superbias (PCA centers on mean)
+        superbias_flat = np.mean(arr_flat, axis=0)  # Mean across frames for each pixel
         superbias = superbias_flat.reshape(height, width)
         print(f"[superbias] Output shape: {superbias.shape}, dtype: {superbias.dtype}", flush=True)
         print(f"[superbias] PCA explained variance ratio: {pca.explained_variance_ratio_}", flush=True)

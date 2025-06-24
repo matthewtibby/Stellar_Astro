@@ -114,6 +114,7 @@ def main():
             "✅ Median (robust against outliers)",
             "✅ Kappa-Sigma Clipping (statistical outlier rejection)", 
             "✅ Percentile Clipping (percentile-based rejection)",
+            "✅ MinMax Rejection (removes min/max values, simple and effective)",
             "✅ Winsorized Sigma Clipping (limits extreme values)",
             "✅ Entropy-Weighted Averaging (information-based weighting)",
             "✅ Adaptive Stacking (automatic method selection)",

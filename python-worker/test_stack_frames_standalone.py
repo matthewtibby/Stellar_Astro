@@ -250,6 +250,7 @@ def quick_test():
             ('median', None), 
             ('sigma', 3.0),
             ('percentile_clip', 60),
+            ('minmax', None),
             ('adaptive', None),
             ('entropy_weighted', None),
             ('winsorized', 3.0),
