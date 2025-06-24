@@ -27,6 +27,7 @@ from .fits_analysis import analyze_fits_headers, detect_camera, KNOWN_CAMERAS
 from .calibration_worker import create_master_frame, save_master_frame, save_master_preview, analyze_frames, recommend_stacking, infer_frame_type
 from .supabase_io import download_file, upload_file
 from .cosmetic_masking import compute_bad_pixel_mask, compute_bad_column_mask, compute_bad_row_mask, apply_masks
+from .patterned_noise_removal import remove_gradients_median, remove_striping_fourier, remove_background_polynomial, detect_pattern_type, apply_combined_correction
 from pydantic import BaseModel
 import traceback
 import uuid
@@ -34,6 +35,8 @@ from datetime import datetime
 import glob
 from concurrent.futures import ThreadPoolExecutor
 from fastapi import APIRouter
+from .trail_detection import detect_trails
+from .outlier_rejection import detect_outlier_frames
 
 logger = logging.getLogger(__name__)
 
@@ -419,6 +422,15 @@ class CosmeticMaskRequest(BaseModel):
     user_id: str
     settings: dict = {}  # sigma, min_bad_fraction, etc.
 
+class PatternedNoiseRequest(BaseModel):
+    input_bucket: str
+    input_paths: list[str]  # List of image paths to correct
+    output_bucket: str
+    output_base: str  # Base path for corrected images
+    project_id: str
+    user_id: str
+    settings: dict = {}  # method, filter_size, strength, etc.
+
 # --- JOB STATUS/RESULTS DB HELPERS ---
 async def insert_job(job_id, status, error=None, result=None, diagnostics=None, warnings=None, progress=None):
     conn = await get_db()
@@ -583,6 +595,208 @@ async def run_cosmetic_mask_job(request: CosmeticMaskRequest, job_id: str):
         tb = traceback.format_exc()
         print(f"[FAIL] Cosmetic mask generation failed: job_id={job_id}, error={e}\n{tb}", flush=True)
         await insert_job(job_id, status="failed", error=f"Mask generation failed: {e}", progress=100)
+
+@app.post("/patterned-noise/correct")
+async def correct_patterned_noise(request: PatternedNoiseRequest, background_tasks: BackgroundTasks):
+    """
+    Correct patterned noise in astronomical images.
+    Returns job_id for async processing.
+    """
+    try:
+        job_id = f"pattern-{uuid.uuid4().hex[:8]}"
+        await insert_job(job_id, status="queued", progress=0)
+        background_tasks.add_task(run_patterned_noise_job, request, job_id)
+        return {"jobId": job_id, "status": "queued"}
+    except Exception as e:
+        tb = traceback.format_exc()
+        print(f"[ERROR] Exception in /patterned-noise/correct: {e}\n{tb}")
+        return JSONResponse(status_code=500, content={"error": str(e), "traceback": tb})
+
+async def run_patterned_noise_job(request: PatternedNoiseRequest, job_id: str):
+    """
+    Background task to correct patterned noise in images.
+    """
+    try:
+        await update_job_progress(job_id, 10)
+        print(f"[{datetime.utcnow().isoformat()}] [PATTERN] Starting patterned noise correction: {job_id}")
+
+        # Download input images
+        await update_job_progress(job_id, 20)
+        temp_dir = tempfile.mkdtemp()
+        local_files = []
+        
+        def download_one(path):
+            local_path = os.path.join(temp_dir, os.path.basename(path))
+            download_file(request.input_bucket, path, local_path)
+            return local_path
+
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = [executor.submit(download_one, path) for path in request.input_paths]
+            local_files = [f.result() for f in futures]
+
+        print(f"[PATTERN] Downloaded {len(local_files)} images")
+        await update_job_progress(job_id, 40)
+
+        # Process each image
+        corrected_files = []
+        pattern_info = []
+        settings = request.settings
+        
+        for i, file_path in enumerate(local_files):
+            with fits.open(file_path) as hdul:
+                image = hdul[0].data.astype(np.float32)
+                header = hdul[0].header
+            
+            # Auto-detect pattern type if method not specified
+            if 'method' not in settings or settings['method'] == 'auto':
+                pattern_type, confidence, recommendations = detect_pattern_type(image)
+                method = recommendations.get('method', 'none')
+                if method == 'none':
+                    print(f"[PATTERN] No correction needed for {os.path.basename(file_path)}")
+                    corrected_image = image
+                    pattern_removed = np.zeros_like(image)
+                    correction_info = {'method': 'none', 'pattern_type': pattern_type, 'confidence': confidence}
+                else:
+                    print(f"[PATTERN] Auto-detected {pattern_type} (confidence: {confidence:.2f}) for {os.path.basename(file_path)}")
+                    # Apply recommended method with recommended settings
+                    if method == 'median_filter':
+                        corrected_image, pattern_removed, star_mask = remove_gradients_median(
+                            image,
+                            filter_size=recommendations.get('filter_size', 64),
+                            preserve_stars=recommendations.get('preserve_stars', True)
+                        )
+                        correction_info = {
+                            'method': 'median_filter',
+                            'pattern_type': pattern_type,
+                            'confidence': confidence,
+                            'filter_size': recommendations.get('filter_size', 64),
+                            'stars_protected': int(np.sum(star_mask)) if star_mask is not None else 0
+                        }
+                    elif method == 'fourier_filter':
+                        corrected_image, pattern_removed, freq_mask = remove_striping_fourier(
+                            image,
+                            direction=recommendations.get('direction', 'both'),
+                            strength=recommendations.get('strength', 0.7),
+                            frequency_cutoff=recommendations.get('frequency_cutoff', 0.1)
+                        )
+                        correction_info = {
+                            'method': 'fourier_filter',
+                            'pattern_type': pattern_type,
+                            'confidence': confidence,
+                            'direction': recommendations.get('direction', 'both'),
+                            'strength': recommendations.get('strength', 0.7)
+                        }
+                    elif method == 'combined':
+                        corrected_image, pattern_removed, details = apply_combined_correction(
+                            image,
+                            gradient_filter_size=recommendations.get('gradient_filter_size', 64),
+                            fourier_strength=recommendations.get('fourier_strength', 0.5)
+                        )
+                        correction_info = {
+                            'method': 'combined',
+                            'pattern_type': pattern_type,
+                            'confidence': confidence,
+                            'gradient_filter_size': recommendations.get('gradient_filter_size', 64),
+                            'fourier_strength': recommendations.get('fourier_strength', 0.5)
+                        }
+            else:
+                # Use manually specified method
+                method = settings['method']
+                if method == 'median_filter':
+                    corrected_image, pattern_removed, star_mask = remove_gradients_median(
+                        image,
+                        filter_size=settings.get('filter_size', 64),
+                        preserve_stars=settings.get('preserve_stars', True),
+                        star_threshold=settings.get('star_threshold')
+                    )
+                    correction_info = {'method': 'median_filter', 'manual': True}
+                elif method == 'fourier_filter':
+                    corrected_image, pattern_removed, freq_mask = remove_striping_fourier(
+                        image,
+                        direction=settings.get('direction', 'both'),
+                        strength=settings.get('strength', 0.7),
+                        frequency_cutoff=settings.get('frequency_cutoff', 0.1)
+                    )
+                    correction_info = {'method': 'fourier_filter', 'manual': True}
+                elif method == 'polynomial':
+                    corrected_image, pattern_removed, model = remove_background_polynomial(
+                        image,
+                        degree=settings.get('degree', 2),
+                        sigma_clip=settings.get('sigma_clip', 3.0)
+                    )
+                    correction_info = {'method': 'polynomial', 'manual': True}
+                elif method == 'combined':
+                    corrected_image, pattern_removed, details = apply_combined_correction(
+                        image,
+                        gradient_filter_size=settings.get('gradient_filter_size', 64),
+                        fourier_strength=settings.get('fourier_strength', 0.5),
+                        preserve_stars=settings.get('preserve_stars', True),
+                        direction=settings.get('direction', 'both')
+                    )
+                    correction_info = {'method': 'combined', 'manual': True}
+                else:
+                    print(f"[PATTERN] Unknown method: {method}")
+                    corrected_image = image
+                    pattern_removed = np.zeros_like(image)
+                    correction_info = {'method': 'none', 'error': f'Unknown method: {method}'}
+
+            # Calculate improvement statistics
+            original_std = float(np.std(image))
+            corrected_std = float(np.std(corrected_image))
+            pattern_std = float(np.std(pattern_removed))
+            improvement_pct = (original_std - corrected_std) / original_std * 100 if original_std > 0 else 0
+
+            correction_info.update({
+                'original_std': original_std,
+                'corrected_std': corrected_std,
+                'pattern_std': pattern_std,
+                'improvement_percent': improvement_pct,
+                'filename': os.path.basename(file_path)
+            })
+            pattern_info.append(correction_info)
+
+            # Save corrected image
+            corrected_filename = f"corrected_{os.path.basename(file_path)}"
+            corrected_path = os.path.join(temp_dir, corrected_filename)
+            fits.PrimaryHDU(corrected_image, header=header).writeto(corrected_path, overwrite=True)
+            corrected_files.append(corrected_path)
+
+            print(f"[PATTERN] Processed {os.path.basename(file_path)}: {improvement_pct:.1f}% improvement")
+
+        await update_job_progress(job_id, 80)
+
+        # Upload corrected images
+        corrected_storage_paths = []
+        for i, corrected_path in enumerate(corrected_files):
+            storage_path = f"{request.output_base}/corrected_{os.path.basename(request.input_paths[i])}"
+            upload_file(request.output_bucket, storage_path, corrected_path)
+            corrected_storage_paths.append(storage_path)
+
+        # Calculate overall statistics
+        total_improvement = np.mean([info['improvement_percent'] for info in pattern_info])
+        methods_used = list(set([info['method'] for info in pattern_info]))
+
+        # Cleanup temp files
+        import shutil
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+        result = {
+            'corrected_paths': corrected_storage_paths,
+            'pattern_analysis': pattern_info,
+            'overall_improvement_percent': float(total_improvement),
+            'methods_used': methods_used,
+            'images_processed': len(local_files),
+            'project_id': request.project_id,
+            'user_id': request.user_id
+        }
+
+        await insert_job(job_id, status="success", result=result, progress=100)
+        print(f"[{datetime.utcnow().isoformat()}] [PATTERN] Patterned noise correction completed: {job_id}")
+
+    except Exception as e:
+        tb = traceback.format_exc()
+        print(f"[FAIL] Patterned noise correction failed: job_id={job_id}, error={e}\n{tb}", flush=True)
+        await insert_job(job_id, status="failed", error=f"Pattern correction failed: {e}", progress=100)
 
 async def run_calibration_job(job: CalibrationJobRequest, job_id: str):
     try:
@@ -1633,6 +1847,129 @@ async def analyze_superdark(request: Request):
             status_code=500,
             content={'success': False, 'error': str(e)}
         )
+
+class TrailDetectRequest(BaseModel):
+    fits_path: str = None  # Path to FITS file in storage
+    sensitivity: float = 0.5
+    min_length: int = 30
+    mask_output: bool = True
+    preview_output: bool = True
+    output_dir: str = "output"
+
+@app.post("/trails/detect")
+async def trails_detect(
+    file: UploadFile = File(None),
+    request: TrailDetectRequest = None
+):
+    """
+    Detect satellite/airplane trails in a FITS image. Accepts either a direct file upload or a path to a FITS file.
+    """
+    try:
+        if file is not None:
+            # Save uploaded file to temp
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".fits") as tmp:
+                tmp.write(await file.read())
+                fits_path = tmp.name
+        elif request and request.fits_path:
+            fits_path = request.fits_path
+        else:
+            raise HTTPException(status_code=400, detail="No FITS file provided.")
+        # Run detection
+        result = detect_trails(
+            fits_path,
+            sensitivity=request.sensitivity if request else 0.5,
+            min_length=request.min_length if request else 30,
+            mask_output=request.mask_output if request else True,
+            preview_output=request.preview_output if request else True,
+            output_dir=request.output_dir if request else "output"
+        )
+        # Clean up temp file if uploaded
+        if file is not None:
+            os.remove(fits_path)
+        return result
+    except Exception as e:
+        logger.error(f"Trail detection error: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+class OutlierDetectRequest(BaseModel):
+    fits_paths: list[str] = None  # Either full paths OR just filenames
+    bucket: str = None  # Supabase bucket name (e.g. 'fits-files')
+    project_id: str = None
+    user_id: str = None 
+    frame_type: str = None  # 'bias', 'dark', 'flat'
+    sigma_thresh: float = 3.0
+
+@app.post("/outliers/detect")
+async def outliers_detect(request: OutlierDetectRequest):
+    """
+    Detect outlier frames in a stack of FITS files.
+    """
+    try:
+        fits_paths = request.fits_paths
+        logger.info(f"Original fits_paths: {fits_paths}")
+        
+        # If fits_paths are just filenames, construct full bucket paths
+        if request.bucket and request.project_id and request.user_id and request.frame_type:
+            fits_paths = [f"{request.user_id}/{request.project_id}/{request.frame_type}/{filename}" 
+                         for filename in request.fits_paths]
+            logger.info(f"Constructed bucket paths: {fits_paths}")
+            logger.info(f"Using bucket: {request.bucket}")
+        
+        # Download files from Supabase and process locally
+        local_paths = []
+        try:
+            if request.bucket:
+                # Download files from Supabase bucket
+                for remote_path in fits_paths:
+                    local_temp_path = f"/tmp/{os.path.basename(remote_path)}"
+                    try:
+                        # Download file using the imported download_file function
+                        download_file(request.bucket, remote_path, local_temp_path)
+                        if os.path.exists(local_temp_path) and os.path.getsize(local_temp_path) > 0:
+                            local_paths.append(local_temp_path)
+                            logger.info(f"Successfully downloaded {remote_path}")
+                        else:
+                            logger.error(f"Downloaded file {remote_path} is empty or missing")
+                    except Exception as e:
+                        logger.error(f"Failed to download {remote_path}: {e}")
+                        continue
+                
+                # Run outlier detection on local files
+                if local_paths:
+                    logger.info(f"Successfully downloaded {len(local_paths)} files, running outlier detection")
+                    result = detect_outlier_frames(local_paths, sigma_thresh=request.sigma_thresh)
+                    
+                    # Replace local paths with original remote paths in results
+                    for i, remote_path in enumerate(fits_paths[:len(local_paths)]):
+                        # Update good frames
+                        for frame in result['good']:
+                            if frame['path'] == local_paths[i]:
+                                frame['path'] = remote_path
+                        # Update outlier frames  
+                        for frame in result['outliers']:
+                            if frame['path'] == local_paths[i]:
+                                frame['path'] = remote_path
+                    
+                    return result
+                else:
+                    logger.error(f"No valid files found. Attempted to download {len(fits_paths)} files from bucket {request.bucket}")
+                    return JSONResponse(status_code=400, content={
+                        "error": f"No valid files found. Attempted paths: {fits_paths[:3]}{'...' if len(fits_paths) > 3 else ''}"
+                    })
+            else:
+                # Direct file path processing (for local testing)
+                result = detect_outlier_frames(fits_paths, sigma_thresh=request.sigma_thresh)
+                return result
+                
+        finally:
+            # Clean up downloaded temp files
+            for local_path in local_paths:
+                if os.path.exists(local_path):
+                    os.remove(local_path)
+                    
+    except Exception as e:
+        logger.error(f"Outlier detection error: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 if __name__ == "__main__":
     # Force port 8000 and prevent port changes

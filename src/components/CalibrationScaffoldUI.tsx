@@ -172,6 +172,9 @@ const STATUS_LABELS: Record<MasterStatus, string> = {
 const COSMETIC_METHODS = [
   { value: 'hot_pixel_map', label: 'Hot Pixel Map' },
   { value: 'la_cosmic', label: 'L.A.Cosmic' },
+  { value: 'bad_pixel_masking', label: 'Bad Pixel/Column/Row Masking' },
+  { value: 'patterned_noise_removal', label: 'Patterned Noise Removal' },
+  { value: 'combined_advanced', label: 'Combined Advanced Correction' },
 ];
 
 // SVG illustration for empty state
@@ -202,6 +205,43 @@ const Confetti = () => (
 // Example bucket and path logic (replace with real project/user logic as needed)
 const SUPABASE_INPUT_BUCKET = 'raw-frames';
 const SUPABASE_OUTPUT_BUCKET = 'calibrated-frames';
+
+// API endpoints for cosmetic correction
+const COSMETIC_API_BASE = process.env.NODE_ENV === 'development' ? 'http://localhost:8000' : 'https://your-production-api.com';
+
+// API functions for cosmetic correction
+const generateBadPixelMasks = async (projectId: string, userId: string, sigmaThreshold: number = 5.0) => {
+  const response = await fetch(`${COSMETIC_API_BASE}/cosmetic-masks/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      project_id: projectId,
+      user_id: userId,
+      sigma_threshold: sigmaThreshold,
+    }),
+  });
+  return response.json();
+};
+
+const correctPatternedNoise = async (projectId: string, userId: string, method: string = 'auto', options: any = {}) => {
+  const response = await fetch(`${COSMETIC_API_BASE}/patterned-noise/correct`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      project_id: projectId,
+      user_id: userId,
+      method,
+      ...options,
+    }),
+  });
+  return response.json();
+};
+
+// Job status polling function
+const pollJobStatus = async (jobId: string) => {
+  const response = await fetch(`${COSMETIC_API_BASE}/jobs/${jobId}/status`);
+  return response.json();
+};
 
 function getProgressMessage(progress: number) {
   if (progress < 20) return "Preparing and downloading frames...";
@@ -248,6 +288,151 @@ function groupByMatchingFrames(frames: Array<{ name: string; camera: string; bin
   return { groups, bestKey, bestGroup };
 }
 
+// OutlierReviewTable subcomponent
+function OutlierReviewTable({
+  frames,
+  outliers,
+  sigma,
+  onSigmaChange,
+  onOverride,
+  overrides,
+  loading,
+  onReRun,
+}: {
+  frames: any[];
+  outliers: any[];
+  sigma: number;
+  onSigmaChange: (v: number) => void;
+  onOverride: (path: string, include: boolean) => void;
+  overrides: Record<string, boolean>;
+  loading: boolean;
+  onReRun: () => void;
+}) {
+  return (
+    <div className="bg-[#181c23] rounded-xl shadow-lg p-6 mt-6">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-xl font-bold text-blue-200">Outlier Frame Review</h3>
+        <div className="flex items-center gap-4">
+          <label className="text-blue-100 font-medium">Sigma Threshold</label>
+          <input
+            type="range"
+            min={1}
+            max={5}
+            step={0.1}
+            value={sigma}
+            onChange={e => onSigmaChange(Number(e.target.value))}
+            className="w-32 accent-blue-600"
+            disabled={loading}
+          />
+          <input
+            type="number"
+            min={1}
+            max={5}
+            step={0.1}
+            value={sigma}
+            onChange={e => onSigmaChange(Number(e.target.value))}
+            className="border rounded px-2 py-1 w-16 bg-[#232946] text-white border-[#232946]"
+            disabled={loading}
+          />
+          <button
+            className="ml-4 px-3 py-1 bg-blue-700 text-white rounded hover:bg-blue-800"
+            onClick={onReRun}
+            disabled={loading}
+          >
+            {loading ? "Detecting..." : "Re-Run"}
+          </button>
+        </div>
+      </div>
+      <div className="flex items-center gap-8 mb-2">
+        <span className="text-green-400 font-semibold">
+          Good: {frames.length - outliers.length}
+        </span>
+        <span className="text-red-400 font-semibold">
+          Outliers: {outliers.length}
+        </span>
+        <span className="text-blue-300">
+          Total: {frames.length}
+        </span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-sm text-blue-100">
+          <thead>
+            <tr>
+              <th className="px-2 py-1 text-left">Include</th>
+              <th className="px-2 py-1 text-left">File</th>
+              <th className="px-2 py-1 text-right">Mean</th>
+              <th className="px-2 py-1 text-right">Std</th>
+              <th className="px-2 py-1 text-right">Median</th>
+              <th className="px-2 py-1 text-right">Min</th>
+              <th className="px-2 py-1 text-right">Max</th>
+              <th className="px-2 py-1 text-left">Outlier?</th>
+              <th className="px-2 py-1 text-left">Reason</th>
+            </tr>
+          </thead>
+          <tbody>
+            {frames.map((f, i) => {
+              const isOutlier = f.outlier;
+              const included = overrides[f.path] !== undefined ? overrides[f.path] : !isOutlier;
+              return (
+                <tr
+                  key={f.path}
+                  className={
+                    isOutlier && included
+                      ? "bg-yellow-900/30"
+                      : isOutlier
+                      ? "bg-red-900/40"
+                      : included
+                      ? "bg-green-900/10"
+                      : "bg-gray-800/40"
+                  }
+                >
+                  <td className="px-2 py-1">
+                    <input
+                      type="checkbox"
+                      checked={included}
+                      onChange={e => onOverride(f.path, e.target.checked)}
+                      className="accent-blue-600"
+                    />
+                  </td>
+                  <td className="px-2 py-1 max-w-xs truncate" title={f.path}>
+                    {f.path.split("/").pop()}
+                  </td>
+                  <td className="px-2 py-1 text-right">{f.mean.toFixed(3)}</td>
+                  <td className="px-2 py-1 text-right">{f.std.toFixed(3)}</td>
+                  <td className="px-2 py-1 text-right">{f.median.toFixed(3)}</td>
+                  <td className="px-2 py-1 text-right">{f.min.toFixed(3)}</td>
+                  <td className="px-2 py-1 text-right">{f.max.toFixed(3)}</td>
+                  <td className="px-2 py-1">
+                    {isOutlier ? (
+                      <span className="text-red-400 font-bold">Yes</span>
+                    ) : (
+                      <span className="text-green-400">No</span>
+                    )}
+                  </td>
+                  <td className="px-2 py-1">
+                    {isOutlier && f.reasons && (
+                      <ul>
+                        {f.reasons.map((r: string, j: number) => (
+                          <li key={j} className="text-yellow-300">{r}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div className="mt-4 text-xs text-blue-300">
+        <span>
+          <b>Tip:</b> Outliers are auto-flagged, but you can override by toggling the checkbox. Only checked frames will be used in the master stack.
+        </span>
+      </div>
+    </div>
+  );
+}
+
 const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = ({ projectId, userId }) => {
   const [selectedType, setSelectedType] = useState<MasterType>('bias');
   const [tabState, setTabState] = useState({
@@ -271,6 +456,13 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
       darkOptimization: false,
       useSuperdark: false,
       superdarkPath: '',
+      // New advanced cosmetic correction parameters
+      badPixelSigmaThreshold: 5.0,
+      patternedNoiseMethod: 'auto',
+      patternedNoiseStrength: 0.5,
+      gradientRemovalSize: 50,
+      fourierCutoffFreq: 0.1,
+      polynomialDegree: 2,
     },
     flat: {
       advanced: false,
@@ -282,6 +474,13 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
       cosmeticThreshold: 0.5,
       customRejection: '',
       badPixelMapPath: '',
+      // New advanced cosmetic correction parameters
+      badPixelSigmaThreshold: 5.0,
+      patternedNoiseMethod: 'auto',
+      patternedNoiseStrength: 0.5,
+      gradientRemovalSize: 50,
+      fourierCutoffFreq: 0.1,
+      polynomialDegree: 2,
     },
     bias: {
       advanced: false,
@@ -292,6 +491,13 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
       cosmeticThreshold: 0.5,
       customRejection: '',
       badPixelMapPath: '',
+      // New advanced cosmetic correction parameters
+      badPixelSigmaThreshold: 5.0,
+      patternedNoiseMethod: 'auto',
+      patternedNoiseStrength: 0.5,
+      gradientRemovalSize: 50,
+      fourierCutoffFreq: 0.1,
+      polynomialDegree: 2,
     },
   });
   const [showHistogram, setShowHistogram] = useState(false);
@@ -367,6 +573,66 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
   const [selectedDarkPaths, setSelectedDarkPaths] = useState<string[]>([]);
   const [superdarkRefetchTrigger, setSuperdarkRefetchTrigger] = useState(0);
 
+  // State for cosmetic correction jobs
+  const [cosmeticJobs, setCosmeticJobs] = useState<{
+    badPixelMasking?: { jobId: string; status: string; progress: number };
+    patternedNoise?: { jobId: string; status: string; progress: number };
+  }>({});
+  const [cosmeticResults, setCosmeticResults] = useState<{
+    badPixelMasks?: any;
+    patternedNoiseCorrection?: any;
+  }>({});
+
+  // Outlier detection state
+  const [outlierSigma, setOutlierSigma] = useState(3.0);
+  const [outlierResults, setOutlierResults] = useState<any>(null);
+  const [outlierLoading, setOutlierLoading] = useState(false);
+  const [outlierError, setOutlierError] = useState<string | null>(null);
+  const [outlierOverrides, setOutlierOverrides] = useState<Record<string, boolean>>({});
+
+  // API call for outlier detection
+  async function detectOutliers(fitsPaths: string[], sigmaThresh: number = 3.0) {
+    const response = await fetch('http://localhost:8000/outliers/detect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        fits_paths: fitsPaths, 
+        sigma_thresh: sigmaThresh,
+        bucket: 'raw-frames',
+        project_id: projectId,
+        user_id: userId,
+        frame_type: selectedType
+      }),
+    });
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Outlier detection failed');
+    }
+    return response.json();
+  }
+
+  const handleRunOutlierDetection = async () => {
+    setOutlierLoading(true);
+    setOutlierError(null);
+    try {
+      // Use filenames from realFiles - the backend will construct full paths
+      const result = await detectOutliers(realFiles, outlierSigma);
+      setOutlierResults(result);
+      // Reset overrides: include all good, exclude outliers by default
+      const newOverrides: Record<string, boolean> = {};
+      result.good.forEach((f: any) => { newOverrides[f.path] = true; });
+      result.outliers.forEach((f: any) => { newOverrides[f.path] = false; });
+      setOutlierOverrides(newOverrides);
+    } catch (e: any) {
+      setOutlierError(e.message);
+    } finally {
+      setOutlierLoading(false);
+    }
+  };
+
+  const handleOverride = (path: string, include: boolean) => {
+    setOutlierOverrides(prev => ({ ...prev, [path]: include }));
+  };
 
   // Load presets from localStorage on mount
   useEffect(() => {
@@ -647,6 +913,13 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
       darkOptimization: false,
       useSuperdark: false,
       superdarkPath: '',
+      // New advanced cosmetic correction parameters
+      badPixelSigmaThreshold: 5.0,
+      patternedNoiseMethod: 'auto',
+      patternedNoiseStrength: 0.5,
+      gradientRemovalSize: 50,
+      fourierCutoffFreq: 0.1,
+      polynomialDegree: 2,
     },
     flat: {
       advanced: false,
@@ -658,6 +931,13 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
       cosmeticThreshold: 0.5,
       customRejection: '',
       badPixelMapPath: '',
+      // New advanced cosmetic correction parameters
+      badPixelSigmaThreshold: 5.0,
+      patternedNoiseMethod: 'auto',
+      patternedNoiseStrength: 0.5,
+      gradientRemovalSize: 50,
+      fourierCutoffFreq: 0.1,
+      polynomialDegree: 2,
     },
     bias: {
       advanced: false,
@@ -668,6 +948,13 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
       cosmeticThreshold: 0.5,
       customRejection: '',
       badPixelMapPath: '',
+      // New advanced cosmetic correction parameters
+      badPixelSigmaThreshold: 5.0,
+      patternedNoiseMethod: 'auto',
+      patternedNoiseStrength: 0.5,
+      gradientRemovalSize: 50,
+      fourierCutoffFreq: 0.1,
+      polynomialDegree: 2,
     },
   };
 
@@ -962,6 +1249,13 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
           darkOptimization: false,
           useSuperdark: false,
           superdarkPath: '',
+          // New advanced cosmetic correction parameters
+          badPixelSigmaThreshold: 5.0,
+          patternedNoiseMethod: 'auto',
+          patternedNoiseStrength: 0.5,
+          gradientRemovalSize: 50,
+          fourierCutoffFreq: 0.1,
+          polynomialDegree: 2,
         };
       case 'flat':
         return {
@@ -974,6 +1268,13 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
           cosmeticThreshold: 0.5,
           customRejection: '',
           badPixelMapPath: '',
+          // New advanced cosmetic correction parameters
+          badPixelSigmaThreshold: 5.0,
+          patternedNoiseMethod: 'auto',
+          patternedNoiseStrength: 0.5,
+          gradientRemovalSize: 50,
+          fourierCutoffFreq: 0.1,
+          polynomialDegree: 2,
         };
       case 'bias':
       default:
@@ -986,6 +1287,13 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
           cosmeticThreshold: 0.5,
           customRejection: '',
           badPixelMapPath: '',
+          // New advanced cosmetic correction parameters
+          badPixelSigmaThreshold: 5.0,
+          patternedNoiseMethod: 'auto',
+          patternedNoiseStrength: 0.5,
+          gradientRemovalSize: 50,
+          fourierCutoffFreq: 0.1,
+          polynomialDegree: 2,
         };
     }
   };
@@ -1185,6 +1493,80 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
   const openSuperdarkModal = () => {
     console.log('[DEBUG] openSuperdarkModal called');
     setShowSuperdarkModal(true);
+  };
+
+  // Handle cosmetic correction job submission
+  const handleCosmeticCorrection = async (type: 'badPixelMasking' | 'patternedNoise') => {
+    try {
+      let result: any;
+      const currentTabSettings = tabState[selectedType];
+      
+      if (type === 'badPixelMasking') {
+        result = await generateBadPixelMasks(
+          projectId, 
+          userId, 
+          currentTabSettings.badPixelSigmaThreshold
+        );
+        setCosmeticJobs(prev => ({
+          ...prev,
+          badPixelMasking: { jobId: result.job_id, status: 'running', progress: 0 }
+        }));
+      } else if (type === 'patternedNoise') {
+        result = await correctPatternedNoise(
+          projectId, 
+          userId, 
+          currentTabSettings.patternedNoiseMethod,
+          {
+            strength: currentTabSettings.patternedNoiseStrength,
+            gradient_removal_size: currentTabSettings.gradientRemovalSize,
+            fourier_cutoff_freq: currentTabSettings.fourierCutoffFreq,
+            polynomial_degree: currentTabSettings.polynomialDegree,
+          }
+        );
+        setCosmeticJobs(prev => ({
+          ...prev,
+          patternedNoise: { jobId: result.job_id, status: 'running', progress: 0 }
+        }));
+      }
+
+      // Start polling for job status
+      if (result?.job_id) {
+        pollCosmeticJobStatus(result.job_id, type);
+      }
+    } catch (error) {
+      console.error(`Error starting ${type} job:`, error);
+    }
+  };
+
+  // Poll cosmetic correction job status
+  const pollCosmeticJobStatus = async (jobId: string, type: 'badPixelMasking' | 'patternedNoise') => {
+    const poll = async () => {
+      try {
+        const status = await pollJobStatus(jobId);
+        
+        setCosmeticJobs(prev => ({
+          ...prev,
+          [type]: { jobId, status: status.status, progress: status.progress || 0 }
+        }));
+
+        if (status.status === 'completed') {
+          setCosmeticResults(prev => ({
+            ...prev,
+            [type === 'badPixelMasking' ? 'badPixelMasks' : 'patternedNoiseCorrection']: status.result
+          }));
+        } else if (status.status === 'running') {
+          setTimeout(poll, 2000); // Poll every 2 seconds
+        }
+      } catch (error) {
+        console.error(`Error polling ${type} job status:`, error);
+        setCosmeticJobs(prev => ({
+          ...prev,
+          [type]: { jobId, status: 'failed', progress: 0 }
+        }));
+      }
+    };
+    
+    poll();
   };
 
   return (
@@ -1797,27 +2179,153 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                               <option key={m.value} value={m.value}>{m.label}</option>
                             ))}
                           </select>
-                          <div className="mt-4">
-                            <label className="block font-medium mb-1 text-blue-100">Threshold</label>
-                            <input
-                              type="range"
-                              min="0"
-                              max="1"
-                              step="0.01"
-                              value={tabState.dark.cosmeticThreshold}
-                              onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, cosmeticThreshold: Number(e.target.value) } }))}
-                              className="w-40 accent-blue-600"
-                            />
-                            <input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              max="1"
-                              value={tabState.dark.cosmeticThreshold}
-                              onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, cosmeticThreshold: Number(e.target.value) } }))}
-                              className="border rounded px-2 py-1 w-20 bg-[#181c23] text-white border-[#232946] ml-2"
-                            />
-                          </div>
+                          {/* Show advanced controls for new methods */}
+                          {tabState.dark.cosmeticMethod === 'bad_pixel_masking' && (
+                            <div className="mt-4">
+                              <label className="block font-medium mb-1 text-blue-100">Sigma Threshold</label>
+                              <input
+                                type="number"
+                                min="2"
+                                max="10"
+                                step="0.1"
+                                value={tabState.dark.badPixelSigmaThreshold}
+                                onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, badPixelSigmaThreshold: Number(e.target.value) } }))}
+                                className="border rounded px-2 py-1 w-24 bg-[#181c23] text-white border-[#232946] ml-2"
+                              />
+                              <button
+                                className="ml-4 px-3 py-1 bg-blue-700 text-white rounded hover:bg-blue-800"
+                                onClick={() => handleCosmeticCorrection('badPixelMasking')}
+                                disabled={cosmeticJobs.badPixelMasking?.status === 'running'}
+                              >
+                                {cosmeticJobs.badPixelMasking?.status === 'running' ? 'Running...' : 'Run Bad Pixel Masking'}
+                              </button>
+                              {cosmeticJobs.badPixelMasking && (
+                                <div className="mt-2 text-xs text-blue-300">
+                                  Status: {cosmeticJobs.badPixelMasking.status} | Progress: {cosmeticJobs.badPixelMasking.progress}%
+                                </div>
+                              )}
+                              {cosmeticResults.badPixelMasks && (
+                                <div className="mt-2 text-green-400 text-xs">Bad pixel mask generated! (pixels: {cosmeticResults.badPixelMasks.bad_pixels}, columns: {cosmeticResults.badPixelMasks.bad_columns}, rows: {cosmeticResults.badPixelMasks.bad_rows})</div>
+                              )}
+                            </div>
+                          )}
+                          {tabState.dark.cosmeticMethod === 'patterned_noise_removal' && (
+                            <div className="mt-4">
+                              <label className="block font-medium mb-1 text-blue-100">Patterned Noise Method</label>
+                              <select
+                                className="bg-[#181c23] text-white border border-[#232946] rounded px-3 py-2 mt-1"
+                                value={tabState.dark.patternedNoiseMethod}
+                                onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, patternedNoiseMethod: e.target.value } }))}
+                              >
+                                <option value="auto">Auto</option>
+                                <option value="median_filter">Median Filter</option>
+                                <option value="fourier_filter">Fourier Filter</option>
+                                <option value="polynomial">Polynomial</option>
+                                <option value="combined">Combined</option>
+                              </select>
+                              <label className="block font-medium mb-1 text-blue-100 mt-2">Strength</label>
+                              <input
+                                type="range"
+                                min="0"
+                                max="1"
+                                step="0.01"
+                                value={tabState.dark.patternedNoiseStrength}
+                                onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, patternedNoiseStrength: Number(e.target.value) } }))}
+                                className="w-40 accent-blue-600"
+                              />
+                              <input
+                                type="number"
+                                min="0"
+                                max="1"
+                                step="0.01"
+                                value={tabState.dark.patternedNoiseStrength}
+                                onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, patternedNoiseStrength: Number(e.target.value) } }))}
+                                className="border rounded px-2 py-1 w-20 bg-[#181c23] text-white border-[#232946] ml-2"
+                              />
+                              {/* Show method-specific params */}
+                              {tabState.dark.patternedNoiseMethod === 'median_filter' && (
+                                <div className="mt-2">
+                                  <label className="block font-medium mb-1 text-blue-100">Gradient Removal Size</label>
+                                  <input
+                                    type="number"
+                                    min="10"
+                                    max="200"
+                                    step="1"
+                                    value={tabState.dark.gradientRemovalSize}
+                                    onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, gradientRemovalSize: Number(e.target.value) } }))}
+                                    className="border rounded px-2 py-1 w-24 bg-[#181c23] text-white border-[#232946] ml-2"
+                                  />
+                                </div>
+                              )}
+                              {tabState.dark.patternedNoiseMethod === 'fourier_filter' && (
+                                <div className="mt-2">
+                                  <label className="block font-medium mb-1 text-blue-100">Fourier Cutoff Frequency</label>
+                                  <input
+                                    type="number"
+                                    min="0.01"
+                                    max="0.5"
+                                    step="0.01"
+                                    value={tabState.dark.fourierCutoffFreq}
+                                    onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, fourierCutoffFreq: Number(e.target.value) } }))}
+                                    className="border rounded px-2 py-1 w-24 bg-[#181c23] text-white border-[#232946] ml-2"
+                                  />
+                                </div>
+                              )}
+                              {tabState.dark.patternedNoiseMethod === 'polynomial' && (
+                                <div className="mt-2">
+                                  <label className="block font-medium mb-1 text-blue-100">Polynomial Degree</label>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    max="5"
+                                    step="1"
+                                    value={tabState.dark.polynomialDegree}
+                                    onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, polynomialDegree: Number(e.target.value) } }))}
+                                    className="border rounded px-2 py-1 w-24 bg-[#181c23] text-white border-[#232946] ml-2"
+                                  />
+                                </div>
+                              )}
+                              <button
+                                className="ml-4 px-3 py-1 bg-blue-700 text-white rounded hover:bg-blue-800 mt-2"
+                                onClick={() => handleCosmeticCorrection('patternedNoise')}
+                                disabled={cosmeticJobs.patternedNoise?.status === 'running'}
+                              >
+                                {cosmeticJobs.patternedNoise?.status === 'running' ? 'Running...' : 'Run Patterned Noise Removal'}
+                              </button>
+                              {cosmeticJobs.patternedNoise && (
+                                <div className="mt-2 text-xs text-blue-300">
+                                  Status: {cosmeticJobs.patternedNoise.status} | Progress: {cosmeticJobs.patternedNoise.progress}%
+                                </div>
+                              )}
+                              {cosmeticResults.patternedNoiseCorrection && (
+                                <div className="mt-2 text-green-400 text-xs">Patterned noise correction complete! (improvement: {cosmeticResults.patternedNoiseCorrection.improvement_percent}%)</div>
+                              )}
+                            </div>
+                          )}
+                          {/* Existing threshold for legacy methods */}
+                          {['hot_pixel_map', 'la_cosmic'].includes(tabState.dark.cosmeticMethod) && (
+                            <div className="mt-4">
+                              <label className="block font-medium mb-1 text-blue-100">Threshold</label>
+                              <input
+                                type="range"
+                                min="0"
+                                max="1"
+                                step="0.01"
+                                value={tabState.dark.cosmeticThreshold}
+                                onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, cosmeticThreshold: Number(e.target.value) } }))}
+                                className="w-40 accent-blue-600"
+                              />
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                max="1"
+                                value={tabState.dark.cosmeticThreshold}
+                                onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, cosmeticThreshold: Number(e.target.value) } }))}
+                                className="border rounded px-2 py-1 w-20 bg-[#181c23] text-white border-[#232946] ml-2"
+                              />
+                            </div>
+                          )}
                         </div>
                       )}
                       {/* Custom Rejection Expression */}
@@ -1853,6 +2361,30 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                             </Tooltip>
                           </TooltipProvider>
                         </label>
+                      </div>
+                      {/* Outlier Frame Rejection */}
+                      <div className="mb-4 border-t border-blue-900 pt-4 mt-4">
+                        <h4 className="font-semibold text-blue-200 mb-2">Outlier Frame Rejection</h4>
+                        <button
+                          className="px-3 py-1 bg-blue-700 text-white rounded hover:bg-blue-800"
+                          onClick={handleRunOutlierDetection}
+                          disabled={outlierLoading}
+                        >
+                          {outlierLoading ? 'Detecting...' : 'Run Outlier Detection'}
+                        </button>
+                        {outlierError && <div className="text-red-400 mt-2">{outlierError}</div>}
+                        {outlierResults && (
+                          <OutlierReviewTable
+                            frames={[...outlierResults.good, ...outlierResults.outliers]}
+                            outliers={outlierResults.outliers}
+                            sigma={outlierSigma}
+                            onSigmaChange={setOutlierSigma}
+                            onOverride={handleOverride}
+                            overrides={outlierOverrides}
+                            loading={outlierLoading}
+                            onReRun={handleRunOutlierDetection}
+                          />
+                        )}
                       </div>
                       {/* Create Superdark Button */}
                       <div className="mb-4">
@@ -2026,27 +2558,151 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                               <option key={m.value} value={m.value}>{m.label}</option>
                             ))}
                           </select>
-                          <div className="mt-4">
-                            <label className="block font-medium mb-1 text-blue-100">Threshold</label>
-                            <input
-                              type="range"
-                              min="0"
-                              max="1"
-                              step="0.01"
-                              value={tabState.flat.cosmeticThreshold}
-                              onChange={e => setTabState(prev => ({ ...prev, flat: { ...prev.flat, cosmeticThreshold: Number(e.target.value) } }))}
-                              className="w-40 accent-blue-600"
-                            />
-                            <input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              max="1"
-                              value={tabState.flat.cosmeticThreshold}
-                              onChange={e => setTabState(prev => ({ ...prev, flat: { ...prev.flat, cosmeticThreshold: Number(e.target.value) } }))}
-                              className="border rounded px-2 py-1 w-20 bg-[#181c23] text-white border-[#232946] ml-2"
-                            />
-                          </div>
+                          {tabState.flat.cosmeticMethod === 'bad_pixel_masking' && (
+                            <div className="mt-4">
+                              <label className="block font-medium mb-1 text-blue-100">Sigma Threshold</label>
+                              <input
+                                type="number"
+                                min="2"
+                                max="10"
+                                step="0.1"
+                                value={tabState.flat.badPixelSigmaThreshold}
+                                onChange={e => setTabState(prev => ({ ...prev, flat: { ...prev.flat, badPixelSigmaThreshold: Number(e.target.value) } }))}
+                                className="border rounded px-2 py-1 w-24 bg-[#181c23] text-white border-[#232946] ml-2"
+                              />
+                              <button
+                                className="ml-4 px-3 py-1 bg-blue-700 text-white rounded hover:bg-blue-800"
+                                onClick={() => handleCosmeticCorrection('badPixelMasking')}
+                                disabled={cosmeticJobs.badPixelMasking?.status === 'running'}
+                              >
+                                {cosmeticJobs.badPixelMasking?.status === 'running' ? 'Running...' : 'Run Bad Pixel Masking'}
+                              </button>
+                              {cosmeticJobs.badPixelMasking && (
+                                <div className="mt-2 text-xs text-blue-300">
+                                  Status: {cosmeticJobs.badPixelMasking.status} | Progress: {cosmeticJobs.badPixelMasking.progress}%
+                                </div>
+                              )}
+                              {cosmeticResults.badPixelMasks && (
+                                <div className="mt-2 text-green-400 text-xs">Bad pixel mask generated! (pixels: {cosmeticResults.badPixelMasks.bad_pixels}, columns: {cosmeticResults.badPixelMasks.bad_columns}, rows: {cosmeticResults.badPixelMasks.bad_rows})</div>
+                              )}
+                            </div>
+                          )}
+                          {tabState.flat.cosmeticMethod === 'patterned_noise_removal' && (
+                            <div className="mt-4">
+                              <label className="block font-medium mb-1 text-blue-100">Patterned Noise Method</label>
+                              <span className="ml-2 text-xs text-yellow-400">Use with caution: may remove real illumination gradients in flats.</span>
+                              <select
+                                className="bg-[#181c23] text-white border border-[#232946] rounded px-3 py-2 mt-1"
+                                value={tabState.flat.patternedNoiseMethod}
+                                onChange={e => setTabState(prev => ({ ...prev, flat: { ...prev.flat, patternedNoiseMethod: e.target.value } }))}
+                              >
+                                <option value="auto">Auto</option>
+                                <option value="median_filter">Median Filter</option>
+                                <option value="fourier_filter">Fourier Filter</option>
+                                <option value="polynomial">Polynomial</option>
+                                <option value="combined">Combined</option>
+                              </select>
+                              <label className="block font-medium mb-1 text-blue-100 mt-2">Strength</label>
+                              <input
+                                type="range"
+                                min="0"
+                                max="1"
+                                step="0.01"
+                                value={tabState.flat.patternedNoiseStrength}
+                                onChange={e => setTabState(prev => ({ ...prev, flat: { ...prev.flat, patternedNoiseStrength: Number(e.target.value) } }))}
+                                className="w-40 accent-blue-600"
+                              />
+                              <input
+                                type="number"
+                                min="0"
+                                max="1"
+                                step="0.01"
+                                value={tabState.flat.patternedNoiseStrength}
+                                onChange={e => setTabState(prev => ({ ...prev, flat: { ...prev.flat, patternedNoiseStrength: Number(e.target.value) } }))}
+                                className="border rounded px-2 py-1 w-20 bg-[#181c23] text-white border-[#232946] ml-2"
+                              />
+                              {tabState.flat.patternedNoiseMethod === 'median_filter' && (
+                                <div className="mt-2">
+                                  <label className="block font-medium mb-1 text-blue-100">Gradient Removal Size</label>
+                                  <input
+                                    type="number"
+                                    min="10"
+                                    max="200"
+                                    step="1"
+                                    value={tabState.flat.gradientRemovalSize}
+                                    onChange={e => setTabState(prev => ({ ...prev, flat: { ...prev.flat, gradientRemovalSize: Number(e.target.value) } }))}
+                                    className="border rounded px-2 py-1 w-24 bg-[#181c23] text-white border-[#232946] ml-2"
+                                  />
+                                </div>
+                              )}
+                              {tabState.flat.patternedNoiseMethod === 'fourier_filter' && (
+                                <div className="mt-2">
+                                  <label className="block font-medium mb-1 text-blue-100">Fourier Cutoff Frequency</label>
+                                  <input
+                                    type="number"
+                                    min="0.01"
+                                    max="0.5"
+                                    step="0.01"
+                                    value={tabState.flat.fourierCutoffFreq}
+                                    onChange={e => setTabState(prev => ({ ...prev, flat: { ...prev.flat, fourierCutoffFreq: Number(e.target.value) } }))}
+                                    className="border rounded px-2 py-1 w-24 bg-[#181c23] text-white border-[#232946] ml-2"
+                                  />
+                                </div>
+                              )}
+                              {tabState.flat.patternedNoiseMethod === 'polynomial' && (
+                                <div className="mt-2">
+                                  <label className="block font-medium mb-1 text-blue-100">Polynomial Degree</label>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    max="5"
+                                    step="1"
+                                    value={tabState.flat.polynomialDegree}
+                                    onChange={e => setTabState(prev => ({ ...prev, flat: { ...prev.flat, polynomialDegree: Number(e.target.value) } }))}
+                                    className="border rounded px-2 py-1 w-24 bg-[#181c23] text-white border-[#232946] ml-2"
+                                  />
+                                </div>
+                              )}
+                              <button
+                                className="ml-4 px-3 py-1 bg-blue-700 text-white rounded hover:bg-blue-800 mt-2"
+                                onClick={() => handleCosmeticCorrection('patternedNoise')}
+                                disabled={cosmeticJobs.patternedNoise?.status === 'running'}
+                              >
+                                {cosmeticJobs.patternedNoise?.status === 'running' ? 'Running...' : 'Run Patterned Noise Removal'}
+                              </button>
+                              {cosmeticJobs.patternedNoise && (
+                                <div className="mt-2 text-xs text-blue-300">
+                                  Status: {cosmeticJobs.patternedNoise.status} | Progress: {cosmeticJobs.patternedNoise.progress}%
+                                </div>
+                              )}
+                              {cosmeticResults.patternedNoiseCorrection && (
+                                <div className="mt-2 text-green-400 text-xs">Patterned noise correction complete! (improvement: {cosmeticResults.patternedNoiseCorrection.improvement_percent}%)</div>
+                              )}
+                            </div>
+                          )}
+                          {['hot_pixel_map', 'la_cosmic'].includes(tabState.flat.cosmeticMethod) && (
+                            <div className="mt-4">
+                              <label className="block font-medium mb-1 text-blue-100">Threshold</label>
+                              <input
+                                type="range"
+                                min="0"
+                                max="1"
+                                step="0.01"
+                                value={tabState.flat.cosmeticThreshold}
+                                onChange={e => setTabState(prev => ({ ...prev, flat: { ...prev.flat, cosmeticThreshold: Number(e.target.value) } }))}
+                                className="w-40 accent-blue-600"
+                              />
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                max="1"
+                                value={tabState.flat.cosmeticThreshold}
+                                onChange={e => setTabState(prev => ({ ...prev, flat: { ...prev.flat, cosmeticThreshold: Number(e.target.value) } }))}
+                                className="border rounded px-2 py-1 w-20 bg-[#181c23] text-white border-[#232946] ml-2"
+                              />
+                            </div>
+                          )}
                         </div>
                       )}
                       {/* Custom Rejection Expression */}
@@ -2059,6 +2715,30 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                           onChange={e => setTabState(prev => ({ ...prev, flat: { ...prev.flat, customRejection: e.target.value } }))}
                           placeholder="e.g. value > 5000"
                         />
+                      </div>
+                      {/* Outlier Frame Rejection */}
+                      <div className="mb-4 border-t border-blue-900 pt-4 mt-4">
+                        <h4 className="font-semibold text-blue-200 mb-2">Outlier Frame Rejection</h4>
+                        <button
+                          className="px-3 py-1 bg-blue-700 text-white rounded hover:bg-blue-800"
+                          onClick={handleRunOutlierDetection}
+                          disabled={outlierLoading}
+                        >
+                          {outlierLoading ? 'Detecting...' : 'Run Outlier Detection'}
+                        </button>
+                        {outlierError && <div className="text-red-400 mt-2">{outlierError}</div>}
+                        {outlierResults && (
+                          <OutlierReviewTable
+                            frames={[...outlierResults.good, ...outlierResults.outliers]}
+                            outliers={outlierResults.outliers}
+                            sigma={outlierSigma}
+                            onSigmaChange={setOutlierSigma}
+                            onOverride={handleOverride}
+                            overrides={outlierOverrides}
+                            loading={outlierLoading}
+                            onReRun={handleRunOutlierDetection}
+                          />
+                        )}
                       </div>
                     </>
                   )}
