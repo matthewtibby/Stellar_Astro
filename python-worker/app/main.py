@@ -26,6 +26,7 @@ import string
 from .fits_analysis import analyze_fits_headers, detect_camera, KNOWN_CAMERAS
 from .calibration_worker import create_master_frame, save_master_frame, save_master_preview, analyze_frames, recommend_stacking, infer_frame_type
 from .supabase_io import download_file, upload_file
+from .cosmetic_masking import compute_bad_pixel_mask, compute_bad_column_mask, compute_bad_row_mask, apply_masks
 from pydantic import BaseModel
 import traceback
 import uuid
@@ -409,6 +410,15 @@ class CalibrationJobRequest(BaseModel):
 class CancelJobRequest(BaseModel):
     jobId: str
 
+class CosmeticMaskRequest(BaseModel):
+    input_bucket: str
+    input_paths: list[str]  # List of dark frame paths for mask generation
+    output_bucket: str
+    output_base: str  # Base path for mask output
+    project_id: str
+    user_id: str
+    settings: dict = {}  # sigma, min_bad_fraction, etc.
+
 # --- JOB STATUS/RESULTS DB HELPERS ---
 async def insert_job(job_id, status, error=None, result=None, diagnostics=None, warnings=None, progress=None):
     conn = await get_db()
@@ -452,6 +462,127 @@ async def cancel_job(payload: CancelJobRequest):
     job_id = payload.jobId
     await insert_job(job_id, status="cancelled", progress=100, error="Job cancelled by user.")
     return {"job_id": job_id, "status": "cancelled"}
+
+@app.post("/cosmetic-masks/generate")
+async def generate_cosmetic_masks(request: CosmeticMaskRequest, background_tasks: BackgroundTasks):
+    """
+    Generate bad pixel, column, and row masks from a stack of dark frames.
+    Returns job_id for async processing.
+    """
+    try:
+        job_id = f"mask-{uuid.uuid4().hex[:8]}"
+        await insert_job(job_id, status="queued", progress=0)
+        background_tasks.add_task(run_cosmetic_mask_job, request, job_id)
+        return {"jobId": job_id, "status": "queued"}
+    except Exception as e:
+        tb = traceback.format_exc()
+        print(f"[ERROR] Exception in /cosmetic-masks/generate: {e}\n{tb}")
+        return JSONResponse(status_code=500, content={"error": str(e), "traceback": tb})
+
+async def run_cosmetic_mask_job(request: CosmeticMaskRequest, job_id: str):
+    """
+    Background task to generate cosmetic masks from dark frames.
+    """
+    try:
+        await update_job_progress(job_id, 10)
+        print(f"[{datetime.utcnow().isoformat()}] [MASK] Starting cosmetic mask generation: {job_id}")
+
+        # Download dark frames
+        await update_job_progress(job_id, 20)
+        temp_dir = tempfile.mkdtemp()
+        local_files = []
+        
+        def download_one(path):
+            local_path = os.path.join(temp_dir, os.path.basename(path))
+            download_file(request.input_bucket, path, local_path)
+            return local_path
+
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = [executor.submit(download_one, path) for path in request.input_paths]
+            local_files = [f.result() for f in futures]
+
+        print(f"[MASK] Downloaded {len(local_files)} dark frames")
+        await update_job_progress(job_id, 40)
+
+        # Load FITS stack
+        dark_stack = []
+        for file_path in local_files:
+            with fits.open(file_path) as hdul:
+                dark_stack.append(hdul[0].data.astype(np.float32))
+        
+        dark_stack = np.stack(dark_stack)
+        print(f"[MASK] Loaded dark stack shape: {dark_stack.shape}")
+        await update_job_progress(job_id, 60)
+
+        # Generate masks with user settings
+        settings = request.settings
+        sigma = settings.get('sigma', 5)
+        min_bad_fraction = settings.get('min_bad_fraction', 0.5)
+        
+        bad_pixel_mask = compute_bad_pixel_mask(dark_stack, sigma=sigma, min_bad_fraction=min_bad_fraction)
+        bad_col_mask = compute_bad_column_mask(dark_stack, sigma=sigma)
+        bad_row_mask = compute_bad_row_mask(dark_stack, sigma=sigma)
+        
+        print(f"[MASK] Generated masks - Bad pixels: {np.sum(bad_pixel_mask)}, Bad columns: {np.sum(bad_col_mask)}, Bad rows: {np.sum(bad_row_mask)}")
+        await update_job_progress(job_id, 80)
+
+        # Save masks as FITS files
+        mask_paths = {}
+        
+        # Bad pixel mask (2D)
+        pixel_mask_path = os.path.join(temp_dir, "bad_pixel_mask.fits")
+        fits.writeto(pixel_mask_path, bad_pixel_mask.astype(np.uint8), overwrite=True)
+        pixel_storage_path = f"{request.output_base}/bad_pixel_mask.fits"
+        upload_file(request.output_bucket, pixel_storage_path, pixel_mask_path)
+        mask_paths['bad_pixel_mask'] = pixel_storage_path
+        
+        # Bad column mask (1D)
+        col_mask_path = os.path.join(temp_dir, "bad_column_mask.fits")
+        fits.writeto(col_mask_path, bad_col_mask.astype(np.uint8), overwrite=True)
+        col_storage_path = f"{request.output_base}/bad_column_mask.fits"
+        upload_file(request.output_bucket, col_storage_path, col_mask_path)
+        mask_paths['bad_column_mask'] = col_storage_path
+        
+        # Bad row mask (1D)
+        row_mask_path = os.path.join(temp_dir, "bad_row_mask.fits")
+        fits.writeto(row_mask_path, bad_row_mask.astype(np.uint8), overwrite=True)
+        row_storage_path = f"{request.output_base}/bad_row_mask.fits"
+        upload_file(request.output_bucket, row_storage_path, row_mask_path)
+        mask_paths['bad_row_mask'] = row_storage_path
+
+        # Generate statistics
+        stats = {
+            'total_pixels': int(dark_stack.shape[1] * dark_stack.shape[2]),
+            'bad_pixels': int(np.sum(bad_pixel_mask)),
+            'bad_pixel_percentage': float(np.sum(bad_pixel_mask) / (dark_stack.shape[1] * dark_stack.shape[2]) * 100),
+            'total_columns': int(dark_stack.shape[2]),
+            'bad_columns': int(np.sum(bad_col_mask)),
+            'bad_column_percentage': float(np.sum(bad_col_mask) / dark_stack.shape[2] * 100),
+            'total_rows': int(dark_stack.shape[1]),
+            'bad_rows': int(np.sum(bad_row_mask)),
+            'bad_row_percentage': float(np.sum(bad_row_mask) / dark_stack.shape[1] * 100),
+            'settings_used': settings,
+            'input_frames': len(local_files)
+        }
+
+        # Cleanup temp files
+        import shutil
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+        result = {
+            'mask_paths': mask_paths,
+            'statistics': stats,
+            'project_id': request.project_id,
+            'user_id': request.user_id
+        }
+
+        await insert_job(job_id, status="success", result=result, progress=100)
+        print(f"[{datetime.utcnow().isoformat()}] [MASK] Cosmetic mask generation completed: {job_id}")
+
+    except Exception as e:
+        tb = traceback.format_exc()
+        print(f"[FAIL] Cosmetic mask generation failed: job_id={job_id}, error={e}\n{tb}", flush=True)
+        await insert_job(job_id, status="failed", error=f"Mask generation failed: {e}", progress=100)
 
 async def run_calibration_job(job: CalibrationJobRequest, job_id: str):
     try:
