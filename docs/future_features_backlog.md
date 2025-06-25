@@ -357,4 +357,125 @@ const COSMETIC_METHODS = [
 - **Flexibility**: Enable/disable methods based on specific needs
 - **Processing Efficiency**: Optimal ordering reduces computation time
 
-This enhancement transforms Stellar Astro from a single-method tool to a comprehensive cosmetic correction suite, providing the flexibility and control that serious astrophotographers demand. 
+This enhancement transforms Stellar Astro from a single-method tool to a comprehensive cosmetic correction suite, providing the flexibility and control that serious astrophotographers demand.
+
+## Gradient Correction & Background Extraction
+
+### 🌌 Post-Processing Gradient Correction
+- **Advanced Gradient Removal** (**Priority: High**)
+  - Professional-grade gradient correction for stacked light frames
+  - Multiple algorithm options: Synthetic Flat Field, Polynomial Background, Dynamic Background Extraction (DBE-style)
+  - Interactive gradient modeling with user-guided background point selection
+  - **Status:** 📅 Planned
+  - **Timeline:** Major release (3-4 months)
+  - **Dependencies:** Current gradient detection system (✅ Implemented)
+
+- **Background Extraction Engine** (**Priority: High**)
+  - Automated background modeling using statistical analysis
+  - Support for complex gradients (light pollution, vignetting, flat field errors)
+  - Preserve astronomical objects while removing gradients
+  - Real-time preview with adjustable parameters
+  - **Target Performance:** Process 100MP+ images in <30 seconds
+  - **Status:** 📅 Planned
+
+### 🎯 Integration with Calibration Stage
+- **Seamless Workflow** (**Priority: High**)
+  - Build on existing gradient detection from calibration stage
+  - Use detection results to inform correction algorithms
+  - Quality scores guide correction strength and method selection
+  - **Two-Stage Approach:**
+    1. **Calibration Stage:** Detection & validation (✅ **Currently Implemented**)
+    2. **Post-Processing Stage:** Gradient correction (📅 **Planned**)
+  - **Status:** 📅 Planned
+
+### 🔧 Algorithm Portfolio
+- **Synthetic Flat Field Creation** (**Priority: High**)
+  - Generate correction frames from light images (Photoshop-style approach)
+  - Object removal and background interpolation
+  - Gaussian smoothing for large-scale gradient modeling
+  - **Compatible with:** All image types, especially nebulae and galaxies
+  - **Status:** 📅 Planned
+
+- **Dynamic Background Extraction (DBE)** (**Priority: High**)
+  - PixInsight-style DBE implementation
+  - User-guided background point selection with interactive UI
+  - Mathematical surface modeling (polynomial/spline fitting)
+  - Automatic background point suggestion using AI
+  - **Compatible with:** Complex gradients, multi-source light pollution
+  - **Status:** 📅 Planned
+
+- **Polynomial Background Fitting** (**Priority: Medium**)
+  - Mathematical surface fitting (2D polynomial)
+  - Configurable polynomial degree (linear, quadratic, cubic)
+  - Robust outlier rejection for astronomical objects
+  - **Compatible with:** Simple gradients, vignetting correction
+  - **Status:** 📅 Planned
+
+### 🖥️ User Interface & Workflow
+- **Interactive Gradient Correction Tool** (**Priority: High**)
+  - Real-time preview with before/after comparison
+  - Adjustable correction strength and smoothing
+  - ROI (Region of Interest) selection for targeted correction
+  - Mask support to protect astronomical objects
+  - **Status:** 📅 Planned
+
+- **Background Point Editor** (**Priority: High**)
+  - Click-to-place background sampling points
+  - Automatic point suggestion based on image analysis
+  - Visual feedback showing gradient model overlay
+  - Export/import point sets for batch processing
+  - **Status:** 📅 Planned
+
+### 📊 Quality Assessment & Validation
+- **Correction Quality Metrics** (**Priority: Medium**)
+  - Before/after gradient analysis and scoring
+  - Background uniformity improvement measurement
+  - Object preservation validation (ensure no detail loss)
+  - Statistical analysis of correction effectiveness
+  - **Status:** 📅 Planned
+
+- **Method Recommendation Engine** (**Priority: Medium**)
+  - AI-powered algorithm selection based on image characteristics
+  - Use calibration stage detection results to recommend correction approach
+  - Performance benchmarking across different gradient types
+  - **Status:** 📅 Planned
+
+### 🚀 Advanced Features
+- **Batch Gradient Correction** (**Priority: Medium**)
+  - Apply correction settings to multiple images
+  - Template-based processing for imaging sessions
+  - Cloud processing for large datasets
+  - **Status:** 📅 Planned
+
+- **Integration with External Tools** (**Priority: Low**)
+  - Export settings for GraXpert, PixInsight, Siril
+  - Import correction masks from external software
+  - API for third-party integration
+  - **Status:** 💡 Under Consideration
+
+### 🏆 Competitive Differentiation
+**Stellar Astro Gradient Correction vs. Competitors:**
+
+| Feature | Stellar Astro (Planned) | GraXpert | PixInsight DBE | Siril |
+|---------|-------------------------|----------|----------------|-------|
+| **Calibration Integration** | ✅ Seamless two-stage | ❌ Standalone | ❌ Separate tool | ❌ Separate tool |
+| **Quality-Guided Correction** | ✅ Uses detection scores | ❌ Manual only | ❌ Manual only | ❌ Manual only |
+| **Real-time Preview** | ✅ Planned | ✅ Yes | ✅ Yes | ✅ Yes |
+| **Multiple Algorithms** | ✅ 3+ methods | ✅ 2 methods | ✅ DBE only | ✅ Limited |
+| **Cloud Processing** | ✅ Planned | ❌ Local only | ❌ Local only | ❌ Local only |
+| **Web-based** | ✅ Yes | ❌ Desktop app | ❌ Desktop app | ❌ Desktop app |
+
+### 📈 Implementation Roadmap
+1. **Phase 1** (Month 1-2): Synthetic flat field algorithm
+2. **Phase 2** (Month 2-3): Interactive UI with background point selection  
+3. **Phase 3** (Month 3-4): DBE-style dynamic background extraction
+4. **Phase 4** (Month 4): Quality metrics and batch processing
+
+### 💡 Technical Innovation
+- **First web-based gradient correction** tool with calibration integration
+- **AI-guided background point selection** using image analysis
+- **Quality-aware processing** that uses calibration detection results
+- **Cloud-scale processing** for large imaging sessions
+- **Seamless integration** between detection and correction stages
+
+This feature would establish Stellar Astro as the **only astrophotography platform** offering integrated gradient detection (calibration) and correction (post-processing) in a unified web-based workflow, providing significant competitive advantage over existing desktop solutions. 

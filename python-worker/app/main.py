@@ -76,6 +76,7 @@ from .trail_detection import detect_trails
 from .outlier_rejection import detect_outlier_frames
 from .frame_consistency import analyze_frame_consistency, suggest_frame_selection
 from .cosmic_ray_detection import CosmicRayDetector, validate_cosmic_ray_parameters
+from .gradient_analysis import analyze_calibration_frame_gradients, GradientAnalysisResult
 
 logger = logging.getLogger(__name__)
 
@@ -2706,6 +2707,212 @@ async def run_enhanced_cosmic_ray_job(request: CosmicRayDetectionRequest, job_id
     except Exception as e:
         logger.error(f"Enhanced cosmic ray detection job {job_id} failed: {e}")
         await insert_job(job_id, "failed", error=str(e))
+
+class GradientAnalysisRequest(BaseModel):
+    fits_paths: list[str] = None  # Either full paths OR just filenames
+    bucket: str = None  # Supabase bucket name (e.g. 'fits-files')
+    project_id: str = None
+    user_id: str = None 
+    frame_type: str = None  # 'dark', 'flat' (auto-detected if None)
+
+@app.post("/gradients/analyze")
+async def analyze_gradients(request: GradientAnalysisRequest, background_tasks: BackgroundTasks):
+    """
+    Analyze gradients in calibration frames for quality assessment.
+    
+    This endpoint detects and analyzes gradient issues in dark and flat frames
+    during the calibration stage, following industry standards where:
+    - Detection happens during calibration (this endpoint)
+    - Correction happens in post-processing (GraXpert, Siril, etc.)
+    """
+    try:
+        if not request.fits_paths:
+            raise HTTPException(status_code=400, detail="No FITS paths provided")
+        
+        job_id = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+        
+        # Start gradient analysis job
+        background_tasks.add_task(run_gradient_analysis_job, request, job_id)
+        
+        return {
+            "job_id": job_id,
+            "status": "started",
+            "message": f"Gradient analysis started for {len(request.fits_paths)} frames",
+            "analysis_type": "detection_and_validation"
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to start gradient analysis: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+async def run_gradient_analysis_job(request: GradientAnalysisRequest, job_id: str):
+    """Run gradient analysis job for multiple calibration frames."""
+    db = get_db()
+    try:
+        await insert_job(job_id, "running")
+        await update_job_progress(job_id, 0)
+        
+        # Download files
+        local_files = []
+        for fits_path in request.fits_paths:
+            local_file = f"tmp_{fits_path.replace('/', '_')}"
+            success = await download_file_with_fallback(
+                request.bucket, fits_path, local_file,
+                {'project_id': request.project_id, 'user_id': request.user_id, 'frame_type': request.frame_type}
+            )
+            if success:
+                local_files.append((local_file, fits_path))
+        
+        if not local_files:
+            raise Exception("Failed to download any files")
+        
+        await update_job_progress(job_id, 20)
+        
+        all_results = []
+        total_files = len(local_files)
+        
+        for i, (local_file, original_path) in enumerate(local_files):
+            try:
+                # Analyze gradients in this frame
+                result = analyze_calibration_frame_gradients(local_file, request.frame_type)
+                
+                # Add file info to result
+                result_dict = {
+                    "file_path": original_path,
+                    "frame_type": result.frame_type,
+                    "gradient_score": result.gradient_score,
+                    "uniformity_score": result.uniformity_score,
+                    "detected_issues": result.detected_issues,
+                    "recommendations": result.recommendations,
+                    "statistics": result.statistics,
+                    "quality_flags": result.quality_flags
+                }
+                
+                all_results.append(result_dict)
+                
+            except Exception as e:
+                logger.warning(f"Failed to analyze {original_path}: {e}")
+                all_results.append({
+                    "file_path": original_path,
+                    "frame_type": request.frame_type or "unknown",
+                    "gradient_score": 0.0,
+                    "uniformity_score": 0.0,
+                    "detected_issues": [f"Analysis failed: {str(e)}"],
+                    "recommendations": ["Check file integrity"],
+                    "statistics": {},
+                    "quality_flags": {}
+                })
+            
+            # Update progress
+            progress = 20 + (70 * (i + 1) / total_files)
+            await update_job_progress(job_id, int(progress))
+        
+        # Generate summary statistics
+        summary = generate_gradient_summary(all_results)
+        
+        await update_job_progress(job_id, 90)
+        
+        # Clean up downloaded files
+        for local_file, _ in local_files:
+            if os.path.exists(local_file):
+                os.remove(local_file)
+        
+        await update_job_progress(job_id, 100)
+        
+        # Update job with results
+        await db.fetch(
+            "UPDATE jobs SET status = $1, result = $2, diagnostics = $3 WHERE id = $4",
+            "completed",
+            json.dumps({
+                "summary": summary,
+                "frame_results": all_results,
+                "total_frames": len(all_results)
+            }),
+            json.dumps({
+                "frame_type": request.frame_type,
+                "analysis_method": "calibration_stage_detection"
+            }),
+            job_id
+        )
+        
+    except Exception as e:
+        logger.error(f"Gradient analysis job {job_id} failed: {e}")
+        await db.fetch(
+            "UPDATE jobs SET status = $1, error = $2 WHERE id = $3",
+            "failed",
+            str(e),
+            job_id
+        )
+
+def generate_gradient_summary(results: list) -> dict:
+    """Generate summary statistics from gradient analysis results."""
+    if not results:
+        return {}
+    
+    # Calculate overall statistics
+    gradient_scores = [r.get('gradient_score', 0) for r in results]
+    uniformity_scores = [r.get('uniformity_score', 0) for r in results]
+    
+    # Count issues
+    total_issues = sum(len(r.get('detected_issues', [])) for r in results)
+    frames_with_issues = sum(1 for r in results if r.get('detected_issues'))
+    
+    # Categorize frame quality
+    excellent_frames = sum(1 for s in gradient_scores if s >= 8.0)
+    good_frames = sum(1 for s in gradient_scores if 6.0 <= s < 8.0)
+    poor_frames = sum(1 for s in gradient_scores if s < 6.0)
+    
+    # Most common issues
+    all_issues = []
+    for r in results:
+        all_issues.extend(r.get('detected_issues', []))
+    
+    issue_counts = {}
+    for issue in all_issues:
+        # Group similar issues
+        if 'amp glow' in issue.lower():
+            issue_counts['Amp Glow'] = issue_counts.get('Amp Glow', 0) + 1
+        elif 'light leak' in issue.lower():
+            issue_counts['Light Leaks'] = issue_counts.get('Light Leaks', 0) + 1
+        elif 'uniformity' in issue.lower():
+            issue_counts['Poor Uniformity'] = issue_counts.get('Poor Uniformity', 0) + 1
+        elif 'vignetting' in issue.lower():
+            issue_counts['Vignetting'] = issue_counts.get('Vignetting', 0) + 1
+        else:
+            issue_counts['Other'] = issue_counts.get('Other', 0) + 1
+    
+    return {
+        "total_frames": len(results),
+        "frames_with_issues": frames_with_issues,
+        "average_gradient_score": sum(gradient_scores) / len(gradient_scores) if gradient_scores else 0,
+        "average_uniformity_score": sum(uniformity_scores) / len(uniformity_scores) if uniformity_scores else 0,
+        "quality_distribution": {
+            "excellent": excellent_frames,
+            "good": good_frames,
+            "poor": poor_frames
+        },
+        "common_issues": issue_counts,
+        "total_issues": total_issues,
+        "recommendation": generate_overall_recommendation(gradient_scores, issue_counts)
+    }
+
+def generate_overall_recommendation(gradient_scores: list, issue_counts: dict) -> str:
+    """Generate overall recommendation based on analysis results."""
+    avg_score = sum(gradient_scores) / len(gradient_scores) if gradient_scores else 0
+    
+    if avg_score >= 8.0:
+        return "Excellent calibration frame quality. No major gradient issues detected."
+    elif avg_score >= 6.0:
+        return "Good calibration frame quality with minor issues. Consider addressing flagged problems."
+    elif avg_score >= 4.0:
+        if 'Amp Glow' in issue_counts:
+            return "Moderate gradient issues detected. Consider improving camera cooling or shorter exposures."
+        elif 'Light Leaks' in issue_counts:
+            return "Light leaks detected. Check telescope/camera for unwanted light entry points."
+        else:
+            return "Moderate gradient issues. Review individual frame recommendations."
+    else:
+        return "Significant gradient issues detected. Consider re-taking calibration frames with improved setup."
 
 if __name__ == "__main__":
     # Force port 8000 and prevent port changes

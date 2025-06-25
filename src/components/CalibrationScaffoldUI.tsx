@@ -19,6 +19,7 @@ import { createBrowserClient } from '@/src/lib/supabase';
 import { supabaseUrl, supabaseAnonKey } from '@/src/lib/supabase';
 import CreateSuperdarkUI from './CreateSuperdarkUI';
 import { useSuperdarks } from '@/src/hooks/useSuperdarks';
+import FrameQualityReport from './FrameQualityReport';
 
 interface DarkFileWithMetadata {
   name: string;
@@ -301,9 +302,9 @@ const pollJobStatus = async (jobId: string) => {
 
 function getProgressMessage(progress: number) {
   if (progress < 20) return "Preparing and downloading frames...";
-  if (progress < 40) return "Reviewing and analyzing frames...";
+  if (progress < 40) return "Analyzing frame quality and gradients...";
   if (progress < 60) return "Calibrating and stacking frames...";
-  if (progress < 75) return "Creating master dark...";
+  if (progress < 75) return "Creating master frame...";
   if (progress < 95) return "Uploading results to database...";
   if (progress < 100) return "Loading preview...";
   return "Calibration complete!";
@@ -925,6 +926,10 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
   const [consistencyError, setConsistencyError] = useState<string | null>(null);
   const [consistencySelections, setConsistencySelections] = useState<Record<string, boolean>>({});
 
+  // Frame quality analysis state
+  const [qualityAnalysisResults, setQualityAnalysisResults] = useState<any>(null);
+  const [showQualityReport, setShowQualityReport] = useState(false);
+
   // Add this near the other state declarations (around line 865)
   const [autoConsistencyEnabled, setAutoConsistencyEnabled] = useState(true);
   const [smartDefaultsEnabled, setSmartDefaultsEnabled] = useState(true);
@@ -1091,6 +1096,13 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
 
   const handleConsistencyFrameToggle = (path: string, include: boolean) => {
     setConsistencySelections(prev => ({ ...prev, [path]: include }));
+  };
+
+  // Handler for quality report frame overrides
+  const handleQualityFrameOverride = (framePath: string, action: 'accept' | 'reject') => {
+    console.log(`Quality override: ${action} frame ${framePath}`);
+    // This could trigger a re-run of calibration with the override
+    // For now, just log the action
   };
 
   // Load presets from localStorage on mount
@@ -1353,71 +1365,117 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
     bias: 'Check for a narrow, centered peak. Bias frames should have low noise and no clipping.'
   };
 
+  // Helper to get default tab state for a given type
+  const getDefaultTabState = (type: MasterType) => {
+    const defaultCosmeticMethods = COSMETIC_METHODS.reduce((acc, method) => {
+      acc[method.value] = { enabled: method.defaultEnabled, order: method.order };
+      return acc;
+    }, {} as Record<string, { enabled: boolean; order: number }>);
+
+    switch (type) {
+      case 'dark':
+        return {
+          advanced: false,
+          stackingMethod: 'median',
+          sigmaThreshold: '3.0',
+          darkScaling: false,
+          darkScalingAuto: true,
+          darkScalingFactor: 1.0,
+          biasSubtraction: false,
+          ampGlowSuppression: false,
+          tempMatching: false,
+          exposureMatching: false,
+          cosmeticCorrection: false,
+          cosmeticMethods: defaultCosmeticMethods,
+          cosmeticThreshold: 0.5,
+          customRejection: '',
+          pixelRejectionAlgorithm: 'sigma',
+          badPixelMapPath: '',
+          darkOptimization: false,
+          useSuperdark: false,
+          superdarkPath: '',
+          // Flat-specific properties (unused but needed for type consistency)
+          weightParam: '',
+          // New advanced cosmetic correction parameters
+          badPixelSigmaThreshold: 5.0,
+          patternedNoiseMethod: 'auto',
+          patternedNoiseStrength: 0.5,
+          gradientRemovalSize: 50,
+          fourierCutoffFreq: 0.1,
+          polynomialDegree: 2,
+        };
+      case 'flat':
+        return {
+          advanced: false,
+          stackingMethod: 'mean',
+          sigmaThreshold: '3.0',
+          weightParam: '',
+          cosmeticCorrection: false,
+          cosmeticMethods: defaultCosmeticMethods,
+          cosmeticThreshold: 0.5,
+          customRejection: '',
+          badPixelMapPath: '',
+          // Dark-specific properties (unused but needed for type consistency)
+          darkScaling: false,
+          darkScalingAuto: true,
+          darkScalingFactor: 1.0,
+          biasSubtraction: false,
+          ampGlowSuppression: false,
+          tempMatching: false,
+          exposureMatching: false,
+          pixelRejectionAlgorithm: 'sigma',
+          darkOptimization: false,
+          useSuperdark: false,
+          superdarkPath: '',
+          // New advanced cosmetic correction parameters
+          badPixelSigmaThreshold: 5.0,
+          patternedNoiseMethod: 'auto',
+          patternedNoiseStrength: 0.5,
+          gradientRemovalSize: 50,
+          fourierCutoffFreq: 0.1,
+          polynomialDegree: 2,
+        };
+      case 'bias':
+      default:
+        return {
+          advanced: false,
+          stackingMethod: 'median',
+          sigmaThreshold: '3.0',
+          cosmeticCorrection: false,
+          cosmeticMethods: defaultCosmeticMethods,
+          cosmeticThreshold: 0.5,
+          customRejection: '',
+          badPixelMapPath: '',
+          // Dark-specific properties (unused but needed for type consistency)
+          darkScaling: false,
+          darkScalingAuto: true,
+          darkScalingFactor: 1.0,
+          biasSubtraction: false,
+          ampGlowSuppression: false,
+          tempMatching: false,
+          exposureMatching: false,
+          pixelRejectionAlgorithm: 'sigma',
+          darkOptimization: false,
+          useSuperdark: false,
+          superdarkPath: '',
+          // Flat-specific properties (unused but needed for type consistency)
+          weightParam: '',
+          // New advanced cosmetic correction parameters
+          badPixelSigmaThreshold: 5.0,
+          patternedNoiseMethod: 'auto',
+          patternedNoiseStrength: 0.5,
+          gradientRemovalSize: 50,
+          fourierCutoffFreq: 0.1,
+          polynomialDegree: 2,
+        };
+    }
+  };
+
   // Default settings for reset
   const defaultTabState = {
-    dark: {
-      advanced: false,
-      stackingMethod: 'median',
-      sigmaThreshold: '3.0',
-      darkScaling: false,
-      darkScalingAuto: true,
-      darkScalingFactor: 1.0,
-      biasSubtraction: false,
-      ampGlowSuppression: false,
-      tempMatching: false,
-      exposureMatching: false,
-      cosmeticCorrection: false,
-      cosmeticMethod: 'hot_pixel_map',
-      cosmeticThreshold: 0.5,
-      customRejection: '',
-      pixelRejectionAlgorithm: 'sigma',
-      badPixelMapPath: '',
-      darkOptimization: false,
-      useSuperdark: false,
-      superdarkPath: '',
-      // New advanced cosmetic correction parameters
-      badPixelSigmaThreshold: 5.0,
-      patternedNoiseMethod: 'auto',
-      patternedNoiseStrength: 0.5,
-      gradientRemovalSize: 50,
-      fourierCutoffFreq: 0.1,
-      polynomialDegree: 2,
-    },
-    flat: {
-      advanced: false,
-      stackingMethod: 'mean',
-      sigmaThreshold: '3.0',
-      weightParam: '',
-      cosmeticCorrection: false,
-      cosmeticMethod: 'hot_pixel_map',
-      cosmeticThreshold: 0.5,
-      customRejection: '',
-      badPixelMapPath: '',
-      // New advanced cosmetic correction parameters
-      badPixelSigmaThreshold: 5.0,
-      patternedNoiseMethod: 'auto',
-      patternedNoiseStrength: 0.5,
-      gradientRemovalSize: 50,
-      fourierCutoffFreq: 0.1,
-      polynomialDegree: 2,
-    },
-    bias: {
-      advanced: false,
-      stackingMethod: 'median',
-      sigmaThreshold: '3.0',
-      cosmeticCorrection: false,
-      cosmeticMethod: 'hot_pixel_map',
-      cosmeticThreshold: 0.5,
-      customRejection: '',
-      badPixelMapPath: '',
-      // New advanced cosmetic correction parameters
-      badPixelSigmaThreshold: 5.0,
-      patternedNoiseMethod: 'auto',
-      patternedNoiseStrength: 0.5,
-      gradientRemovalSize: 50,
-      fourierCutoffFreq: 0.1,
-      polynomialDegree: 2,
-    },
+    dark: getDefaultTabState('dark'),
+    flat: getDefaultTabState('flat'),
+    bias: getDefaultTabState('bias'),
   };
 
   // Reset current tab
@@ -1619,6 +1677,16 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                 }),
               });
             }
+
+            // --- Extract quality analysis results ---
+            if (data.diagnostics && data.diagnostics.quality_analysis) {
+              setQualityAnalysisResults(data.diagnostics.quality_analysis);
+              // Show quality report if there are issues detected
+              const hasIssues = data.results.rejected > 0 || 
+                              (data.diagnostics.quality_analysis.summary && 
+                               data.diagnostics.quality_analysis.summary.average_quality < 7);
+              setShowQualityReport(hasIssues);
+            }
           } else {
             console.log('[Preview] No preview_url found in results:', data.results);
           }
@@ -1687,83 +1755,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
     });
   };
 
-  // Add this helper to get default tab state for a given type
-  const getDefaultTabState = (type: MasterType) => {
-    const defaultCosmeticMethods = COSMETIC_METHODS.reduce((acc, method) => {
-      acc[method.value] = { enabled: method.defaultEnabled, order: method.order };
-      return acc;
-    }, {} as Record<string, { enabled: boolean; order: number }>);
 
-    switch (type) {
-      case 'dark':
-        return {
-          advanced: false,
-          stackingMethod: 'median',
-          sigmaThreshold: '3.0',
-          darkScaling: false,
-          darkScalingAuto: true,
-          darkScalingFactor: 1.0,
-          biasSubtraction: false,
-          ampGlowSuppression: false,
-          tempMatching: false,
-          exposureMatching: false,
-          cosmeticCorrection: false,
-          cosmeticMethods: defaultCosmeticMethods,
-          cosmeticThreshold: 0.5,
-          customRejection: '',
-          pixelRejectionAlgorithm: 'sigma',
-          badPixelMapPath: '',
-          darkOptimization: false,
-          useSuperdark: false,
-          superdarkPath: '',
-          // New advanced cosmetic correction parameters
-          badPixelSigmaThreshold: 5.0,
-          patternedNoiseMethod: 'auto',
-          patternedNoiseStrength: 0.5,
-          gradientRemovalSize: 50,
-          fourierCutoffFreq: 0.1,
-          polynomialDegree: 2,
-        };
-      case 'flat':
-        return {
-          advanced: false,
-          stackingMethod: 'mean',
-          sigmaThreshold: '3.0',
-          weightParam: '',
-          cosmeticCorrection: false,
-          cosmeticMethods: defaultCosmeticMethods,
-          cosmeticThreshold: 0.5,
-          customRejection: '',
-          badPixelMapPath: '',
-          // New advanced cosmetic correction parameters
-          badPixelSigmaThreshold: 5.0,
-          patternedNoiseMethod: 'auto',
-          patternedNoiseStrength: 0.5,
-          gradientRemovalSize: 50,
-          fourierCutoffFreq: 0.1,
-          polynomialDegree: 2,
-        };
-      case 'bias':
-      default:
-        return {
-          advanced: false,
-          stackingMethod: 'median',
-          sigmaThreshold: '3.0',
-          cosmeticCorrection: false,
-          cosmeticMethods: defaultCosmeticMethods,
-          cosmeticThreshold: 0.5,
-          customRejection: '',
-          badPixelMapPath: '',
-          // New advanced cosmetic correction parameters
-          badPixelSigmaThreshold: 5.0,
-          patternedNoiseMethod: 'auto',
-          patternedNoiseStrength: 0.5,
-          gradientRemovalSize: 50,
-          fourierCutoffFreq: 0.1,
-          polynomialDegree: 2,
-        };
-    }
-  };
 
   // Add this handler near other job handlers
   const handleCancelJob = async () => {
@@ -2486,7 +2478,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                         />
                       </div>
                       {/* LA Cosmic parameters */}
-                      {selectedType === 'bias' && tabState.bias.cosmeticMethod === 'la_cosmic' && (
+                      {selectedType === 'bias' && tabState.bias.cosmeticMethods?.la_cosmic?.enabled && (
                         <div className="bg-[#232946] rounded-lg p-4 mb-4 border border-blue-900 shadow max-w-lg">
                           {/* Info banner if any param is auto-populated */}
                           {Object.values(autoPopulated).some(Boolean) && (
@@ -2526,7 +2518,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                       )}
 
                       {/* Enhanced Cosmic Ray Detection */}
-                      {selectedType === 'bias' && ['la_cosmic_enhanced', 'multi_algorithm', 'auto_method'].includes(tabState.bias.cosmeticMethod) && (
+                      {selectedType === 'bias' && (tabState.bias.cosmeticMethods?.la_cosmic_enhanced?.enabled || tabState.bias.cosmeticMethods?.multi_algorithm?.enabled || tabState.bias.cosmeticMethods?.auto_method?.enabled) && (
                         <div className="bg-gradient-to-br from-purple-900/30 to-blue-900/30 rounded-lg p-4 mb-4 border border-purple-500/30 shadow-lg">
                           <div className="flex items-center gap-2 mb-3">
                             <Zap className="w-5 h-5 text-purple-400" />
@@ -3225,7 +3217,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                               )}
                             </div>
                           )}
-                          {tabState.dark.cosmeticMethod === 'patterned_noise_removal' && (
+                          {tabState.dark.cosmeticMethods?.patterned_noise_removal?.enabled && (
                             <div className="mt-4">
                               <label className="block font-medium mb-1 text-blue-100">Patterned Noise Method</label>
                               <select
@@ -3319,7 +3311,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                             </div>
                           )}
                           {/* Existing threshold for legacy methods */}
-                          {['hot_pixel_map', 'la_cosmic'].includes(tabState.dark.cosmeticMethod) && (
+                          {(tabState.dark.cosmeticMethods?.hot_pixel_map?.enabled || tabState.dark.cosmeticMethods?.la_cosmic?.enabled) && (
                             <div className="mt-4">
                               <label className="block font-medium mb-1 text-blue-100">Threshold</label>
                               <input
@@ -3567,14 +3559,14 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                           <label className="block font-medium mb-1 text-blue-100">Correction Method</label>
                           <select
                             className="bg-[#181c23] text-white border border-[#232946] rounded px-3 py-2 mt-1"
-                            value={tabState.flat.cosmeticMethod}
-                            onChange={e => setTabState(prev => ({ ...prev, flat: { ...prev.flat, cosmeticMethod: e.target.value } }))}
+                                                    value="multiple_methods"
+                        disabled={true}
                           >
                             {COSMETIC_METHODS.map((m: { value: string; label: string }) => (
                               <option key={m.value} value={m.value}>{m.label}</option>
                             ))}
                           </select>
-                          {tabState.flat.cosmeticMethod === 'bad_pixel_masking' && (
+                          {tabState.flat.cosmeticMethods?.bad_pixel_masking?.enabled && (
                             <div className="mt-4">
                               <label className="block font-medium mb-1 text-blue-100">Sigma Threshold</label>
                               <input
@@ -3603,7 +3595,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                               )}
                             </div>
                           )}
-                          {tabState.flat.cosmeticMethod === 'patterned_noise_removal' && (
+                          {tabState.flat.cosmeticMethods?.patterned_noise_removal?.enabled && (
                             <div className="mt-4">
                               <label className="block font-medium mb-1 text-blue-100">Patterned Noise Method</label>
                               <span className="ml-2 text-xs text-yellow-400">Use with caution: may remove real illumination gradients in flats.</span>
@@ -3696,7 +3688,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                               )}
                             </div>
                           )}
-                          {['hot_pixel_map', 'la_cosmic'].includes(tabState.flat.cosmeticMethod) && (
+                          {(tabState.flat.cosmeticMethods?.hot_pixel_map?.enabled || tabState.flat.cosmeticMethods?.la_cosmic?.enabled) && (
                             <div className="mt-4">
                               <label className="block font-medium mb-1 text-blue-100">Threshold</label>
                               <input
@@ -4077,6 +4069,17 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                     >
                       <BarChart3 className="w-7 h-7 text-blue-200" />
                     </button>
+                    {/* Quality Report toggle icon */}
+                    {qualityAnalysisResults && (
+                      <button
+                        className="p-3 ml-2 rounded-full bg-gray-900/80 hover:bg-purple-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400 shadow-lg flex-shrink-0"
+                        style={{ minWidth: 44, minHeight: 44, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                        onClick={() => setShowQualityReport(!showQualityReport)}
+                        aria-label="Show Quality Report"
+                      >
+                        <Info className="w-7 h-7 text-purple-200" />
+                      </button>
+                    )}
                     {/* Main image preview, relative for overlay */}
                     <div className="relative flex-grow flex justify-center">
                       <img src={displayUrl} alt={displayTitle} className="rounded-lg shadow-lg max-w-full max-h-96" />
@@ -4153,6 +4156,27 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
  
           </div>
         </div>
+
+        {/* Frame Quality Report */}
+        {showQualityReport && qualityAnalysisResults && (
+          <div className="mt-6">
+            <FrameQualityReport
+              summary={qualityAnalysisResults.summary || {
+                total_frames: 0,
+                accepted_frames: 0,
+                flagged_frames: 0,
+                rejected_frames: 0,
+                average_quality: 0,
+                common_issues: [],
+                overall_recommendation: ''
+              }}
+              frameResults={qualityAnalysisResults.frame_results || []}
+              rejectedFrames={qualityAnalysisResults.rejected_frames || []}
+              onFrameOverride={handleQualityFrameOverride}
+            />
+          </div>
+        )}
+
         {/* Action Buttons */}
         <div className="flex justify-end gap-4 mt-8">
           <button className="px-6 py-2 bg-[#232946] text-white rounded shadow hover:bg-[#181c23]" onClick={handleBack}>Back</button>
