@@ -3329,7 +3329,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                                     </button>
                                                                          {cosmeticJobs?.badPixelMasking && (
                                        <div className="text-xs text-blue-300">
-                                         Status: {cosmeticJobs.badPixelMasking.status} | Progress: {cosmeticJobs.badPixelMasking.progress}%
+                                         Status: {cosmeticJobs.badPixelMasking?.status} | Progress: {cosmeticJobs.badPixelMasking?.progress}%
                                        </div>
                                      )}
                                   </div>
@@ -3409,7 +3409,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                               </button>
                               {cosmeticJobs.badPixelMasking && (
                                 <div className="mt-2 text-xs text-blue-300">
-                                  Status: {cosmeticJobs.badPixelMasking.status} | Progress: {cosmeticJobs.badPixelMasking.progress}%
+                                  Status: {cosmeticJobs.badPixelMasking?.status} | Progress: {cosmeticJobs.badPixelMasking?.progress}%
                                 </div>
                               )}
                               {cosmeticResults.badPixelMasks && (
@@ -3790,7 +3790,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                               </button>
                               {cosmeticJobs.badPixelMasking && (
                                 <div className="mt-2 text-xs text-blue-300">
-                                  Status: {cosmeticJobs.badPixelMasking.status} | Progress: {cosmeticJobs.badPixelMasking.progress}%
+                                  Status: {cosmeticJobs.badPixelMasking?.status} | Progress: {cosmeticJobs.badPixelMasking?.progress}%
                                 </div>
                               )}
                               {cosmeticResults.badPixelMasks && (
