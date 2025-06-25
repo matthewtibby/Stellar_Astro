@@ -170,11 +170,67 @@ const STATUS_LABELS: Record<MasterStatus, string> = {
 };
 
 const COSMETIC_METHODS = [
-  { value: 'hot_pixel_map', label: 'Hot Pixel Map' },
-  { value: 'la_cosmic', label: 'L.A.Cosmic' },
-  { value: 'bad_pixel_masking', label: 'Bad Pixel/Column/Row Masking' },
-  { value: 'patterned_noise_removal', label: 'Patterned Noise Removal' },
-  { value: 'combined_advanced', label: 'Combined Advanced Correction' },
+  { 
+    value: 'hot_pixel_map', 
+    label: 'Hot Pixel Map',
+    tooltip: 'Identifies and masks consistently hot pixels by comparing multiple frames. Essential for removing sensor defects.',
+    category: 'detection',
+    defaultEnabled: true,
+    order: 1
+  },
+  { 
+    value: 'la_cosmic_enhanced', 
+    label: 'L.A.Cosmic Enhanced',
+    tooltip: 'Advanced cosmic ray detection using L.A.Cosmic algorithm with auto-tuning and multi-method support. Removes high-energy particle strikes.',
+    category: 'cosmic_rays',
+    defaultEnabled: true,
+    order: 2
+  },
+  { 
+    value: 'bad_pixel_masking', 
+    label: 'Bad Pixel/Column/Row Masking',
+    tooltip: 'Masks known bad pixels, columns, and rows based on calibration analysis. Removes systematic sensor defects.',
+    category: 'masking',
+    defaultEnabled: false,
+    order: 3
+  },
+  { 
+    value: 'patterned_noise_removal', 
+    label: 'Patterned Noise Removal',
+    tooltip: 'Removes systematic noise patterns like banding, fixed pattern noise, and readout artifacts using advanced filtering.',
+    category: 'noise',
+    defaultEnabled: false,
+    order: 4
+  },
+  { 
+    value: 'la_cosmic', 
+    label: 'L.A.Cosmic (Basic)',
+    tooltip: 'Standard L.A.Cosmic cosmic ray detection with manual parameters. Use Enhanced version for better results.',
+    category: 'cosmic_rays',
+    defaultEnabled: false,
+    order: 5
+  },
+  { 
+    value: 'multi_algorithm', 
+    label: 'Multi-Algorithm Detection',
+    tooltip: 'Combines multiple cosmic ray detection methods (L.A.Cosmic, sigma clipping, Laplacian) with voting strategies.',
+    category: 'cosmic_rays',
+    defaultEnabled: false,
+    order: 6
+  },
+];
+
+const COSMIC_RAY_METHODS = [
+  { value: 'lacosmic', label: 'L.A.Cosmic (Standard)' },
+  { value: 'multi', label: 'Multi-Algorithm' },
+  { value: 'auto', label: 'Auto-Select Method' },
+  { value: 'sigma_clip', label: 'Sigma Clipping' }
+];
+
+const MULTI_COMBINE_METHODS = [
+  { value: 'intersection', label: 'Intersection (Conservative)' },
+  { value: 'union', label: 'Union (Aggressive)' },
+  { value: 'voting', label: 'Majority Voting' }
 ];
 
 // SVG illustration for empty state
@@ -593,6 +649,103 @@ function FrameConsistencyTable({
 }
 
 const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = ({ projectId, userId }) => {
+  
+  // Helper functions for cosmetic methods
+  const handleCosmeticMethodToggle = (frameType: MasterType, methodValue: string, enabled: boolean) => {
+    setTabState(prev => {
+      let newCosmeticMethods = { ...prev[frameType].cosmeticMethods };
+      
+      // Handle conflicting method logic
+      if (enabled) {
+        const conflictingMethods = getConflictingMethods(methodValue);
+        
+        // Disable conflicting methods
+        conflictingMethods.forEach(conflictMethod => {
+          if (newCosmeticMethods[conflictMethod]?.enabled) {
+            newCosmeticMethods[conflictMethod] = {
+              ...newCosmeticMethods[conflictMethod],
+              enabled: false
+            };
+          }
+        });
+      }
+      
+      // Update the selected method
+      newCosmeticMethods[methodValue] = {
+        ...newCosmeticMethods[methodValue],
+        enabled
+      };
+
+      return {
+        ...prev,
+        [frameType]: {
+          ...prev[frameType],
+          cosmeticMethods: newCosmeticMethods
+        }
+      };
+    });
+  };
+
+  // Define conflicting method groups
+  const getConflictingMethods = (methodValue: string): string[] => {
+    const conflicts: Record<string, string[]> = {
+      // Cosmic ray detection methods conflict with each other
+      'la_cosmic': ['la_cosmic_enhanced', 'multi_algorithm'],
+      'la_cosmic_enhanced': ['la_cosmic', 'multi_algorithm'], 
+      'multi_algorithm': ['la_cosmic', 'la_cosmic_enhanced'],
+      
+      // Auto method conflicts with all manual selections
+      'auto_method': ['hot_pixel_map', 'la_cosmic', 'la_cosmic_enhanced', 'multi_algorithm', 'bad_pixel_masking', 'patterned_noise_removal'],
+    };
+    
+    return conflicts[methodValue] || [];
+  };
+
+  const getMethodWarnings = (frameType: MasterType, methodValue: string): string[] => {
+    const warnings: string[] = [];
+    const enabledMethods = Object.entries(tabState[frameType].cosmeticMethods)
+      .filter(([_, config]) => config.enabled)
+      .map(([method, _]) => method);
+    
+    // Check for cosmic ray method conflicts
+    const cosmicRayMethods = ['la_cosmic', 'la_cosmic_enhanced', 'multi_algorithm'];
+    const enabledCosmicMethods = enabledMethods.filter(method => cosmicRayMethods.includes(method));
+    
+    if (enabledCosmicMethods.length > 1) {
+      warnings.push("⚠️ Multiple cosmic ray methods selected - only the most recent will be used");
+    }
+    
+    // Check for auto method conflicts
+    if (enabledMethods.includes('auto_method') && enabledMethods.length > 1) {
+      warnings.push("⚠️ Auto-method conflicts with manual selections");
+    }
+    
+    return warnings;
+  };
+
+  const handleCosmeticMethodOrderChange = (frameType: MasterType, methodValue: string, newOrder: number) => {
+    setTabState(prev => ({
+      ...prev,
+      [frameType]: {
+        ...prev[frameType],
+        cosmeticMethods: {
+          ...prev[frameType].cosmeticMethods,
+          [methodValue]: {
+            ...prev[frameType].cosmeticMethods[methodValue],
+            order: newOrder
+          }
+        }
+      }
+    }));
+  };
+
+  const getEnabledCosmeticMethods = (frameType: MasterType) => {
+    const methods = tabState[frameType].cosmeticMethods;
+    return Object.entries(methods)
+      .filter(([_, config]) => config.enabled)
+      .sort(([_, a], [__, b]) => a.order - b.order)
+      .map(([methodValue, _]) => methodValue);
+  };
   const [selectedType, setSelectedType] = useState<MasterType>('bias');
   const [tabState, setTabState] = useState({
     dark: {
@@ -607,7 +760,10 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
       tempMatching: false,
       exposureMatching: false,
       cosmeticCorrection: false,
-      cosmeticMethod: 'hot_pixel_map',
+      cosmeticMethods: COSMETIC_METHODS.reduce((acc, method) => {
+        acc[method.value] = { enabled: method.defaultEnabled, order: method.order };
+        return acc;
+      }, {} as Record<string, { enabled: boolean; order: number }>),
       cosmeticThreshold: 0.5,
       customRejection: '',
       pixelRejectionAlgorithm: 'sigma',
@@ -629,7 +785,10 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
       sigmaThreshold: '3.0',
       weightParam: '',
       cosmeticCorrection: false,
-      cosmeticMethod: 'hot_pixel_map',
+      cosmeticMethods: COSMETIC_METHODS.reduce((acc, method) => {
+        acc[method.value] = { enabled: method.defaultEnabled, order: method.order };
+        return acc;
+      }, {} as Record<string, { enabled: boolean; order: number }>),
       cosmeticThreshold: 0.5,
       customRejection: '',
       badPixelMapPath: '',
@@ -646,7 +805,10 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
       stackingMethod: 'median',
       sigmaThreshold: '3.0',
       cosmeticCorrection: false,
-      cosmeticMethod: 'hot_pixel_map',
+      cosmeticMethods: COSMETIC_METHODS.reduce((acc, method) => {
+        acc[method.value] = { enabled: method.defaultEnabled, order: method.order };
+        return acc;
+      }, {} as Record<string, { enabled: boolean; order: number }>),
       cosmeticThreshold: 0.5,
       customRejection: '',
       badPixelMapPath: '',
@@ -688,6 +850,14 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
     gain: 1.0,
     satlevel: 65535,
     niter: 4,
+    // Enhanced parameters
+    sigma_frac: 0.3,
+    objlim: 5.0,
+    method: 'lacosmic',  // 'lacosmic', 'multi', 'auto'
+    auto_tune: true,
+    multi_methods: ['lacosmic', 'sigma_clip'],
+    combine_method: 'intersection',
+    analyze_image_quality: true
   });
   // Track which parameters are auto-populated
   const [autoPopulated, setAutoPopulated] = useState<{ readnoise?: boolean; gain?: boolean; satlevel?: boolean }>({});
@@ -1519,6 +1689,11 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
 
   // Add this helper to get default tab state for a given type
   const getDefaultTabState = (type: MasterType) => {
+    const defaultCosmeticMethods = COSMETIC_METHODS.reduce((acc, method) => {
+      acc[method.value] = { enabled: method.defaultEnabled, order: method.order };
+      return acc;
+    }, {} as Record<string, { enabled: boolean; order: number }>);
+
     switch (type) {
       case 'dark':
         return {
@@ -1533,7 +1708,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
           tempMatching: false,
           exposureMatching: false,
           cosmeticCorrection: false,
-          cosmeticMethod: 'hot_pixel_map',
+          cosmeticMethods: defaultCosmeticMethods,
           cosmeticThreshold: 0.5,
           customRejection: '',
           pixelRejectionAlgorithm: 'sigma',
@@ -1556,7 +1731,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
           sigmaThreshold: '3.0',
           weightParam: '',
           cosmeticCorrection: false,
-          cosmeticMethod: 'hot_pixel_map',
+          cosmeticMethods: defaultCosmeticMethods,
           cosmeticThreshold: 0.5,
           customRejection: '',
           badPixelMapPath: '',
@@ -1575,7 +1750,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
           stackingMethod: 'median',
           sigmaThreshold: '3.0',
           cosmeticCorrection: false,
-          cosmeticMethod: 'hot_pixel_map',
+          cosmeticMethods: defaultCosmeticMethods,
           cosmeticThreshold: 0.5,
           customRejection: '',
           badPixelMapPath: '',
@@ -1860,6 +2035,131 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
     
     poll();
   };
+
+  // Cosmetic Methods Selection Component with Tooltips and Ordering
+  function CosmeticMethodsSelector({
+    selectedMethods,
+    onMethodToggle,
+    onOrderChange,
+  }: {
+    selectedMethods: Record<string, { enabled: boolean; order: number }>;
+    onMethodToggle: (methodValue: string, enabled: boolean) => void;
+    onOrderChange: (methodValue: string, newOrder: number) => void;
+  }) {
+    // Sort methods by their order for display
+    const sortedMethods = COSMETIC_METHODS.sort((a, b) => {
+      const aOrder = selectedMethods[a.value]?.order || a.order;
+      const bOrder = selectedMethods[b.value]?.order || b.order;
+      return aOrder - bOrder;
+    });
+
+    const enabledMethods = sortedMethods.filter(method => selectedMethods[method.value]?.enabled);
+    const disabledMethods = sortedMethods.filter(method => !selectedMethods[method.value]?.enabled);
+
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h5 className="text-sm font-medium text-blue-200">Cosmetic Correction Methods</h5>
+          <span className="text-xs text-blue-300">
+            {enabledMethods.length} method{enabledMethods.length !== 1 ? 's' : ''} selected
+          </span>
+        </div>
+
+        {/* Enabled Methods (with ordering) */}
+        {enabledMethods.length > 0 && (
+          <div className="space-y-2">
+            <div className="text-xs text-blue-300 mb-2">
+              ✅ Enabled (processed in order):
+            </div>
+            {enabledMethods.map((method, index) => (
+              <TooltipProvider key={method.value}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center justify-between bg-blue-900/30 rounded p-3 border border-blue-600/50">
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs bg-blue-700 text-blue-100 px-2 py-1 rounded font-mono">
+                          {index + 1}
+                        </span>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedMethods[method.value]?.enabled || false}
+                            onChange={(e) => onMethodToggle(method.value, e.target.checked)}
+                            className="accent-blue-600"
+                          />
+                          <span className="text-blue-100 font-medium">{method.label}</span>
+                        </label>
+                      </div>
+                      
+                      {/* Order controls */}
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => index > 0 && onOrderChange(method.value, selectedMethods[method.value].order - 1)}
+                          disabled={index === 0}
+                          className="p-1 text-blue-300 hover:text-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Move up"
+                        >
+                          ↑
+                        </button>
+                        <button
+                          onClick={() => index < enabledMethods.length - 1 && onOrderChange(method.value, selectedMethods[method.value].order + 1)}
+                          disabled={index === enabledMethods.length - 1}
+                          className="p-1 text-blue-300 hover:text-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Move down"
+                        >
+                          ↓
+                        </button>
+                      </div>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-sm">
+                    <p>{method.tooltip}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ))}
+          </div>
+        )}
+
+        {/* Disabled Methods */}
+        {disabledMethods.length > 0 && (
+          <div className="space-y-2">
+            <div className="text-xs text-gray-400 mb-2">
+              ⭕ Available methods:
+            </div>
+            {disabledMethods.map((method) => (
+              <TooltipProvider key={method.value}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center justify-between bg-gray-900/30 rounded p-3 border border-gray-600/30">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedMethods[method.value]?.enabled || false}
+                          onChange={(e) => onMethodToggle(method.value, e.target.checked)}
+                          className="accent-blue-600"
+                        />
+                        <span className="text-gray-300">{method.label}</span>
+                      </label>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-sm">
+                    <p>{method.tooltip}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ))}
+          </div>
+        )}
+
+        {/* Help text */}
+        <div className="text-xs text-blue-300 bg-blue-900/20 rounded p-2">
+          💡 <strong>Pro tip:</strong> Multiple methods work together - Hot Pixel Map removes sensor defects, 
+          L.A.Cosmic Enhanced removes cosmic rays, and additional methods handle specific noise patterns.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <TooltipProvider>
@@ -2224,6 +2524,160 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                           </div>
                         </div>
                       )}
+
+                      {/* Enhanced Cosmic Ray Detection */}
+                      {selectedType === 'bias' && ['la_cosmic_enhanced', 'multi_algorithm', 'auto_method'].includes(tabState.bias.cosmeticMethod) && (
+                        <div className="bg-gradient-to-br from-purple-900/30 to-blue-900/30 rounded-lg p-4 mb-4 border border-purple-500/30 shadow-lg">
+                          <div className="flex items-center gap-2 mb-3">
+                            <Zap className="w-5 h-5 text-purple-400" />
+                            <h4 className="font-semibold text-purple-200">Enhanced Cosmic Ray Detection</h4>
+                            <span className="px-2 py-1 text-xs bg-purple-700 text-purple-100 rounded-full">NEW</span>
+                          </div>
+                          
+                          {/* Detection Method Selection */}
+                          <div className="mb-4">
+                            <label className="block text-purple-200 text-sm mb-2">Detection Method</label>
+                            <select
+                              value={laCosmicParams.method}
+                              onChange={e => setLaCosmicParams(prev => ({ ...prev, method: e.target.value }))}
+                              className="w-full bg-[#2a2e3a] text-purple-100 border border-purple-600 rounded px-3 py-2"
+                            >
+                              {COSMIC_RAY_METHODS.map(method => (
+                                <option key={method.value} value={method.value}>{method.label}</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          {/* Auto-tuning Toggle */}
+                          <div className="mb-4 flex items-center justify-between">
+                            <div>
+                              <label className="text-purple-200 text-sm font-medium">Auto-tune Parameters</label>
+                              <p className="text-xs text-purple-300">Automatically optimize detection parameters for each image</p>
+                            </div>
+                            <label className="inline-flex relative items-center cursor-pointer">
+                              <input 
+                                type="checkbox" 
+                                className="sr-only peer" 
+                                checked={laCosmicParams.auto_tune} 
+                                onChange={e => setLaCosmicParams(prev => ({ ...prev, auto_tune: e.target.checked }))}
+                              />
+                              <div className="w-10 h-5 bg-gray-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-purple-500 rounded-full peer peer-checked:bg-purple-600 transition-all flex items-center justify-start peer-checked:justify-end">
+                                {!laCosmicParams.auto_tune && <span className="w-3 h-3 bg-white rounded-full ml-1" />}
+                                {laCosmicParams.auto_tune && <span className="w-3 h-3 bg-purple-300 rounded-full mr-1" />}
+                              </div>
+                            </label>
+                          </div>
+
+                          {/* Multi-algorithm specific controls */}
+                          {laCosmicParams.method === 'multi' && (
+                            <div className="space-y-4 border-l-2 border-purple-500/30 pl-4 ml-2">
+                              <div>
+                                <label className="block text-purple-200 text-sm mb-2">Detection Methods to Combine</label>
+                                <div className="space-y-2">
+                                  {['lacosmic', 'sigma_clip', 'laplacian'].map(method => (
+                                    <label key={method} className="flex items-center gap-2 text-purple-200 cursor-pointer">
+                                      <input
+                                        type="checkbox"
+                                        checked={laCosmicParams.multi_methods.includes(method)}
+                                        onChange={e => {
+                                          if (e.target.checked) {
+                                            setLaCosmicParams(prev => ({ 
+                                              ...prev, 
+                                              multi_methods: [...prev.multi_methods, method] 
+                                            }));
+                                          } else {
+                                            setLaCosmicParams(prev => ({ 
+                                              ...prev, 
+                                              multi_methods: prev.multi_methods.filter(m => m !== method) 
+                                            }));
+                                          }
+                                        }}
+                                        className="accent-purple-600"
+                                      />
+                                      <span className="capitalize">{method.replace('_', ' ')}</span>
+                                    </label>
+                                  ))}
+                                </div>
+                              </div>
+                              
+                              <div>
+                                <label className="block text-purple-200 text-sm mb-2">Combination Method</label>
+                                <select
+                                  value={laCosmicParams.combine_method}
+                                  onChange={e => setLaCosmicParams(prev => ({ ...prev, combine_method: e.target.value }))}
+                                  className="w-full bg-[#2a2e3a] text-purple-100 border border-purple-600 rounded px-3 py-2"
+                                >
+                                  {MULTI_COMBINE_METHODS.map(method => (
+                                    <option key={method.value} value={method.value}>{method.label}</option>
+                                  ))}
+                                </select>
+                                <p className="text-xs text-purple-300 mt-1">
+                                  {laCosmicParams.combine_method === 'intersection' && 'Only pixels detected by ALL methods (most conservative)'}
+                                  {laCosmicParams.combine_method === 'union' && 'Pixels detected by ANY method (most aggressive)'}
+                                  {laCosmicParams.combine_method === 'voting' && 'Pixels detected by majority of methods (balanced)'}
+                                </p>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Advanced L.A.Cosmic Parameters */}
+                          {!laCosmicParams.auto_tune && ['lacosmic', 'multi'].includes(laCosmicParams.method) && (
+                            <div className="space-y-3 border-t border-purple-500/20 pt-4">
+                              <h5 className="text-purple-200 font-medium text-sm">Advanced Parameters</h5>
+                              
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-purple-200 text-xs mb-1">Sigma Fraction</label>
+                                  <input 
+                                    type="number" 
+                                    step="0.1" 
+                                    min="0.1" 
+                                    max="1.0" 
+                                    value={laCosmicParams.sigma_frac} 
+                                    onChange={e => setLaCosmicParams(prev => ({ ...prev, sigma_frac: parseFloat(e.target.value) }))}
+                                    className="w-full bg-[#2a2e3a] text-purple-100 border border-purple-600 rounded px-2 py-1 text-sm" 
+                                  />
+                                </div>
+                                
+                                <div>
+                                  <label className="block text-purple-200 text-xs mb-1">Object Limit</label>
+                                  <input 
+                                    type="number" 
+                                    step="0.5" 
+                                    min="1.0" 
+                                    max="10.0" 
+                                    value={laCosmicParams.objlim} 
+                                    onChange={e => setLaCosmicParams(prev => ({ ...prev, objlim: parseFloat(e.target.value) }))}
+                                    className="w-full bg-[#2a2e3a] text-purple-100 border border-purple-600 rounded px-2 py-1 text-sm" 
+                                  />
+                                </div>
+                              </div>
+                              
+                              <p className="text-xs text-purple-300">💡 Enable auto-tune to automatically optimize these parameters</p>
+                            </div>
+                          )}
+
+                          {/* Image Quality Analysis Toggle */}
+                          <div className="mt-4 flex items-center justify-between border-t border-purple-500/20 pt-4">
+                            <div>
+                              <label className="text-purple-200 text-sm font-medium">Generate Image Quality Analysis</label>
+                              <p className="text-xs text-purple-300">Analyze image metrics for parameter recommendations</p>
+                            </div>
+                            <label className="inline-flex relative items-center cursor-pointer">
+                              <input 
+                                type="checkbox" 
+                                className="sr-only peer" 
+                                checked={laCosmicParams.analyze_image_quality} 
+                                onChange={e => setLaCosmicParams(prev => ({ ...prev, analyze_image_quality: e.target.checked }))}
+                              />
+                              <div className="w-10 h-5 bg-gray-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-purple-500 rounded-full peer peer-checked:bg-purple-600 transition-all flex items-center justify-start peer-checked:justify-end">
+                                {!laCosmicParams.analyze_image_quality && <span className="w-3 h-3 bg-white rounded-full ml-1" />}
+                                {laCosmicParams.analyze_image_quality && <span className="w-3 h-3 bg-purple-300 rounded-full mr-1" />}
+                              </div>
+                            </label>
+                          </div>
+                        </div>
+                      )}
                       
                       {/* Outlier Frame Rejection for Bias */}
                       <div className="mb-4 border-t border-blue-900 pt-4 mt-4">
@@ -2486,18 +2940,263 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                       </div>
                       {tabState.dark.cosmeticCorrection && (
                         <div className="mb-4">
-                          <label className="block font-medium mb-1 text-blue-100">Correction Method</label>
-                          <select
-                            className="bg-[#181c23] text-white border border-[#232946] rounded px-3 py-2 mt-1"
-                            value={tabState.dark.cosmeticMethod}
-                            onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, cosmeticMethod: e.target.value } }))}
-                          >
-                            {COSMETIC_METHODS.map((m: { value: string; label: string }) => (
-                              <option key={m.value} value={m.value}>{m.label}</option>
+                          <div className="flex items-center justify-between mb-3">
+                            <label className="block font-medium text-blue-100">Correction Methods</label>
+                            <span className="text-xs text-blue-300">
+                              {Object.values(tabState.dark.cosmeticMethods).filter(m => m.enabled).length} selected
+                            </span>
+                          </div>
+                          
+                          <div className="space-y-2">
+                            {COSMETIC_METHODS.map((method) => (
+                              <TooltipProvider key={method.value}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                                                         <div className={`flex items-center justify-between rounded p-3 border cursor-pointer ${
+                                       tabState.dark.cosmeticMethods[method.value]?.enabled 
+                                         ? 'bg-blue-900/30 border-blue-600/50' 
+                                         : 'bg-gray-900/20 border-gray-600/30 hover:bg-gray-800/30'
+                                     }`}>
+                                       <label className="flex items-center gap-2 cursor-pointer">
+                                         <input
+                                           type="checkbox"
+                                           checked={tabState.dark.cosmeticMethods[method.value]?.enabled || false}
+                                           onChange={(e) => handleCosmeticMethodToggle('dark', method.value, e.target.checked)}
+                                           className="accent-blue-600"
+                                         />
+                                         <span className={`font-medium ${
+                                           tabState.dark.cosmeticMethods[method.value]?.enabled 
+                                             ? 'text-blue-100' 
+                                             : 'text-gray-300'
+                                         }`}>
+                                           {method.label}
+                                         </span>
+                                       </label>
+                                       {tabState.dark.cosmeticMethods[method.value]?.enabled && (
+                                         <span className="text-xs bg-blue-700 text-blue-100 px-2 py-1 rounded font-mono">
+                                           #{tabState.dark.cosmeticMethods[method.value].order}
+                                         </span>
+                                       )}
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="max-w-sm">
+                                    <p>{method.tooltip}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
                             ))}
-                          </select>
-                          {/* Show advanced controls for new methods */}
-                          {tabState.dark.cosmeticMethod === 'bad_pixel_masking' && (
+                          </div>
+                          
+                          {/* Conflict warnings */}
+                          {getMethodWarnings('dark', '').length > 0 && (
+                            <div className="mt-3 text-xs text-amber-300 bg-amber-900/20 rounded p-2 border border-amber-600/30">
+                              {getMethodWarnings('dark', '').map((warning, idx) => (
+                                <div key={idx}>{warning}</div>
+                              ))}
+                            </div>
+                          )}
+                          
+                          <div className="mt-3 text-xs text-blue-300 bg-blue-900/20 rounded p-2">
+                            💡 <strong>Pro tip:</strong> Each method targets different defects - Hot Pixel Map removes sensor defects, 
+                            L.A.Cosmic removes cosmic rays, Bad Pixel Masking handles systematic defects.
+                            <br/><br/>
+                            <strong>Smart Conflicts:</strong> Conflicting methods (like L.A.Cosmic Basic + Enhanced) are automatically disabled to prevent redundancy.
+                          </div>
+
+                          {/* Method-specific settings for each enabled method */}
+                          {Object.entries(tabState.dark.cosmeticMethods)
+                            .filter(([_, config]) => config.enabled)
+                            .sort(([_, a], [__, b]) => a.order - b.order)
+                            .map(([methodValue, config]) => (
+                              <div key={methodValue} className="mt-4 p-4 bg-gray-900/20 rounded-lg border border-gray-600/30">
+                                <div className="flex items-center gap-2 mb-3">
+                                  <span className="text-xs bg-blue-700 text-blue-100 px-2 py-1 rounded font-mono">
+                                    #{config.order}
+                                  </span>
+                                  <h5 className="font-medium text-blue-200">
+                                    {COSMETIC_METHODS.find(m => m.value === methodValue)?.label} Settings
+                                  </h5>
+                                </div>
+
+                                {/* Hot Pixel Map Settings */}
+                                {methodValue === 'hot_pixel_map' && (
+                                  <div className="space-y-3">
+                                    <div>
+                                      <label className="block text-sm text-blue-200 mb-1">Detection Threshold</label>
+                                      <div className="flex items-center gap-2">
+                                        <input
+                                          type="range"
+                                          min="0"
+                                          max="1"
+                                          step="0.01"
+                                          value={tabState.dark.cosmeticThreshold}
+                                          onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, cosmeticThreshold: Number(e.target.value) } }))}
+                                          className="flex-1 accent-blue-600"
+                                        />
+                                        <input
+                                          type="number"
+                                          step="0.01"
+                                          min="0"
+                                          max="1"
+                                          value={tabState.dark.cosmeticThreshold}
+                                          onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, cosmeticThreshold: Number(e.target.value) } }))}
+                                          className="w-20 bg-[#181c23] text-white border border-[#232946] rounded px-2 py-1 text-sm"
+                                        />
+                                      </div>
+                                      <p className="text-xs text-gray-400 mt-1">Higher values = more aggressive detection</p>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* L.A.Cosmic Basic Settings */}
+                                {methodValue === 'la_cosmic' && (
+                                  <div className="space-y-3">
+                                    <div>
+                                      <label className="block text-sm text-blue-200 mb-1">Sigma Clipping Threshold</label>
+                                      <div className="flex items-center gap-2">
+                                        <input
+                                          type="range"
+                                          min="3"
+                                          max="8"
+                                          step="0.1"
+                                          value={laCosmicParams.sigclip}
+                                          onChange={e => setLaCosmicParams(prev => ({ ...prev, sigclip: parseFloat(e.target.value) }))}
+                                          className="flex-1 accent-blue-600"
+                                        />
+                                        <input
+                                          type="number"
+                                          step="0.1"
+                                          min="3"
+                                          max="8"
+                                          value={laCosmicParams.sigclip}
+                                          onChange={e => setLaCosmicParams(prev => ({ ...prev, sigclip: parseFloat(e.target.value) }))}
+                                          className="w-20 bg-[#181c23] text-white border border-[#232946] rounded px-2 py-1 text-sm"
+                                        />
+                                      </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                      <div>
+                                        <label className="block text-sm text-blue-200 mb-1">Gain</label>
+                                        <input
+                                          type="number"
+                                          step="0.1"
+                                          min="0.1"
+                                          value={laCosmicParams.gain}
+                                          onChange={e => setLaCosmicParams(prev => ({ ...prev, gain: parseFloat(e.target.value) }))}
+                                          className="w-full bg-[#181c23] text-white border border-[#232946] rounded px-2 py-1 text-sm"
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="block text-sm text-blue-200 mb-1">Read Noise</label>
+                                        <input
+                                          type="number"
+                                          step="0.1"
+                                          min="0.1"
+                                          value={laCosmicParams.readnoise}
+                                          onChange={e => setLaCosmicParams(prev => ({ ...prev, readnoise: parseFloat(e.target.value) }))}
+                                          className="w-full bg-[#181c23] text-white border border-[#232946] rounded px-2 py-1 text-sm"
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Bad Pixel Masking Settings */}
+                                {methodValue === 'bad_pixel_masking' && (
+                                  <div className="space-y-3">
+                                    <div>
+                                      <label className="block text-sm text-blue-200 mb-1">Detection Sigma Threshold</label>
+                                      <div className="flex items-center gap-2">
+                                        <input
+                                          type="range"
+                                          min="2"
+                                          max="10"
+                                          step="0.1"
+                                          value={tabState.dark.badPixelSigmaThreshold}
+                                          onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, badPixelSigmaThreshold: Number(e.target.value) } }))}
+                                          className="flex-1 accent-blue-600"
+                                        />
+                                        <input
+                                          type="number"
+                                          min="2"
+                                          max="10"
+                                          step="0.1"
+                                          value={tabState.dark.badPixelSigmaThreshold}
+                                          onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, badPixelSigmaThreshold: Number(e.target.value) } }))}
+                                          className="w-20 bg-[#181c23] text-white border border-[#232946] rounded px-2 py-1 text-sm"
+                                        />
+                                      </div>
+                                      <p className="text-xs text-gray-400 mt-1">Higher values = less aggressive masking</p>
+                                    </div>
+                                    <button
+                                      className="px-3 py-2 bg-blue-700 text-white rounded hover:bg-blue-800 text-sm"
+                                      onClick={() => handleCosmeticCorrection('badPixelMasking')}
+                                      disabled={cosmeticJobs.badPixelMasking?.status === 'running'}
+                                    >
+                                      {cosmeticJobs.badPixelMasking?.status === 'running' ? 'Running...' : 'Generate Bad Pixel Map'}
+                                    </button>
+                                                                         {cosmeticJobs?.badPixelMasking && (
+                                       <div className="text-xs text-blue-300">
+                                         Status: {cosmeticJobs.badPixelMasking.status} | Progress: {cosmeticJobs.badPixelMasking.progress}%
+                                       </div>
+                                     )}
+                                  </div>
+                                )}
+
+                                {/* Patterned Noise Removal Settings */}
+                                {methodValue === 'patterned_noise_removal' && (
+                                  <div className="space-y-3">
+                                    <div>
+                                      <label className="block text-sm text-blue-200 mb-1">Noise Removal Method</label>
+                                      <select
+                                        value={tabState.dark.patternedNoiseMethod}
+                                        onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, patternedNoiseMethod: e.target.value } }))}
+                                        className="w-full bg-[#181c23] text-white border border-[#232946] rounded px-2 py-1 text-sm"
+                                      >
+                                        <option value="auto">Auto</option>
+                                        <option value="median_filter">Median Filter</option>
+                                        <option value="fourier_filter">Fourier Filter</option>
+                                        <option value="polynomial">Polynomial</option>
+                                        <option value="combined">Combined</option>
+                                      </select>
+                                    </div>
+                                    <div>
+                                      <label className="block text-sm text-blue-200 mb-1">Correction Strength</label>
+                                      <div className="flex items-center gap-2">
+                                        <input
+                                          type="range"
+                                          min="0"
+                                          max="1"
+                                          step="0.01"
+                                          value={tabState.dark.patternedNoiseStrength}
+                                          onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, patternedNoiseStrength: Number(e.target.value) } }))}
+                                          className="flex-1 accent-blue-600"
+                                        />
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          max="1"
+                                          step="0.01"
+                                          value={tabState.dark.patternedNoiseStrength}
+                                          onChange={e => setTabState(prev => ({ ...prev, dark: { ...prev.dark, patternedNoiseStrength: Number(e.target.value) } }))}
+                                          className="w-20 bg-[#181c23] text-white border border-[#232946] rounded px-2 py-1 text-sm"
+                                        />
+                                      </div>
+                                    </div>
+                                    <button
+                                      className="px-3 py-2 bg-blue-700 text-white rounded hover:bg-blue-800 text-sm"
+                                      onClick={() => handleCosmeticCorrection('patternedNoise')}
+                                      disabled={cosmeticJobs.patternedNoise?.status === 'running'}
+                                    >
+                                      {cosmeticJobs.patternedNoise?.status === 'running' ? 'Running...' : 'Apply Noise Removal'}
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+
+                          {/* Legacy settings section - keeping for compatibility but should be hidden when new system is active */}
+                          {false && (
                             <div className="mt-4">
                               <label className="block font-medium mb-1 text-blue-100">Sigma Threshold</label>
                               <input

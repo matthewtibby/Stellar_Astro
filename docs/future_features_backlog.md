@@ -194,3 +194,167 @@
 - "Import from previous" option: Let users import settings, templates, or files from a previous project when creating a new one. (**Status: Backlog**) 
 *Calibration*
 Resumable/chunked uploads 
+
+## Phase 3: Advanced Cosmic Ray Detection
+
+### 🤖 AI/ML-Powered Detection
+- **Machine Learning Detection** (**Priority: High**)
+  - Custom neural networks trained on real astronomical data
+  - Deep Learning approach using CNN-based cosmic ray detection
+  - Transfer learning adapted for different camera types and imaging conditions
+  - Real-time learning models that improve from user feedback
+  - **Status:** 📅 Planned
+  - **Timeline:** Phase 3.1 (2-3 months)
+
+- **Training Dataset Creation** (**Priority: High**)
+  - Build training datasets from user-contributed cosmic ray detections
+  - Automated data labeling pipeline
+  - Quality validation and verification system
+  - **Status:** 📅 Planned
+
+### ⚡ GPU Acceleration & Performance
+- **CUDA Processing** (**Priority: High**)
+  - GPU-accelerated L.A.Cosmic and custom algorithms
+  - Parallel processing utilizing GPU cores for massive batch processing
+  - Efficient GPU memory management for large images
+  - **Performance Target:** 10-100x speed improvement for large datasets
+  - **Status:** 📅 Planned
+  - **Timeline:** Phase 3.2 (1-2 months)
+
+- **Cloud GPU Support** (**Priority: Medium**)
+  - Integration with cloud GPU instances for processing
+  - Scalable processing for enterprise users
+  - Cost-optimized GPU utilization
+  - **Status:** 📅 Planned
+
+### 📊 Advanced Visualization & Analytics
+- **3D Cosmic Ray Mapping** (**Priority: Medium**)
+  - Visualize cosmic ray distribution across image stacks
+  - Interactive 3D visualizations using WebGL/Three.js
+  - Temporal analysis tracking patterns over time/sessions
+  - **Status:** 📅 Planned
+  - **Timeline:** Phase 3.3 (2 months)
+
+- **Statistical Dashboards** (**Priority: Medium**)
+  - Advanced analytics on detection patterns
+  - Performance benchmarking and comparison tools
+  - Export capabilities for research purposes
+  - Interactive web-based visualization with zoom and filtering
+  - **Status:** 📅 Planned
+
+### 🔄 Seamless Workflow Integration
+- **Light Frame Processing Integration** (**Priority: High**)
+  - Automatic cosmic ray removal during stacking process
+  - Pre-processing pipeline with integrated cosmic ray detection
+  - Background processing without user intervention
+  - **Status:** 📅 Planned
+  - **Timeline:** Phase 3.4 (1 month)
+
+- **Smart Automation** (**Priority: High**)
+  - AI decides when cosmic ray detection is needed
+  - Workflow templates for different imaging scenarios
+  - Context-aware processing understanding image content
+  - **Status:** 📅 Planned
+
+### 🛠️ Advanced Algorithm Framework
+- **Custom Algorithm Editor** (**Priority: Low**)
+  - Visual algorithm designer for power users
+  - Plugin architecture for community-contributed algorithms
+  - Algorithm marketplace for sharing custom solutions
+  - Performance benchmarking on standardized test sets
+  - **Status:** 💡 Under Consideration
+
+- **Hybrid Algorithm Approaches** (**Priority: Medium**)
+  - Intelligent combination of multiple algorithms
+  - Dynamic algorithm selection based on image characteristics
+  - User behavior learning and preference adaptation
+  - **Status:** 📅 Planned
+
+### 🧠 Intelligent Automation
+- **Predictive Analysis** (**Priority: Medium**)
+  - Predict cosmic ray likelihood before processing
+  - Auto-quality assessment with improvement suggestions
+  - Smart parameter evolution that learns over time
+  - **Status:** 📅 Planned
+
+- **Real-time Processing** (**Priority: Low**)
+  - Live cosmic ray detection during image acquisition
+  - WebRTC integration for real-time processing streams
+  - Mobile support for cosmic ray detection on tablets/phones
+  - **Status:** 💡 Under Consideration
+
+### 📈 Performance Targets
+- **ML Detection Accuracy:** >95% precision, >98% recall
+- **GPU Speed Improvement:** 10-100x faster processing
+- **Batch Processing:** 1000+ images processed simultaneously
+- **Memory Efficiency:** Process 100MP+ images with minimal RAM usage
+- **Real-time Capability:** Live processing during image acquisition
+
+### 🎯 Competitive Advantage
+Phase 3 would establish Stellar Astro as the **world's most advanced cosmic ray detection system**, surpassing PixInsight, Siril, and all existing solutions with:
+- Revolutionary AI-powered detection
+- Unprecedented GPU acceleration
+- Advanced research-grade analytics
+- Seamless workflow automation
+- Cloud-scale processing capabilities
+
+## Multiple Cosmetic Correction Methods
+
+### 🔧 Multi-Method Selection Enhancement
+- **Multiple Cosmetic Corrections** (**Priority: High**)
+  - Replace single dropdown with multiple checkbox selection
+  - Allow users to run multiple correction methods in sequence
+  - Professional workflow alignment with Hot Pixel Map → L.A.Cosmic → Bad Pixel Masking → Patterned Noise
+  - **Status:** 📅 Planned
+  - **Timeline:** Near-term (2-3 weeks)
+
+- **Method Tooltips & Documentation** (**Priority: High**)
+  - Interactive tooltips explaining each correction method
+  - Professional descriptions with use cases
+  - Method categories (detection, cosmic_rays, masking, noise)
+  - **Status:** 📅 Planned
+
+- **Processing Order Control** (**Priority: Medium**)
+  - Drag-and-drop reordering of correction methods
+  - Visual order indicators (1, 2, 3, etc.)
+  - Smart default ordering based on professional workflows
+  - **Status:** 📅 Planned
+
+### 📝 Implementation Requirements
+- **State Structure Update**: Change from `cosmeticMethod: string` to `cosmeticMethods: Record<string, { enabled: boolean; order: number }>`
+- **UI Components**: Replace dropdown with checkbox list with tooltips
+- **Backend Integration**: Update processing pipeline to handle multiple methods in sequence
+- **Default Configuration**: Enable Hot Pixel Map + L.A.Cosmic Enhanced by default
+
+### 🏗️ Technical Specifications
+```typescript
+// New cosmetic methods structure
+cosmeticMethods: {
+  'hot_pixel_map': { enabled: true, order: 1 },
+  'la_cosmic_enhanced': { enabled: true, order: 2 },
+  'bad_pixel_masking': { enabled: false, order: 3 },
+  'patterned_noise_removal': { enabled: false, order: 4 }
+}
+
+// Method definitions with tooltips
+const COSMETIC_METHODS = [
+  { 
+    value: 'hot_pixel_map', 
+    label: 'Hot Pixel Map',
+    tooltip: 'Identifies and masks consistently hot pixels by comparing multiple frames.',
+    category: 'detection',
+    defaultEnabled: true,
+    order: 1
+  },
+  // ... etc
+];
+```
+
+### 💡 User Experience Improvements
+- **Professional Alignment**: Matches how astrophotographers actually work
+- **Better Results**: Multiple corrections address different defect types
+- **Educational Value**: Tooltips help users understand each method
+- **Flexibility**: Enable/disable methods based on specific needs
+- **Processing Efficiency**: Optimal ordering reduces computation time
+
+This enhancement transforms Stellar Astro from a single-method tool to a comprehensive cosmetic correction suite, providing the flexibility and control that serious astrophotographers demand. 

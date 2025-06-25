@@ -75,6 +75,7 @@ from fastapi import APIRouter
 from .trail_detection import detect_trails
 from .outlier_rejection import detect_outlier_frames
 from .frame_consistency import analyze_frame_consistency, suggest_frame_selection
+from .cosmic_ray_detection import CosmicRayDetector, validate_cosmic_ray_parameters
 
 logger = logging.getLogger(__name__)
 
@@ -2172,6 +2173,539 @@ async def analyze_frames_consistency(request: FrameConsistencyRequest):
     except Exception as e:
         logger.error(f"Frame consistency analysis error: {e}")
         return JSONResponse(status_code=500, content={"error": str(e)})
+
+class CosmicRayDetectionRequest(BaseModel):
+    fits_paths: list[str] = None  # Either full paths OR just filenames
+    bucket: str = None  # Supabase bucket name (e.g. 'fits-files')
+    project_id: str = None
+    user_id: str = None 
+    frame_type: str = None  # 'bias', 'dark', 'flat', 'light'
+    method: str = 'lacosmic'  # 'lacosmic', 'sigma_clip', 'multi', 'auto'
+    sigma_clip: float = 4.5  # L.A.Cosmic sigma threshold
+    sigma_frac: float = 0.3  # L.A.Cosmic sigma fraction
+    objlim: float = 5.0  # L.A.Cosmic object limit
+    gain: float = 1.0  # CCD gain
+    readnoise: float = 6.5  # CCD readout noise
+    satlevel: float = 65535.0  # Saturation level
+    niter: int = 4  # Number of iterations
+    save_cleaned: bool = True  # Save cleaned images
+    save_masks: bool = True  # Save cosmic ray masks
+    # Phase 2 enhancements
+    auto_tune: bool = True  # Auto-tune parameters per image
+    multi_methods: list[str] = ['lacosmic', 'sigma_clip']  # Methods for multi-algorithm
+    combine_method: str = 'intersection'  # 'intersection', 'union', 'voting'
+    analyze_image_quality: bool = True  # Generate image quality metrics
+
+@app.post("/cosmic-rays/detect")
+async def detect_cosmic_rays(request: CosmicRayDetectionRequest, background_tasks: BackgroundTasks):
+    """
+    Detect and remove cosmic rays from astronomical images.
+    
+    This endpoint processes light frames (and potentially other frame types) to identify
+    and remove cosmic ray hits using the L.A.Cosmic algorithm or simple sigma clipping.
+    """
+    try:
+        logger.info(f"Starting cosmic ray detection for {len(request.fits_paths)} files")
+        
+        # Validate parameters
+        params = {
+            'method': request.method,
+            'sigma_clip': request.sigma_clip,
+            'sigma_frac': request.sigma_frac,
+            'objlim': request.objlim,
+            'gain': request.gain,
+            'readnoise': request.readnoise,
+            'satlevel': request.satlevel,
+            'niter': request.niter,
+            'save_mask': request.save_masks
+        }
+        validated_params = validate_cosmic_ray_parameters(params)
+        
+        # Generate job ID
+        job_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=16))
+        
+        # Insert job into database
+        await insert_job(job_id, "running", progress=0)
+        
+        # Start background task
+        background_tasks.add_task(run_cosmic_ray_job, request, job_id, validated_params)
+        
+        return {"job_id": job_id, "status": "started", "message": "Cosmic ray detection job started"}
+        
+    except Exception as e:
+        logger.error(f"Failed to start cosmic ray detection job: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+async def run_cosmic_ray_job(request: CosmicRayDetectionRequest, job_id: str, params: dict):
+    """
+    Background task to run cosmic ray detection on multiple files.
+    """
+    try:
+        logger.info(f"Running cosmic ray detection job {job_id}")
+        
+        fits_paths = request.fits_paths
+        
+        # If fits_paths are just filenames, construct full bucket paths
+        if request.bucket and request.project_id and request.user_id and request.frame_type:
+            fits_paths = [f"{request.user_id}/{request.project_id}/{request.frame_type}/{filename}" 
+                         for filename in request.fits_paths]
+        
+        # Initialize cosmic ray detector
+        detector = CosmicRayDetector(
+            sigma_clip=params['sigma_clip'],
+            sigma_frac=params['sigma_frac'],
+            objlim=params['objlim'],
+            gain=params['gain'],
+            readnoise=params['readnoise'],
+            satlevel=params['satlevel'],
+            niter=params['niter']
+        )
+        
+        # Process files
+        results = []
+        processed_count = 0
+        
+        # Download and process files
+        request_info = {
+            'project_id': request.project_id,
+            'user_id': request.user_id,
+            'frame_type': request.frame_type
+        }
+        
+        for i, remote_path in enumerate(fits_paths):
+            try:
+                logger.info(f"Processing file {i+1}/{len(fits_paths)}: {remote_path}")
+                
+                # Download file
+                local_temp_path = f"/tmp/{os.path.basename(remote_path)}"
+                success = await download_file_with_fallback(request.bucket, remote_path, local_temp_path, request_info)
+                
+                if not success:
+                    logger.warning(f"Failed to download {remote_path}, skipping")
+                    continue
+                
+                # Process file for cosmic rays
+                output_path = None
+                if request.save_cleaned:
+                    output_path = local_temp_path.replace('.fit', '_cleaned.fits').replace('.fits', '_cleaned.fits')
+                
+                result = detector.process_fits_file(
+                    local_temp_path,
+                    output_path=output_path,
+                    method=params['method'],
+                    save_mask=params['save_mask']
+                )
+                
+                # Upload results back to storage if we saved them
+                if request.save_cleaned and output_path and os.path.exists(output_path):
+                    # Upload cleaned image
+                    cleaned_remote_path = remote_path.replace('.fit', '_cleaned.fits').replace('.fits', '_cleaned.fits')
+                    upload_file(request.bucket, output_path, cleaned_remote_path)
+                    result['cleaned_remote_path'] = cleaned_remote_path
+                    os.remove(output_path)  # Clean up local file
+                
+                if params['save_mask'] and 'mask_path' in result and os.path.exists(result['mask_path']):
+                    # Upload cosmic ray mask
+                    mask_remote_path = remote_path.replace('.fit', '_crmask.fits').replace('.fits', '_crmask.fits')
+                    upload_file(request.bucket, result['mask_path'], mask_remote_path)
+                    result['mask_remote_path'] = mask_remote_path
+                    os.remove(result['mask_path'])  # Clean up local file
+                
+                result['original_path'] = remote_path
+                results.append(result)
+                processed_count += 1
+                
+                # Clean up downloaded file
+                if os.path.exists(local_temp_path):
+                    os.remove(local_temp_path)
+                
+                # Update progress
+                progress = int((i + 1) / len(fits_paths) * 100)
+                await update_job_progress(job_id, progress)
+                
+            except Exception as e:
+                logger.error(f"Error processing {remote_path}: {e}")
+                continue
+        
+        # Calculate summary statistics
+        if results:
+            total_cosmic_rays = sum(r['num_cosmic_rays'] for r in results)
+            avg_percentage = sum(r['cosmic_ray_percentage'] for r in results) / len(results)
+            
+            summary = {
+                'processed_files': processed_count,
+                'total_files': len(fits_paths),
+                'total_cosmic_rays_detected': total_cosmic_rays,
+                'average_cosmic_ray_percentage': avg_percentage,
+                'method': params['method'],
+                'parameters': params
+            }
+        else:
+            summary = {
+                'processed_files': 0,
+                'total_files': len(fits_paths),
+                'error': 'No files could be processed'
+            }
+        
+        # Update job with results
+        job_result = {
+            'summary': summary,
+            'file_results': results
+        }
+        
+        await insert_job(job_id, "completed", result=job_result, progress=100)
+        logger.info(f"Cosmic ray detection job {job_id} completed successfully")
+        
+    except Exception as e:
+        logger.error(f"Cosmic ray detection job {job_id} failed: {e}")
+        await insert_job(job_id, "failed", error=str(e))
+
+@app.post("/cosmic-rays/batch-detect")
+async def batch_detect_cosmic_rays(request: CosmicRayDetectionRequest, background_tasks: BackgroundTasks):
+    """
+    Enhanced batch cosmic ray detection with auto-tuning and multi-algorithm support.
+    
+    Phase 2 features:
+    - Auto-parameter tuning per image
+    - Multi-algorithm detection with voting
+    - Image quality analysis and recommendations
+    - Better performance optimization
+    """
+    try:
+        logger.info(f"Starting enhanced batch cosmic ray detection for {len(request.fits_paths)} files")
+        
+        # Validate enhanced parameters
+        params = {
+            'method': request.method,
+            'sigma_clip': request.sigma_clip,
+            'sigma_frac': request.sigma_frac,
+            'objlim': request.objlim,
+            'gain': request.gain,
+            'readnoise': request.readnoise,
+            'satlevel': request.satlevel,
+            'niter': request.niter,
+            'save_mask': request.save_masks,
+            'auto_tune': request.auto_tune,
+            'multi_methods': request.multi_methods,
+            'combine_method': request.combine_method,
+            'analyze_image_quality': request.analyze_image_quality
+        }
+        validated_params = validate_cosmic_ray_parameters(params)
+        
+        # Generate job ID
+        job_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=16))
+        
+        # Insert job into database
+        await insert_job(job_id, "running", progress=0)
+        
+        # Start enhanced background task
+        background_tasks.add_task(run_enhanced_cosmic_ray_job, request, job_id, validated_params)
+        
+        return {"job_id": job_id, "status": "started", "message": f"Enhanced batch cosmic ray detection started with {request.method} method"}
+        
+    except Exception as e:
+        logger.error(f"Failed to start enhanced cosmic ray detection job: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+@app.get("/cosmic-rays/recommendations/{job_id}")
+async def get_cosmic_ray_recommendations(job_id: str):
+    """
+    Get parameter recommendations based on image analysis results.
+    """
+    try:
+        job_data = await get_job(job_id)
+        
+        if not job_data:
+            return JSONResponse(status_code=404, content={"error": "Job not found"})
+        
+        if job_data['status'] != 'completed':
+            return JSONResponse(content={
+                "job_id": job_id,
+                "status": job_data['status'],
+                "message": "Analysis not yet complete"
+            })
+        
+        # Extract recommendations from job results
+        result = job_data.get('result', {})
+        recommendations = result.get('recommendations', {})
+        image_analysis = result.get('image_analysis', {})
+        
+        return JSONResponse(content={
+            "job_id": job_id,
+            "recommendations": recommendations,
+            "image_analysis": image_analysis,
+            "summary": result.get('summary', {})
+        })
+        
+    except Exception as e:
+        logger.error(f"Failed to get recommendations for job {job_id}: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+async def run_enhanced_cosmic_ray_job(request: CosmicRayDetectionRequest, job_id: str, params: dict):
+    """
+    Enhanced background task for cosmic ray detection with Phase 2 features.
+    """
+    try:
+        logger.info(f"Running enhanced cosmic ray detection job {job_id}")
+        
+        fits_paths = request.fits_paths
+        
+        # If fits_paths are just filenames, construct full bucket paths
+        if request.bucket and request.project_id and request.user_id and request.frame_type:
+            fits_paths = [f"{request.user_id}/{request.project_id}/{request.frame_type}/{filename}" 
+                         for filename in request.fits_paths]
+        
+        # Initialize cosmic ray detector
+        detector = CosmicRayDetector(
+            sigma_clip=params['sigma_clip'],
+            sigma_frac=params['sigma_frac'],
+            objlim=params['objlim'],
+            gain=params['gain'],
+            readnoise=params['readnoise'],
+            satlevel=params['satlevel'],
+            niter=params['niter']
+        )
+        
+        # Process files with enhanced features
+        results = []
+        image_quality_metrics = []
+        processed_count = 0
+        
+        # Download and process files
+        request_info = {
+            'project_id': request.project_id,
+            'user_id': request.user_id,
+            'frame_type': request.frame_type
+        }
+        
+        for i, remote_path in enumerate(fits_paths):
+            try:
+                logger.info(f"Processing file {i+1}/{len(fits_paths)}: {remote_path}")
+                
+                # Download file
+                local_temp_path = f"/tmp/{os.path.basename(remote_path)}"
+                success = await download_file_with_fallback(request.bucket, remote_path, local_temp_path, request_info)
+                
+                if not success:
+                    logger.warning(f"Failed to download {remote_path}, skipping")
+                    continue
+                
+                # Load image data for analysis
+                with fits.open(local_temp_path) as hdul:
+                    data = hdul[0].data.astype(np.float64)
+                
+                # Phase 2: Image quality analysis
+                if params['analyze_image_quality']:
+                    quality_metrics = detector.get_image_quality_metrics(data)
+                    quality_metrics['file_path'] = remote_path
+                    image_quality_metrics.append(quality_metrics)
+                
+                # Phase 2: Auto-tune parameters if enabled
+                original_params = {}
+                if params['auto_tune']:
+                    original_params = {
+                        'sigma_clip': detector.sigma_clip,
+                        'objlim': detector.objlim,
+                        'niter': detector.niter,
+                        'sigma_frac': detector.sigma_frac
+                    }
+                    
+                    tuned_params = detector.auto_tune_parameters(data)
+                    for param, value in tuned_params.items():
+                        setattr(detector, param, value)
+                
+                # Process with enhanced methods
+                if params['method'] == 'multi':
+                    # Multi-algorithm detection
+                    cleaned_data, crmask, multi_stats = detector.detect_multi_algorithm(
+                        data, 
+                        methods=params['multi_methods'],
+                        combine_method=params['combine_method']
+                    )
+                    
+                    result = {
+                        'method': 'multi',
+                        'num_cosmic_rays': int(np.sum(crmask)),
+                        'cosmic_ray_percentage': float(np.sum(crmask) / data.size * 100),
+                        'image_shape': data.shape,
+                        'multi_stats': multi_stats,
+                        'parameters': {
+                            'methods_used': params['multi_methods'],
+                            'combine_method': params['combine_method'],
+                            'auto_tuned': params['auto_tune']
+                        }
+                    }
+                    
+                elif params['method'] == 'auto':
+                    # Automatic method selection based on image characteristics
+                    quality = detector.get_image_quality_metrics(data)
+                    
+                    if quality['snr'] > 50 and quality['star_density'] > 0.01:
+                        # High quality image - use L.A.Cosmic
+                        cleaned_data, crmask = detector.detect_lacosmic(data)
+                        selected_method = 'lacosmic'
+                    else:
+                        # Lower quality image - use sigma clipping
+                        crmask = detector.detect_sigma_clipping(data)
+                        cleaned_data = detector.clean_cosmic_rays(data, crmask)
+                        selected_method = 'sigma_clip'
+                    
+                    result = {
+                        'method': f'auto-{selected_method}',
+                        'num_cosmic_rays': int(np.sum(crmask)),
+                        'cosmic_ray_percentage': float(np.sum(crmask) / data.size * 100),
+                        'image_shape': data.shape,
+                        'auto_selected_method': selected_method,
+                        'selection_reasoning': f"SNR: {quality['snr']:.1f}, Star density: {quality['star_density']:.3f}"
+                    }
+                    
+                else:
+                    # Standard single-method processing
+                    output_path = None
+                    if request.save_cleaned:
+                        output_path = local_temp_path.replace('.fit', '_cleaned.fits').replace('.fits', '_cleaned.fits')
+                    
+                    result = detector.process_fits_file(
+                        local_temp_path,
+                        output_path=output_path,
+                        method=params['method'],
+                        save_mask=params['save_mask']
+                    )
+                    
+                    # Upload results back to storage if we saved them
+                    if request.save_cleaned and output_path and os.path.exists(output_path):
+                        # Upload cleaned image
+                        cleaned_remote_path = remote_path.replace('.fit', '_cleaned.fits').replace('.fits', '_cleaned.fits')
+                        upload_file(request.bucket, output_path, cleaned_remote_path)
+                        result['cleaned_remote_path'] = cleaned_remote_path
+                        os.remove(output_path)  # Clean up local file
+                
+                # Add auto-tuning info
+                if params['auto_tune']:
+                    result['auto_tuned_parameters'] = {
+                        'sigma_clip': detector.sigma_clip,
+                        'objlim': detector.objlim,
+                        'niter': detector.niter,
+                        'sigma_frac': detector.sigma_frac
+                    }
+                    result['original_parameters'] = original_params
+                    # Restore original parameters
+                    for param, value in original_params.items():
+                        setattr(detector, param, value)
+                
+                result['original_path'] = remote_path
+                results.append(result)
+                processed_count += 1
+                
+                # Clean up downloaded file
+                if os.path.exists(local_temp_path):
+                    os.remove(local_temp_path)
+                
+                # Update progress
+                progress = int((i + 1) / len(fits_paths) * 90)  # Reserve 10% for analysis
+                await update_job_progress(job_id, progress)
+                
+            except Exception as e:
+                logger.error(f"Error processing {remote_path}: {e}")
+                continue
+        
+        # Phase 2: Generate recommendations and analysis
+        await update_job_progress(job_id, 95)
+        recommendations = {}
+        
+        if results:
+            # Analyze cosmic ray statistics
+            cosmic_ray_percentages = [r['cosmic_ray_percentage'] for r in results if 'cosmic_ray_percentage' in r]
+            
+            if cosmic_ray_percentages:
+                avg_cr_percentage = np.mean(cosmic_ray_percentages)
+                std_cr_percentage = np.std(cosmic_ray_percentages)
+                
+                # Generate recommendations based on results
+                if avg_cr_percentage > 2.0:
+                    recommendations['sensitivity'] = {
+                        'issue': 'High cosmic ray detection rate',
+                        'current_avg': f"{avg_cr_percentage:.2f}%",
+                        'recommendation': 'Consider increasing sigma_clip threshold to reduce false positives',
+                        'suggested_sigma_clip': min(6.0, params['sigma_clip'] + 0.5)
+                    }
+                elif avg_cr_percentage < 0.1:
+                    recommendations['sensitivity'] = {
+                        'issue': 'Very low cosmic ray detection rate',
+                        'current_avg': f"{avg_cr_percentage:.2f}%",
+                        'recommendation': 'Consider decreasing sigma_clip threshold for more sensitive detection',
+                        'suggested_sigma_clip': max(3.0, params['sigma_clip'] - 0.5)
+                    }
+                else:
+                    recommendations['sensitivity'] = {
+                        'status': 'Optimal',
+                        'current_avg': f"{avg_cr_percentage:.2f}%",
+                        'message': 'Cosmic ray detection rate is within expected range'
+                    }
+                
+                # Consistency recommendations
+                if std_cr_percentage > 1.0:
+                    recommendations['consistency'] = {
+                        'issue': 'High variation in cosmic ray detection between frames',
+                        'std_deviation': f"{std_cr_percentage:.2f}%",
+                        'recommendation': 'Consider enabling auto-tuning or reviewing frame quality'
+                    }
+                else:
+                    recommendations['consistency'] = {
+                        'status': 'Good',
+                        'std_deviation': f"{std_cr_percentage:.2f}%",
+                        'message': 'Consistent detection across frames'
+                    }
+        
+        # Auto-tuning recommendations
+        if params['auto_tune']:
+            recommendations['auto_tuning'] = {
+                'status': 'Enabled',
+                'message': 'Parameters were automatically optimized for each image'
+            }
+        else:
+            recommendations['auto_tuning'] = {
+                'status': 'Disabled',
+                'recommendation': 'Consider enabling auto-tuning for better per-image optimization'
+            }
+        
+        # Calculate final summary statistics
+        if results:
+            total_cosmic_rays = sum(r.get('num_cosmic_rays', 0) for r in results)
+            avg_percentage = sum(r.get('cosmic_ray_percentage', 0) for r in results) / len(results)
+            
+            summary = {
+                'processed_files': processed_count,
+                'total_files': len(fits_paths),
+                'total_cosmic_rays_detected': total_cosmic_rays,
+                'average_cosmic_ray_percentage': avg_percentage,
+                'method': params['method'],
+                'auto_tuning_enabled': params['auto_tune'],
+                'parameters': params
+            }
+        else:
+            summary = {
+                'processed_files': 0,
+                'total_files': len(fits_paths),
+                'error': 'No files could be processed'
+            }
+        
+        # Update job with enhanced results
+        job_result = {
+            'summary': summary,
+            'file_results': results,
+            'recommendations': recommendations,
+            'image_analysis': {
+                'quality_metrics': image_quality_metrics if params['analyze_image_quality'] else []
+            }
+        }
+        
+        await insert_job(job_id, "completed", result=job_result, progress=100)
+        logger.info(f"Enhanced cosmic ray detection job {job_id} completed successfully")
+        
+    except Exception as e:
+        logger.error(f"Enhanced cosmic ray detection job {job_id} failed: {e}")
+        await insert_job(job_id, "failed", error=str(e))
 
 if __name__ == "__main__":
     # Force port 8000 and prevent port changes

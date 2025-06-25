@@ -10,3 +10,5 @@ matplotlib
 requests
 supabase
 python-multipart
+astroscrappy
+scipy
