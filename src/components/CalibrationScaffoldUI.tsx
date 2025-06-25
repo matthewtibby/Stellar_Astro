@@ -433,6 +433,165 @@ function OutlierReviewTable({
   );
 }
 
+function FrameConsistencyTable({
+  analysis,
+  onFrameToggle,
+  frameSelections,
+  loading,
+}: {
+  analysis: any;
+  onFrameToggle: (path: string, include: boolean) => void;
+  frameSelections: Record<string, boolean>;
+  loading: boolean;
+}) {
+  if (!analysis || !analysis.metrics_by_frame) {
+    return null;
+  }
+
+  const sortedFrames = [...analysis.metrics_by_frame].sort((a, b) => b.consistency_score - a.consistency_score);
+
+  return (
+    <div className="bg-[#0f1419] rounded-lg p-3 mt-3 border border-blue-900/50">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-4">
+          <span className="text-sm font-semibold text-blue-200">
+            Overall Consistency: {analysis.overall_consistency?.toFixed(1)}/10
+          </span>
+          <span className="text-xs text-blue-300">
+            Recommended: {analysis.recommended_frames?.length || 0}
+          </span>
+          <span className="text-xs text-yellow-300">
+            Questionable: {analysis.questionable_frames?.length || 0}
+          </span>
+          <span className="text-xs text-red-300">
+            Rejected: {analysis.rejected_frames?.length || 0}
+          </span>
+        </div>
+      </div>
+
+      <div className="mb-3 grid grid-cols-2 gap-4 text-xs">
+        <div className="bg-blue-900/20 p-2 rounded">
+          <span className="text-blue-200 font-medium">Mean Stability:</span>
+          <span className="text-white ml-2">{(analysis.mean_stability * 100)?.toFixed(2)}% CV</span>
+        </div>
+        <div className="bg-blue-900/20 p-2 rounded">
+          <span className="text-blue-200 font-medium">Std Stability:</span>
+          <span className="text-white ml-2">{(analysis.std_stability * 100)?.toFixed(2)}% CV</span>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-xs text-blue-100">
+          <thead>
+            <tr className="text-left">
+              <th className="px-2 py-1">Include</th>
+              <th className="px-2 py-1">File</th>
+              <th className="px-2 py-1 text-right">Score</th>
+              <th className="px-2 py-1 text-right">Mean Cons.</th>
+              <th className="px-2 py-1 text-right">Std Cons.</th>
+              <th className="px-2 py-1 text-right">Hist Sim.</th>
+              <th className="px-2 py-1 text-right">Pixel Corr.</th>
+              <th className="px-2 py-1 text-right">Outlier σ</th>
+              <th className="px-2 py-1">Status</th>
+              <th className="px-2 py-1">Warnings</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sortedFrames.map((frame, i) => {
+              const isRecommended = analysis.recommended_frames?.includes(frame.path);
+              const isQuestionable = analysis.questionable_frames?.includes(frame.path);
+              const isRejected = analysis.rejected_frames?.includes(frame.path);
+              const included = frameSelections[frame.path] !== undefined ? frameSelections[frame.path] : isRecommended;
+              
+              let statusColor = 'text-green-400';
+              let statusText = '✓ Good';
+              let rowColor = 'bg-green-900/10';
+              
+              if (isRejected) {
+                statusColor = 'text-red-400';
+                statusText = '✗ Poor';
+                rowColor = 'bg-red-900/20';
+              } else if (isQuestionable) {
+                statusColor = 'text-yellow-400';
+                statusText = '⚠ Fair';
+                rowColor = 'bg-yellow-900/20';
+              }
+
+              if (!included) {
+                rowColor = 'bg-gray-800/40';
+              }
+
+              return (
+                <tr key={frame.path} className={rowColor}>
+                  <td className="px-2 py-1">
+                    <input
+                      type="checkbox"
+                      checked={included}
+                      onChange={e => onFrameToggle(frame.path, e.target.checked)}
+                      className="accent-purple-600"
+                    />
+                  </td>
+                  <td className="px-2 py-1 max-w-xs truncate" title={frame.path}>
+                    {frame.path.split("/").pop()}
+                  </td>
+                  <td className="px-2 py-1 text-right font-medium">
+                    {frame.consistency_score?.toFixed(1)}
+                  </td>
+                  <td className="px-2 py-1 text-right">
+                    {(frame.mean_consistency * 100)?.toFixed(1)}%
+                  </td>
+                  <td className="px-2 py-1 text-right">
+                    {(frame.std_consistency * 100)?.toFixed(1)}%
+                  </td>
+                  <td className="px-2 py-1 text-right">
+                    {(frame.histogram_similarity * 100)?.toFixed(1)}%
+                  </td>
+                  <td className="px-2 py-1 text-right">
+                    {(frame.pixel_correlation * 100)?.toFixed(1)}%
+                  </td>
+                  <td className="px-2 py-1 text-right">
+                    {frame.outlier_deviation?.toFixed(1)}
+                  </td>
+                  <td className="px-2 py-1">
+                    <span className={statusColor}>{statusText}</span>
+                  </td>
+                  <td className="px-2 py-1">
+                    {frame.warnings && frame.warnings.length > 0 && (
+                      <div className="text-orange-400 text-xs">
+                        {frame.warnings.slice(0, 2).map((warning: string, idx: number) => (
+                          <div key={idx} title={warning}>
+                            {warning.length > 30 ? warning.substring(0, 30) + '...' : warning}
+                          </div>
+                        ))}
+                        {frame.warnings.length > 2 && (
+                          <div className="text-gray-400">+{frame.warnings.length - 2} more</div>
+                        )}
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {analysis.selection_advice && (
+        <div className="mt-3 p-2 bg-purple-900/20 rounded border border-purple-500/30">
+          <div className="text-sm text-purple-200 mb-1">
+            <strong>Selection Advice:</strong>
+          </div>
+          <div className="text-xs text-purple-300">
+            Recommended {analysis.selection_advice.frames_used} frames for stacking
+            (quality: {analysis.selection_advice.selection_quality?.toFixed(1)}/10,
+            improvement: +{analysis.selection_advice.improvement_estimate?.toFixed(1)})
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = ({ projectId, userId }) => {
   const [selectedType, setSelectedType] = useState<MasterType>('bias');
   const [tabState, setTabState] = useState({
@@ -590,8 +749,55 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
   const [outlierError, setOutlierError] = useState<string | null>(null);
   const [outlierOverrides, setOutlierOverrides] = useState<Record<string, boolean>>({});
 
+  // Frame consistency analysis state
+  const [consistencyLoading, setConsistencyLoading] = useState(false);
+  const [consistencyResults, setConsistencyResults] = useState<any>(null);
+  const [consistencyError, setConsistencyError] = useState<string | null>(null);
+  const [consistencySelections, setConsistencySelections] = useState<Record<string, boolean>>({});
+
+  // Add this near the other state declarations (around line 865)
+  const [autoConsistencyEnabled, setAutoConsistencyEnabled] = useState(true);
+  const [smartDefaultsEnabled, setSmartDefaultsEnabled] = useState(true);
+
+  // Enhanced consistency analysis with auto-run capability
+  const handleAutoConsistencyAnalysis = async (fitsPaths: string[]) => {
+    if (!autoConsistencyEnabled || fitsPaths.length < 2) return;
+    
+    try {
+      setConsistencyLoading(true);
+      setConsistencyError(null);
+      
+      const analysis = await analyzeFrameConsistency(fitsPaths);
+      setConsistencyResults(analysis);
+      
+      // If smart defaults are enabled, pre-select recommended frames
+      if (smartDefaultsEnabled) {
+        const selections: Record<string, boolean> = {};
+        analysis.metrics_by_frame.forEach((frame: any) => {
+          const isRecommended = analysis.recommended_frames?.includes(frame.path);
+          selections[frame.path] = isRecommended;
+        });
+        setConsistencySelections(selections);
+        
+        // Show a toast notification about auto-selection
+        console.log(`Auto-selected ${analysis.recommended_frames?.length || 0} recommended frames based on consistency analysis`);
+      }
+    } catch (error) {
+      setConsistencyError(error instanceof Error ? error.message : 'Failed to analyze consistency');
+    } finally {
+      setConsistencyLoading(false);
+    }
+  };
+
+  // Auto-run consistency analysis when frames are loaded
+  useEffect(() => {
+    if (realFiles.length >= 2 && autoConsistencyEnabled) {
+      handleAutoConsistencyAnalysis(realFiles);
+    }
+  }, [realFiles, selectedType, autoConsistencyEnabled]);
+
   // API call for outlier detection
-  async function detectOutliers(fitsPaths: string[], sigmaThresh: number = 3.0) {
+  async function detectOutliers(fitsPaths: string[], sigmaThresh: number = 3.0, frameType?: string) {
     const response = await fetch('http://localhost:8000/outliers/detect', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -601,7 +807,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
         bucket: 'raw-frames',
         project_id: projectId,
         user_id: userId,
-        frame_type: selectedType
+        frame_type: frameType || selectedType
       }),
     });
     if (!response.ok) {
@@ -615,8 +821,23 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
     setOutlierLoading(true);
     setOutlierError(null);
     try {
-      // Use filenames from realFiles - the backend will construct full paths
-      const result = await detectOutliers(realFiles, outlierSigma);
+      // Filter to only FITS files and determine the correct frame type from filenames
+      const fitsFiles = realFiles.filter(f => f.toLowerCase().endsWith('.fit') || f.toLowerCase().endsWith('.fits'));
+      
+      // Detect actual frame type from filenames if bias files are in dark folder
+      let actualFrameType = selectedType;
+      if (fitsFiles.length > 0) {
+        const firstFile = fitsFiles[0].toLowerCase();
+        if (firstFile.includes('bias') || firstFile.includes('zero')) {
+          actualFrameType = 'bias';
+        } else if (firstFile.includes('dark')) {
+          actualFrameType = 'dark';
+        } else if (firstFile.includes('flat')) {
+          actualFrameType = 'flat';
+        }
+      }
+      
+      const result = await detectOutliers(fitsFiles, outlierSigma, actualFrameType);
       setOutlierResults(result);
       // Reset overrides: include all good, exclude outliers by default
       const newOverrides: Record<string, boolean> = {};
@@ -632,6 +853,74 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
 
   const handleOverride = (path: string, include: boolean) => {
     setOutlierOverrides(prev => ({ ...prev, [path]: include }));
+  };
+
+  // API call for frame consistency analysis
+  async function analyzeFrameConsistency(fitsPaths: string[], frameType?: string) {
+    const response = await fetch('http://localhost:8000/frames/consistency', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fits_paths: fitsPaths,
+        bucket: 'raw-frames',
+        project_id: projectId,
+        user_id: userId,
+        frame_type: frameType || selectedType,
+        consistency_threshold: 0.7,
+        sigma_threshold: 2.5,
+        min_frames: 5,
+        max_frames: null
+      }),
+    });
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Frame consistency analysis failed');
+    }
+    return response.json();
+  }
+
+  const handleRunConsistencyAnalysis = async () => {
+    setConsistencyLoading(true);
+    setConsistencyError(null);
+    try {
+      // Filter to only FITS files and determine the correct frame type from filenames
+      const fitsFiles = realFiles.filter(f => f.toLowerCase().endsWith('.fit') || f.toLowerCase().endsWith('.fits'));
+      
+      // Detect actual frame type from filenames if bias files are in dark folder
+      let actualFrameType = selectedType;
+      if (fitsFiles.length > 0) {
+        const firstFile = fitsFiles[0].toLowerCase();
+        if (firstFile.includes('bias') || firstFile.includes('zero')) {
+          actualFrameType = 'bias';
+        } else if (firstFile.includes('dark')) {
+          actualFrameType = 'dark';
+        } else if (firstFile.includes('flat')) {
+          actualFrameType = 'flat';
+        }
+      }
+      
+      const result = await analyzeFrameConsistency(fitsFiles, actualFrameType);
+      setConsistencyResults(result);
+      // Initialize selections based on recommendations
+      const newSelections: Record<string, boolean> = {};
+      if (result.selection_advice) {
+        result.selection_advice.selected_frames.forEach((path: string) => {
+          newSelections[path] = true;
+        });
+        result.selection_advice.excluded_frames.forEach((path: string) => {
+          newSelections[path] = false;
+        });
+      }
+      setConsistencySelections(newSelections);
+    } catch (e: any) {
+      setConsistencyError(e.message);
+    } finally {
+      setConsistencyLoading(false);
+    }
+  };
+
+  const handleConsistencyFrameToggle = (path: string, include: boolean) => {
+    setConsistencySelections(prev => ({ ...prev, [path]: include }));
   };
 
   // Load presets from localStorage on mount
@@ -813,7 +1102,10 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
         setRealFiles([]);
         return;
       }
-      setRealFiles((data || []).filter(f => !f.name.endsWith('/')).map(f => f.name));
+      setRealFiles((data || [])
+        .filter(f => !f.name.endsWith('/')) // Exclude directories
+        .filter(f => f.name.toLowerCase().endsWith('.fit') || f.name.toLowerCase().endsWith('.fits')) // Only FITS files
+        .map(f => f.name));
     };
     fetchFiles();
   }, [selectedType, projectId, userId]);
@@ -1932,6 +2224,31 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                           </div>
                         </div>
                       )}
+                      
+                      {/* Outlier Frame Rejection for Bias */}
+                      <div className="mb-4 border-t border-blue-900 pt-4 mt-4">
+                        <h4 className="font-semibold text-blue-200 mb-2">Outlier Frame Rejection</h4>
+                        <button
+                          className="px-3 py-1 bg-blue-700 text-white rounded hover:bg-blue-800"
+                          onClick={handleRunOutlierDetection}
+                          disabled={outlierLoading}
+                        >
+                          {outlierLoading ? 'Detecting...' : 'Run Outlier Detection'}
+                        </button>
+                        {outlierError && <div className="text-red-400 mt-2">{outlierError}</div>}
+                        {outlierResults && (
+                          <OutlierReviewTable
+                            frames={[...outlierResults.good, ...outlierResults.outliers]}
+                            outliers={outlierResults.outliers}
+                            sigma={outlierSigma}
+                            onSigmaChange={setOutlierSigma}
+                            onOverride={handleOverride}
+                            overrides={outlierOverrides}
+                            loading={outlierLoading}
+                            onReRun={handleRunOutlierDetection}
+                          />
+                        )}
+                      </div>
                     </>
                   )}
                 </>
@@ -2740,10 +3057,86 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                           />
                         )}
                       </div>
+
                     </>
                   )}
                 </>
               )}
+            
+            {/* Frame-to-Frame Consistency Analysis - Available for All Frame Types */}
+            {realFiles.length >= 2 && (
+              <div className="mb-4 border-t border-purple-900 pt-4 mt-4">
+                <h4 className="font-semibold text-purple-200 mb-2">Frame-to-Frame Consistency</h4>
+                <p className="text-sm text-purple-300 mb-3">
+                  Analyze how consistent your {FRAME_TYPES.find(f => f.key === selectedType)?.label.toLowerCase()} frames are with each other for optimal stacking quality.
+                </p>
+                
+                {/* Auto-analysis controls */}
+                <div className="mb-3 p-2 bg-purple-900/20 rounded border border-purple-500/30">
+                  <div className="flex gap-4 items-center">
+                    <label className="flex items-center gap-2 text-sm text-purple-200">
+                      <input
+                        type="checkbox"
+                        checked={autoConsistencyEnabled}
+                        onChange={(e) => setAutoConsistencyEnabled(e.target.checked)}
+                        className="accent-purple-600"
+                      />
+                      Auto-analyze when frames load
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-purple-200">
+                      <input
+                        type="checkbox"
+                        checked={smartDefaultsEnabled}
+                        onChange={(e) => setSmartDefaultsEnabled(e.target.checked)}
+                        className="accent-purple-600"
+                        disabled={!autoConsistencyEnabled}
+                      />
+                      Smart frame pre-selection
+                    </label>
+                  </div>
+                  {smartDefaultsEnabled && autoConsistencyEnabled && (
+                    <div className="mt-1 text-xs text-purple-300">
+                      Recommended frames will be automatically selected for stacking
+                    </div>
+                  )}
+                </div>
+                
+                <div className="flex gap-2 items-center mb-2">
+                  <button
+                    className="px-3 py-1 bg-purple-700 text-white rounded hover:bg-purple-800"
+                    onClick={handleRunConsistencyAnalysis}
+                    disabled={consistencyLoading}
+                  >
+                    {consistencyLoading ? 'Analyzing...' : 'Analyze Consistency'}
+                  </button>
+                  {consistencyResults && (
+                    <div className="flex gap-2 items-center">
+                      <span className="text-sm text-purple-200">
+                        Score: {consistencyResults.overall_consistency?.toFixed(1)}/10
+                      </span>
+                      {consistencyResults.overall_consistency >= 8 && (
+                        <span className="text-green-400 text-sm">✓ Excellent</span>
+                      )}
+                      {consistencyResults.overall_consistency >= 6 && consistencyResults.overall_consistency < 8 && (
+                        <span className="text-yellow-400 text-sm">⚠ Good</span>
+                      )}
+                      {consistencyResults.overall_consistency < 6 && (
+                        <span className="text-red-400 text-sm">⚠ Poor</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+                {consistencyError && <div className="text-red-400 mt-2 text-sm">{consistencyError}</div>}
+                {consistencyResults && (
+                  <FrameConsistencyTable
+                    analysis={consistencyResults}
+                    onFrameToggle={handleConsistencyFrameToggle}
+                    frameSelections={consistencySelections}
+                    loading={consistencyLoading}
+                  />
+                )}
+              </div>
+            )}
             </div>
             {/* Create Master Button with extra margin */}
             <button

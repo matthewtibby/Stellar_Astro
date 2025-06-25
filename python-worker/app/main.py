@@ -28,6 +28,43 @@ from .calibration_worker import create_master_frame, save_master_frame, save_mas
 from .supabase_io import download_file, upload_file
 from .cosmetic_masking import compute_bad_pixel_mask, compute_bad_column_mask, compute_bad_row_mask, apply_masks
 from .patterned_noise_removal import remove_gradients_median, remove_striping_fourier, remove_background_polynomial, detect_pattern_type, apply_combined_correction
+
+async def download_file_with_fallback(bucket: str, remote_path: str, local_path: str, request_info: dict) -> bool:
+    """
+    Download a file with fallback to different frame type folders if the primary path fails.
+    This handles cases where bias files might be stored in dark folders, etc.
+    """
+    filename = os.path.basename(remote_path)
+    
+    # Try primary path first
+    try:
+        download_file(bucket, remote_path, local_path)
+        if os.path.exists(local_path) and os.path.getsize(local_path) > 0:
+            logger.info(f"Successfully downloaded {remote_path}")
+            return True
+    except Exception as e:
+        logger.warning(f"Failed to download {remote_path}: {e}")
+    
+    # If primary path failed, try fallback locations for misplaced files
+    if request_info.get('project_id') and request_info.get('user_id') and request_info.get('frame_type'):
+        fallback_frame_types = ['bias', 'dark', 'flat']
+        if request_info['frame_type'] in fallback_frame_types:
+            fallback_frame_types.remove(request_info['frame_type'])
+        
+        for fallback_type in fallback_frame_types:
+            fallback_path = f"{request_info['user_id']}/{request_info['project_id']}/{fallback_type}/{filename}"
+            try:
+                logger.info(f"Trying fallback path: {fallback_path}")
+                download_file(bucket, fallback_path, local_path)
+                if os.path.exists(local_path) and os.path.getsize(local_path) > 0:
+                    logger.info(f"Successfully downloaded from fallback path: {fallback_path}")
+                    return True
+            except Exception as e:
+                logger.debug(f"Fallback path {fallback_path} also failed: {e}")
+                continue
+    
+    logger.error(f"Could not download {filename} from any location")
+    return False
 from pydantic import BaseModel
 import traceback
 import uuid
@@ -37,6 +74,7 @@ from concurrent.futures import ThreadPoolExecutor
 from fastapi import APIRouter
 from .trail_detection import detect_trails
 from .outlier_rejection import detect_outlier_frames
+from .frame_consistency import analyze_frame_consistency, suggest_frame_selection
 
 logger = logging.getLogger(__name__)
 
@@ -1919,20 +1957,17 @@ async def outliers_detect(request: OutlierDetectRequest):
         local_paths = []
         try:
             if request.bucket:
-                # Download files from Supabase bucket
+                # Download files from Supabase bucket with fallback support
+                request_info = {
+                    'project_id': request.project_id,
+                    'user_id': request.user_id,
+                    'frame_type': request.frame_type
+                }
                 for remote_path in fits_paths:
                     local_temp_path = f"/tmp/{os.path.basename(remote_path)}"
-                    try:
-                        # Download file using the imported download_file function
-                        download_file(request.bucket, remote_path, local_temp_path)
-                        if os.path.exists(local_temp_path) and os.path.getsize(local_temp_path) > 0:
-                            local_paths.append(local_temp_path)
-                            logger.info(f"Successfully downloaded {remote_path}")
-                        else:
-                            logger.error(f"Downloaded file {remote_path} is empty or missing")
-                    except Exception as e:
-                        logger.error(f"Failed to download {remote_path}: {e}")
-                        continue
+                    success = await download_file_with_fallback(request.bucket, remote_path, local_temp_path, request_info)
+                    if success:
+                        local_paths.append(local_temp_path)
                 
                 # Run outlier detection on local files
                 if local_paths:
@@ -1969,6 +2004,173 @@ async def outliers_detect(request: OutlierDetectRequest):
                     
     except Exception as e:
         logger.error(f"Outlier detection error: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+class FrameConsistencyRequest(BaseModel):
+    fits_paths: list[str] = None  # Either full paths OR just filenames
+    bucket: str = None  # Supabase bucket name (e.g. 'fits-files')
+    project_id: str = None
+    user_id: str = None 
+    frame_type: str = None  # 'bias', 'dark', 'flat'
+    consistency_threshold: float = 0.7  # Minimum consistency score (0-1)
+    sigma_threshold: float = 2.5  # Sigma threshold for outlier detection
+    min_frames: int = 5  # Minimum frames to recommend
+    max_frames: Optional[int] = None  # Maximum frames to recommend
+
+@app.post("/frames/consistency")
+async def analyze_frames_consistency(request: FrameConsistencyRequest):
+    """
+    Analyze frame-to-frame consistency in a set of calibration frames.
+    Provides detailed consistency metrics and frame selection recommendations.
+    """
+    try:
+        fits_paths = request.fits_paths
+        logger.info(f"Original fits_paths: {fits_paths}")
+        
+        # If fits_paths are just filenames, construct full bucket paths
+        if request.bucket and request.project_id and request.user_id and request.frame_type:
+            fits_paths = [f"{request.user_id}/{request.project_id}/{request.frame_type}/{filename}" 
+                         for filename in request.fits_paths]
+            logger.info(f"Constructed bucket paths: {fits_paths}")
+            logger.info(f"Using bucket: {request.bucket}")
+        
+        # Download files from Supabase and process locally
+        local_paths = []
+        try:
+            if request.bucket:
+                # Download files from Supabase bucket with fallback support
+                request_info = {
+                    'project_id': request.project_id,
+                    'user_id': request.user_id,
+                    'frame_type': request.frame_type
+                }
+                for remote_path in fits_paths:
+                    local_temp_path = f"/tmp/{os.path.basename(remote_path)}"
+                    success = await download_file_with_fallback(request.bucket, remote_path, local_temp_path, request_info)
+                    if success:
+                        local_paths.append(local_temp_path)
+                
+                # Run consistency analysis on local files
+                if len(local_paths) >= 2:
+                    logger.info(f"Successfully downloaded {len(local_paths)} files, running consistency analysis")
+                    
+                    # Run consistency analysis
+                    analysis = analyze_frame_consistency(
+                        local_paths, 
+                        consistency_threshold=request.consistency_threshold,
+                        sigma_threshold=request.sigma_threshold
+                    )
+                    
+                    # Get frame selection recommendations
+                    selection_advice = suggest_frame_selection(
+                        analysis,
+                        min_frames=request.min_frames,
+                        max_frames=request.max_frames
+                    )
+                    
+                    # Replace local paths with original remote paths in results
+                    path_mapping = {local_paths[i]: fits_paths[i] for i in range(len(local_paths))}
+                    
+                    # Update frame metrics with original paths
+                    for metric in analysis.metrics_by_frame:
+                        if metric.path in path_mapping:
+                            metric.path = path_mapping[metric.path]
+                    
+                    # Update frame lists with original paths
+                    analysis.recommended_frames = [path_mapping.get(p, p) for p in analysis.recommended_frames]
+                    analysis.questionable_frames = [path_mapping.get(p, p) for p in analysis.questionable_frames]
+                    analysis.rejected_frames = [path_mapping.get(p, p) for p in analysis.rejected_frames]
+                    
+                    # Update selection advice with original paths
+                    selection_advice['selected_frames'] = [path_mapping.get(p, p) for p in selection_advice['selected_frames']]
+                    selection_advice['excluded_frames'] = [path_mapping.get(p, p) for p in selection_advice['excluded_frames']]
+                    
+                    # Convert dataclass to dict for JSON serialization
+                    response_data = {
+                        'success': True,
+                        'n_frames': analysis.n_frames,
+                        'overall_consistency': analysis.overall_consistency,
+                        'mean_stability': analysis.mean_stability,
+                        'std_stability': analysis.std_stability,
+                        'temporal_drift': analysis.temporal_drift,
+                        'recommended_frames': analysis.recommended_frames,
+                        'questionable_frames': analysis.questionable_frames,
+                        'rejected_frames': analysis.rejected_frames,
+                        'group_statistics': analysis.group_statistics,
+                        'metrics_by_frame': [
+                            {
+                                'path': m.path,
+                                'mean_consistency': m.mean_consistency,
+                                'std_consistency': m.std_consistency,
+                                'histogram_similarity': m.histogram_similarity,
+                                'pixel_correlation': m.pixel_correlation,
+                                'outlier_deviation': m.outlier_deviation,
+                                'consistency_score': m.consistency_score,
+                                'warnings': m.warnings
+                            }
+                            for m in analysis.metrics_by_frame
+                        ],
+                        'selection_advice': selection_advice
+                    }
+                    
+                    return response_data
+                else:
+                    logger.error(f"Need at least 2 valid files for consistency analysis. Got {len(local_paths)} files from bucket {request.bucket}")
+                    return JSONResponse(status_code=400, content={
+                        "error": f"Need at least 2 valid files for consistency analysis. Attempted paths: {fits_paths[:3]}{'...' if len(fits_paths) > 3 else ''}"
+                    })
+            else:
+                # Direct file path processing (for local testing)
+                analysis = analyze_frame_consistency(
+                    fits_paths, 
+                    consistency_threshold=request.consistency_threshold,
+                    sigma_threshold=request.sigma_threshold
+                )
+                
+                selection_advice = suggest_frame_selection(
+                    analysis,
+                    min_frames=request.min_frames,
+                    max_frames=request.max_frames
+                )
+                
+                # Convert dataclass to dict for JSON serialization
+                response_data = {
+                    'success': True,
+                    'n_frames': analysis.n_frames,
+                    'overall_consistency': analysis.overall_consistency,
+                    'mean_stability': analysis.mean_stability,
+                    'std_stability': analysis.std_stability,
+                    'temporal_drift': analysis.temporal_drift,
+                    'recommended_frames': analysis.recommended_frames,
+                    'questionable_frames': analysis.questionable_frames,
+                    'rejected_frames': analysis.rejected_frames,
+                    'group_statistics': analysis.group_statistics,
+                    'metrics_by_frame': [
+                        {
+                            'path': m.path,
+                            'mean_consistency': m.mean_consistency,
+                            'std_consistency': m.std_consistency,
+                            'histogram_similarity': m.histogram_similarity,
+                            'pixel_correlation': m.pixel_correlation,
+                            'outlier_deviation': m.outlier_deviation,
+                            'consistency_score': m.consistency_score,
+                            'warnings': m.warnings
+                        }
+                        for m in analysis.metrics_by_frame
+                    ],
+                    'selection_advice': selection_advice
+                }
+                
+                return response_data
+                
+        finally:
+            # Clean up downloaded temp files
+            for local_path in local_paths:
+                if os.path.exists(local_path):
+                    os.remove(local_path)
+                    
+    except Exception as e:
+        logger.error(f"Frame consistency analysis error: {e}")
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 if __name__ == "__main__":
