@@ -28,6 +28,7 @@ from .calibration_worker import create_master_frame, save_master_frame, save_mas
 from .supabase_io import download_file, upload_file
 from .cosmetic_masking import compute_bad_pixel_mask, compute_bad_column_mask, compute_bad_row_mask, apply_masks
 from .patterned_noise_removal import remove_gradients_median, remove_striping_fourier, remove_background_polynomial, detect_pattern_type, apply_combined_correction
+from .histogram_analysis import analyze_calibration_frame_histograms
 
 async def download_file_with_fallback(bucket: str, remote_path: str, local_path: str, request_info: dict) -> bool:
     """
@@ -80,10 +81,16 @@ from .gradient_analysis import analyze_calibration_frame_gradients, GradientAnal
 
 logger = logging.getLogger(__name__)
 
+# In-memory job storage (for development without database)
+job_results = {}
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    await init_db()
+    try:
+        await init_db()
+    except Exception as e:
+        print(f"Database initialization failed: {e}. Using in-memory storage.")
     yield
     # Shutdown
     print("Shutting down gracefully...")
@@ -1348,22 +1355,50 @@ async def submit_job(job: CalibrationJobRequest, request: Request, background_ta
 
 @app.get("/jobs/status")
 async def get_job_status(job_id: str):
-    job = await get_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    return {
-        "job_id": job_id,
-        "status": job["status"],
-        "created_at": job["created_at"],
-        "error": job["error"],
-        "progress": job.get("progress", 0)
-    }
+    # Check in-memory storage first
+    if job_id in job_results:
+        job = job_results[job_id]
+        return {
+            "job_id": job_id,
+            "status": job["status"],
+            "created_at": job.get("created_at", ""),
+            "error": job.get("error"),
+            "progress": job.get("progress", 0)
+        }
+    
+    # Fallback to database if available
+    try:
+        job = await get_job(job_id)
+        if job:
+            return {
+                "job_id": job_id,
+                "status": job["status"],
+                "created_at": job["created_at"],
+                "error": job["error"],
+                "progress": job.get("progress", 0)
+            }
+    except:
+        pass  # Database not available
+        
+    raise HTTPException(status_code=404, detail="Job not found")
 
 @app.get("/jobs/results")
 async def get_job_results(job_id: str):
-    job = await get_job(job_id)
+    job = None
+    
+    # Check in-memory storage first
+    if job_id in job_results:
+        job = job_results[job_id]
+    else:
+        # Fallback to database if available
+        try:
+            job = await get_job(job_id)
+        except:
+            pass  # Database not available
+    
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+    
     if job["status"] != "success":
         # 5. Add Retry-After header for 202
         from fastapi.responses import Response
@@ -1373,16 +1408,25 @@ async def get_job_results(job_id: str):
             headers={"Retry-After": "2"},
             media_type="application/json"
         )
-    # Parse the stringified JSON fields
-    results = json.loads(job["result"]) if job["result"] else {}
-    diagnostics = json.loads(job["diagnostics"]) if job.get("diagnostics") else {}
-    warnings = json.loads(job["warnings"]) if job.get("warnings") else []
+    
+    # Handle both in-memory (already parsed) and database (stringified) results
+    if isinstance(job.get("result"), dict):
+        # In-memory storage - already parsed
+        results = job["result"]
+        diagnostics = job.get("diagnostics", {})
+        warnings = job.get("warnings", [])
+    else:
+        # Database storage - needs parsing
+        results = json.loads(job["result"]) if job["result"] else {}
+        diagnostics = json.loads(job["diagnostics"]) if job.get("diagnostics") else {}
+        warnings = json.loads(job["warnings"]) if job.get("warnings") else []
+    
     return {
         "job_id": job_id,
-        "results": results,
+        "result": results,  # Changed from "results" to "result" to match expected format
         "diagnostics": diagnostics,
         "warnings": warnings,
-        "error": job["error"]
+        "error": job.get("error")
     }
 
 @app.get("/jobs/{job_id}/progress")
@@ -2913,6 +2957,189 @@ def generate_overall_recommendation(gradient_scores: list, issue_counts: dict) -
             return "Moderate gradient issues. Review individual frame recommendations."
     else:
         return "Significant gradient issues detected. Consider re-taking calibration frames with improved setup."
+
+class HistogramAnalysisRequest(BaseModel):
+    fits_paths: list[str] = None  # Either full paths OR just filenames
+    bucket: str = None  # Supabase bucket name (e.g. 'fits-files')
+    project_id: str = None
+    user_id: str = None 
+    frame_type: str = None  # 'bias', 'dark', 'flat' (auto-detected if None)
+
+@app.post("/histograms/analyze")
+async def analyze_histograms(request: HistogramAnalysisRequest, background_tasks: BackgroundTasks):
+    """
+    Comprehensive histogram analysis for calibration frames.
+    
+    Provides market-leader level histogram quality assessment including:
+    - Statistical distribution analysis
+    - Clipping and saturation detection
+    - Pedestal requirements calculation
+    - Frame-specific quality scoring
+    - Outlier and anomaly detection
+    """
+    try:
+        # Generate unique job ID
+        job_id = f"histogram_analysis_{uuid.uuid4().hex[:8]}"
+        
+        # Store initial job status
+        await insert_job(job_id, status="running", progress=0)
+        
+        # Start background processing
+        background_tasks.add_task(run_histogram_analysis_job, request, job_id)
+        
+        return {
+            "success": True,
+            "job_id": job_id,
+            "status": "running",
+            "message": "Histogram analysis started"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error starting histogram analysis: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": str(e)}
+        )
+
+async def run_histogram_analysis_job(request: HistogramAnalysisRequest, job_id: str):
+    """Background task for running histogram analysis."""
+    try:
+        from .histogram_analysis import analyze_calibration_frame_histograms
+        
+        logger.info(f"Starting histogram analysis job {job_id}")
+        
+        local_files = []
+        if request.bucket:
+            # Download from Supabase
+            logger.info(f"Downloading {len(request.fits_paths)} files from bucket {request.bucket}")
+            for fits_path in request.fits_paths:
+                local_path = f"/tmp/{job_id}_{os.path.basename(fits_path)}"
+                success = await download_file_with_fallback(
+                    request.bucket, 
+                    fits_path, 
+                    local_path,
+                    {"project_id": request.project_id, "user_id": request.user_id}
+                )
+                if success:
+                    local_files.append(local_path)
+                else:
+                    logger.warning(f"Failed to download {fits_path}")
+        else:
+            # Use local paths directly
+            local_files = request.fits_paths
+        
+        if not local_files:
+            logger.error(f"No files available for analysis in job {job_id}")
+            # Store results in memory instead of database
+            job_results[job_id] = {"status": "failed", "error": "No files to analyze", "progress": 0}
+            return
+        
+        logger.info(f"Analyzing histograms for {len(local_files)} files")
+        
+        # Run histogram analysis
+        analysis_results = analyze_calibration_frame_histograms(local_files, request.frame_type)
+        
+        # Generate summary for frontend
+        summary = generate_histogram_summary(analysis_results)
+        
+        # Store results in memory instead of database
+        result_data = {
+            "analysis_results": analysis_results,
+            "summary": summary,
+            "job_id": job_id
+        }
+        
+        job_results[job_id] = {"status": "success", "result": result_data, "progress": 100}
+        logger.info(f"Histogram analysis completed for job {job_id}")
+        
+    except Exception as e:
+        tb = traceback.format_exc()
+        logger.error(f"Histogram analysis job {job_id} failed: {e}\n{tb}")
+        job_results[job_id] = {"status": "failed", "error": str(e), "progress": 0}
+    
+    finally:
+        # Cleanup downloaded files
+        if request.bucket and local_files:
+            for local_path in local_files:
+                if os.path.exists(local_path):
+                    try:
+                        os.unlink(local_path)
+                    except:
+                        pass
+
+def generate_histogram_summary(analysis_results: dict) -> dict:
+    """Generate a user-friendly summary of histogram analysis results."""
+    frame_results = analysis_results.get('frame_results', [])
+    summary = analysis_results.get('summary', {})
+    
+    if not frame_results:
+        return {
+            "message": "No frames analyzed",
+            "quality_status": "unknown",
+            "recommendations": []
+        }
+    
+    avg_score = summary.get('average_score', 0.0)
+    total_frames = summary.get('total_frames', 0)
+    high_quality = summary.get('high_quality_frames', 0)
+    poor_quality = summary.get('poor_quality_frames', 0)
+    
+    # Determine overall quality status
+    if avg_score >= 8.0:
+        quality_status = "excellent"
+        status_message = f"🟢 Excellent histogram quality ({avg_score:.1f}/10)"
+    elif avg_score >= 6.0:
+        quality_status = "good"
+        status_message = f"🟡 Good histogram quality ({avg_score:.1f}/10)"
+    elif avg_score >= 4.0:
+        quality_status = "moderate"
+        status_message = f"🟠 Moderate histogram quality ({avg_score:.1f}/10)"
+    else:
+        quality_status = "poor"
+        status_message = f"🔴 Poor histogram quality ({avg_score:.1f}/10)"
+    
+    # Generate actionable recommendations
+    recommendations = []
+    common_issues = summary.get('common_issues', [])
+    
+    if 'Clipping detected in histogram' in common_issues:
+        recommendations.append("📊 Adjust exposure settings to avoid clipping")
+    
+    if 'High outlier percentage' in str(common_issues):
+        recommendations.append("🔥 Check for hot pixels or cosmic ray contamination")
+    
+    if 'Pedestal correction required' in str(common_issues):
+        recommendations.append("⚡ Apply pedestal correction during calibration")
+    
+    if 'High noise in bias frame' in str(common_issues):
+        recommendations.append("🌡️ Check for electronic interference or cooling issues")
+    
+    if 'Flat frame underexposed' in str(common_issues):
+        recommendations.append("💡 Increase flat field exposure or illumination")
+    
+    if 'Poor illumination uniformity' in str(common_issues):
+        recommendations.append("🔆 Improve flat field illumination setup")
+    
+    if poor_quality > total_frames * 0.3:
+        recommendations.append("🔄 Consider re-acquiring problematic frames")
+    
+    if not recommendations:
+        recommendations.append("✅ Histogram quality is acceptable for calibration")
+    
+    return {
+        "message": status_message,
+        "quality_status": quality_status,
+        "score": round(avg_score, 1),
+        "frame_breakdown": {
+            "total": total_frames,
+            "high_quality": high_quality,
+            "poor_quality": poor_quality,
+            "requiring_pedestal": summary.get('frames_requiring_pedestal', 0),
+            "with_clipping": summary.get('frames_with_clipping', 0)
+        },
+        "recommendations": recommendations,
+        "overall_recommendation": summary.get('overall_recommendation', '')
+    }
 
 if __name__ == "__main__":
     # Force port 8000 and prevent port changes

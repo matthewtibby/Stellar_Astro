@@ -20,6 +20,7 @@ import { supabaseUrl, supabaseAnonKey } from '@/src/lib/supabase';
 import CreateSuperdarkUI from './CreateSuperdarkUI';
 import { useSuperdarks } from '@/src/hooks/useSuperdarks';
 import FrameQualityReport from './FrameQualityReport';
+import { HistogramAnalysisReport } from './HistogramAnalysisReport';
 
 interface DarkFileWithMetadata {
   name: string;
@@ -928,7 +929,11 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
 
   // Frame quality analysis state
   const [qualityAnalysisResults, setQualityAnalysisResults] = useState<any>(null);
+  const [histogramAnalysisResults, setHistogramAnalysisResults] = useState<any>(null);
   const [showQualityReport, setShowQualityReport] = useState(false);
+  const [showHistogramReport, setShowHistogramReport] = useState(false);
+  const [histogramAnalysisLoading, setHistogramAnalysisLoading] = useState(false);
+  const [histogramAnalysisNotification, setHistogramAnalysisNotification] = useState<string | null>(null);
 
   // Add this near the other state declarations (around line 865)
   const [autoConsistencyEnabled, setAutoConsistencyEnabled] = useState(true);
@@ -1103,6 +1108,105 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
     console.log(`Quality override: ${action} frame ${framePath}`);
     // This could trigger a re-run of calibration with the override
     // For now, just log the action
+  };
+
+  // Histogram analysis functions
+  const handleHistogramAnalysis = async (fitsPaths: string[]) => {
+    console.log('🧪 Histogram Analysis Button Clicked!', { fitsPaths, selectedType, projectId, userId });
+    
+    if (!fitsPaths || fitsPaths.length === 0) {
+      console.log('No files provided for histogram analysis');
+      setHistogramAnalysisNotification('No files found for histogram analysis. Please ensure you have uploaded calibration frames.');
+      setTimeout(() => setHistogramAnalysisNotification(null), 5000);
+      return;
+    }
+
+    try {
+      setHistogramAnalysisLoading(true);
+      setHistogramAnalysisNotification(`Starting histogram analysis for ${fitsPaths.length} files...`);
+      console.log(`Starting histogram analysis for ${fitsPaths.length} files...`);
+      
+      const response = await fetch('http://localhost:8000/histograms/analyze', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          fits_paths: fitsPaths,
+          bucket: 'raw-frames', // Use bucket for Supabase files
+          project_id: projectId,
+          user_id: userId,
+          frame_type: selectedType
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('Histogram analysis started:', data);
+
+      if (data.job_id) {
+        // Poll for completion
+        const pollForResults = async () => {
+          try {
+            const statusResponse = await fetch(`http://localhost:8000/jobs/status?job_id=${data.job_id}`);
+            const statusData = await statusResponse.json();
+            
+            if (statusData.status === 'success') {
+              const resultsResponse = await fetch(`http://localhost:8000/jobs/results?job_id=${data.job_id}`);
+              const resultsData = await resultsResponse.json();
+              
+              console.log('Histogram analysis completed:', resultsData.result);
+              setHistogramAnalysisResults(resultsData.result);
+              setHistogramAnalysisLoading(false);
+              setHistogramAnalysisNotification('Histogram analysis completed successfully!');
+              setTimeout(() => setHistogramAnalysisNotification(null), 3000);
+            } else if (statusData.status === 'failed') {
+              console.error('Histogram analysis failed:', statusData.error);
+              setHistogramAnalysisLoading(false);
+              setHistogramAnalysisNotification(`Analysis failed: ${statusData.error || 'Unknown error'}`);
+              setTimeout(() => setHistogramAnalysisNotification(null), 5000);
+            } else {
+              // Still running, poll again
+              setHistogramAnalysisNotification(`Analyzing histograms... (${statusData.progress || 0}%)`);
+              setTimeout(pollForResults, 2000);
+            }
+          } catch (error) {
+            console.error('Error polling histogram analysis status:', error);
+            setHistogramAnalysisLoading(false);
+            setHistogramAnalysisNotification('Error checking analysis status');
+            setTimeout(() => setHistogramAnalysisNotification(null), 5000);
+          }
+        };
+
+        pollForResults();
+      }
+    } catch (error) {
+      console.error('Error starting histogram analysis:', error);
+      setHistogramAnalysisLoading(false);
+      setHistogramAnalysisNotification('Error starting histogram analysis');
+      setTimeout(() => setHistogramAnalysisNotification(null), 5000);
+    }
+  };
+
+  const handleHistogramFrameAction = (framePath: string, action: 'accept' | 'reject' | 'apply_pedestal') => {
+    console.log(`Histogram frame action: ${action} for ${framePath}`);
+    
+    if (action === 'apply_pedestal') {
+      // Find the frame in results to get pedestal value
+      const frameResult = histogramAnalysisResults?.analysis_results?.frame_results?.find(
+        (frame: any) => frame.frame_path === framePath
+      );
+      
+      if (frameResult?.recommended_pedestal) {
+        console.log(`Applying pedestal of ${frameResult.recommended_pedestal} DN to ${framePath}`);
+        // TODO: Implement pedestal application
+      }
+    }
+    
+    // TODO: Implement frame accept/reject logic
   };
 
   // Load presets from localStorage on mount
@@ -2029,6 +2133,99 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
   };
 
   // Cosmetic Methods Selection Component with Tooltips and Ordering
+  // Histogram Analysis Component
+  function HistogramAnalysisSection({ frameType }: { frameType: MasterType }) {
+    const fitsFiles = realFiles.filter((f: string) => f.endsWith('.fits') || f.endsWith('.fit'));
+    
+    return (
+      <div className="mb-4 border-t border-purple-900 pt-4 mt-4">
+        <div className="flex items-center gap-2 mb-2">
+          <BarChart3 className="w-4 h-4 text-purple-400" />
+          <h4 className="font-semibold text-purple-200">Histogram/Distribution Analysis</h4>
+        </div>
+        <p className="text-xs text-purple-300 mb-3">
+          Analyze pixel value distributions for quality assessment, clipping detection, and pedestal requirements
+        </p>
+        
+        {/* Notification */}
+        {histogramAnalysisNotification && (
+          <div className="mb-3 p-2 bg-blue-900/20 border border-blue-500/30 rounded-lg">
+            <div className="flex items-center gap-2">
+              {histogramAnalysisLoading && (
+                <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
+              )}
+              <span className="text-sm text-blue-200">{histogramAnalysisNotification}</span>
+            </div>
+          </div>
+        )}
+        
+        <button
+          className="px-4 py-2 bg-purple-700 text-white rounded-lg hover:bg-purple-800 disabled:opacity-50 font-semibold shadow-lg transition-all duration-200 hover:shadow-xl"
+          onClick={() => {
+            console.log('🔍 Button clicked - fitsFiles:', fitsFiles);
+            const paths = fitsFiles.map((f: string) => `${userId}/${projectId}/${frameType}/${f}`);
+            console.log('🔍 Generated paths:', paths);
+            handleHistogramAnalysis(paths);
+          }}
+          disabled={fitsFiles.length === 0 || histogramAnalysisLoading}
+        >
+          <BarChart3 className="w-4 h-4 inline mr-1" />
+          {histogramAnalysisLoading ? 'Analyzing...' : `Analyze Histograms (${fitsFiles.length} files)`}
+        </button>
+        
+        {histogramAnalysisResults && (
+          <div className="mt-4">
+            <div className="bg-purple-900/20 rounded-lg p-3 border border-purple-500/30">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="text-sm font-medium text-purple-200">
+                  {histogramAnalysisResults.summary?.message || 'Analysis Complete'}
+                </div>
+              </div>
+              
+              {histogramAnalysisResults.summary?.frame_breakdown && (
+                <div className="grid grid-cols-2 gap-2 text-xs mb-2">
+                  <div className="text-green-300">
+                    High Quality: {histogramAnalysisResults.summary.frame_breakdown.high_quality}
+                  </div>
+                  <div className="text-red-300">
+                    Poor Quality: {histogramAnalysisResults.summary.frame_breakdown.poor_quality}
+                  </div>
+                  <div className="text-yellow-300">
+                    Need Pedestal: {histogramAnalysisResults.summary.frame_breakdown.requiring_pedestal}
+                  </div>
+                  <div className="text-orange-300">
+                    With Clipping: {histogramAnalysisResults.summary.frame_breakdown.with_clipping}
+                  </div>
+                </div>
+              )}
+              
+              {histogramAnalysisResults.summary?.recommendations && (
+                <div className="mt-2">
+                  <div className="text-xs font-medium text-purple-300 mb-1">Key Recommendations:</div>
+                  <ul className="text-xs text-purple-200 space-y-1">
+                    {histogramAnalysisResults.summary.recommendations.slice(0, 3).map((rec: string, idx: number) => (
+                      <li key={idx} className="flex items-start gap-1">
+                        <span className="text-purple-400 mt-0.5">•</span>
+                        <span>{rec}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              
+              <button
+                className="mt-2 text-xs text-purple-400 hover:text-purple-300 underline"
+                onClick={() => setShowHistogramReport(true)}
+              >
+                View Detailed Report →
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   function CosmeticMethodsSelector({
     selectedMethods,
     onMethodToggle,
@@ -2695,6 +2892,9 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                           />
                         )}
                       </div>
+
+                      {/* Histogram/Distribution Analysis */}
+                      <HistogramAnalysisSection frameType="bias" />
                     </>
                   )}
                 </>
@@ -3403,6 +3603,9 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
                           + Create Superdark
                         </button>
                       </div>
+                      
+                      {/* Histogram/Distribution Analysis for Dark */}
+                      <HistogramAnalysisSection frameType="dark" />
                     </>
                   )}
                 </>
@@ -3751,6 +3954,9 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
 
                     </>
                   )}
+                  
+                  {/* Histogram/Distribution Analysis for Flat */}
+                  <HistogramAnalysisSection frameType="flat" />
                 </>
               )}
             
@@ -4251,6 +4457,28 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
         projectId={projectId}
         onSuperdarkCreated={refreshSuperdarks}
       />
+
+      {/* Histogram Analysis Report Modal */}
+      {showHistogramReport && histogramAnalysisResults && (
+        <Dialog open={showHistogramReport} onOpenChange={setShowHistogramReport}>
+          <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <BarChart3 className="w-5 h-5 text-purple-500" />
+                Histogram Analysis Report
+              </DialogTitle>
+              <DialogDescription>
+                Detailed histogram and distribution analysis results for your calibration frames
+              </DialogDescription>
+            </DialogHeader>
+            <HistogramAnalysisReport
+              summary={histogramAnalysisResults.summary || {}}
+              frameResults={histogramAnalysisResults.analysis_results?.frame_results || []}
+              onFrameAction={handleHistogramFrameAction}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
     </TooltipProvider>
   );
 };
