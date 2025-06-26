@@ -1,14 +1,12 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React from 'react';
 import { File, Download, Eye, X, AlertCircle, RefreshCw } from 'lucide-react';
-import { type FileType, type StorageFile } from '@/src/types/store';
+import { type StorageFile } from '@/src/types/store';
 
 // Import extracted types and constants
 import {
-  FileManagementPanelProps,
-  FilesByType,
-  PreviewCache
+  FileManagementPanelProps
 } from './file-management/types';
 
 import {
@@ -20,136 +18,74 @@ import {
 
 // Import services - Phase 2
 import {
-  FileOperationsService,
-  PreviewService,
-  CalibrationService,
   FilterService,
   UtilityService
 } from './file-management/services';
+
+// Import custom hooks - Phase 3
+import {
+  useFileState,
+  usePreviewState,
+  useSearchState,
+  useFileOperations,
+  useCalibrationState,
+  useNotificationState
+} from './file-management/hooks';
 
 export default function FileManagementPanel({ 
   projectId, 
   onRefresh
 }: Pick<FileManagementPanelProps, 'projectId' | 'onRefresh'>) {
-  const [moveNotification, setMoveNotification] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<FileType>('light');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewError, setPreviewError] = useState<string | null>(null);
-  const [tagFilter, setTagFilter] = useState('');
+  
+  // Phase 3: Use custom hooks for state management
+  const { 
+    filesByType, 
+    loading, 
+    hasLoadedFiles, 
+    loadFiles, 
+    refreshFiles 
+  } = useFileState(projectId);
 
-  // Phase 2: Initialize with empty state, services will populate
-  const [filesByType, setFilesByType] = useState<FilesByType>({} as FilesByType);
-  const [loading, setLoading] = useState(false);
-  const [showCalibrationWarning, setShowCalibrationWarning] = useState(false);
-  const [missingFrameTypes, setMissingFrameTypes] = useState<FileType[]>([]);
-  const [hasLoadedFiles, setHasLoadedFiles] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [previewCache, setPreviewCache] = useState<PreviewCache>({});
+  const {
+    previewUrl,
+    previewLoading,
+    previewError,
+    handlePreview,
+    closePreview,
+    clearPreviewError
+  } = usePreviewState();
 
-  // Phase 2: Replace with service calls
-  const loadFiles = useCallback(async () => {
-    if (!projectId) return;
-    try {
-      setLoading(true);
-      const files = await FileOperationsService.loadFiles(projectId);
-      setFilesByType(files);
-      setHasLoadedFiles(true);
-    } catch (err) {
-      console.error('Error loading files:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [projectId]);
+  const {
+    activeTab,
+    setActiveTab,
+    searchTerm,
+    setSearchTerm,
+    tagFilter,
+    setTagFilter,
+    filteredFiles,
+    currentFileCount,
+    hasFiles,
+    clearTagFilter
+  } = useSearchState(filesByType);
 
-  useEffect(() => {
-    if (projectId) {
-      loadFiles();
-    }
-  }, [projectId, loadFiles]);
+  const { handleDownload, handleDeleteFile } = useFileOperations(loadFiles, onRefresh);
 
-  const handleRefresh = async () => {
-    try {
-      const files = await FileOperationsService.refreshFiles(projectId, onRefresh);
-      setFilesByType(files);
-    } catch (err) {
-      console.error('Error refreshing files:', err);
-    }
-  };
+  const {
+    showCalibrationWarning,
+    missingFrameTypes,
+    handleCalibrationProgress,
+    handleConfirmCalibration,
+    handleCancelCalibration
+  } = useCalibrationState();
 
-  const handleDownload = async (file: StorageFile) => {
-    try {
-      await FileOperationsService.downloadFile(file);
-    } catch (error) {
-      console.error('Download failed:', error);
-    }
-  };
+  const {
+    moveNotification,
+    clearNotification
+  } = useNotificationState();
 
-  const handleDeleteFile = async (file: StorageFile) => {
-    try {
-      await FileOperationsService.deleteFile(file);
-      await loadFiles();
-      if (onRefresh) onRefresh();
-    } catch (error) {
-      console.error('Delete failed:', error);
-    }
-  };
-
-  // Phase 2: Use FilterService for filtering
-  const filteredFiles = FilterService.applyFilters(
-    filesByType[activeTab] || [], 
-    tagFilter, 
-    searchTerm
-  );
-
-  const handleCalibrationProgress = () => {
-    const result = CalibrationService.handleCalibrationProgress(filesByType);
-    
-    if (result.errorMessage) {
-      console.error(result.errorMessage);
-      return;
-    }
-
-    if (!result.canProceed && result.missingTypes.length > 0) {
-      setMissingFrameTypes(result.missingTypes);
-      setShowCalibrationWarning(true);
-      return;
-    }
-
-    CalibrationService.proceedToCalibration();
-  };
-
-  const handleConfirmCalibration = () => {
-    setShowCalibrationWarning(false);
-    CalibrationService.proceedDespiteMissingFrames();
-  };
-
-  useEffect(() => {
-    return () => {
-      PreviewService.cleanupAllPreviews(previewCache);
-    };
-  }, [previewCache]);
-
-  const handlePreview = async (file: StorageFile) => {
-    try {
-      setPreviewLoading(true);
-      setPreviewError(null);
-      setPreviewUrl(null);
-
-      const imageUrl = await PreviewService.getPreviewUrl(file, previewCache);
-      setPreviewCache(prev => PreviewService.updateCache(prev, file.path, imageUrl));
-      setPreviewUrl(imageUrl);
-    } catch (error) {
-      setPreviewError(error instanceof Error ? error.message : 'Preview failed');
-    } finally {
-      setPreviewLoading(false);
-    }
-  };
-
-  const closePreview = () => {
-    PreviewService.cleanupPreview(previewUrl);
-    setPreviewUrl(null);
-  };
+  // Simplified handlers using hooks
+  const handleRefresh = () => refreshFiles(onRefresh);
+  const handleCalibrationClick = () => handleCalibrationProgress(filesByType);
 
   const renderFileList = (files: StorageFile[]) => {
     return files.map((file) => {
@@ -204,15 +140,11 @@ export default function FileManagementPanel({
     });
   };
 
-  const renderFileTypeDisplay = (type: FileType) => {
-    const files = filesByType[type] || [];
-    const count = FilterService.getFileCount(files);
-    return (
-      <span className="text-sm text-gray-400">
-        {count} files
-      </span>
-    );
-  };
+  const renderFileTypeDisplay = () => (
+    <span className="text-sm text-gray-400">
+      {currentFileCount} files
+    </span>
+  );
 
   return (
     <div className={CSS_CLASSES.CONTAINER}>
@@ -221,7 +153,7 @@ export default function FileManagementPanel({
           {moveNotification}
           <button
             className="ml-4 px-2 py-1 bg-yellow-700 text-white rounded hover:bg-yellow-800"
-            onClick={() => setMoveNotification(null)}
+            onClick={clearNotification}
           >
             {UI_TEXT.DISMISS_BUTTON}
           </button>
@@ -232,7 +164,7 @@ export default function FileManagementPanel({
         <div className={CSS_CLASSES.HEADER}>
           <h3 className={CSS_CLASSES.TITLE}>{UI_TEXT.TITLE}</h3>
           <div className="flex items-center space-x-2">
-            {renderFileTypeDisplay(activeTab)}
+            {renderFileTypeDisplay()}
             <button 
               onClick={handleRefresh}
               className="p-2 text-gray-400 hover:text-white transition-colors rounded-full hover:bg-gray-800"
@@ -276,13 +208,13 @@ export default function FileManagementPanel({
                   className={CSS_CLASSES.INPUT_BASE}
                 />
                 {tagFilter && (
-                  <button onClick={() => setTagFilter('')} className={CSS_CLASSES.BUTTON_SMALL}>
+                  <button onClick={clearTagFilter} className={CSS_CLASSES.BUTTON_SMALL}>
                     {UI_TEXT.CLEAR_BUTTON}
                   </button>
                 )}
               </div>
 
-              {hasLoadedFiles && (filesByType[activeTab]?.length > 0) && (
+              {hasLoadedFiles && hasFiles && (
                 <div className="mb-4">
                   <input
                     type="text"
@@ -294,7 +226,7 @@ export default function FileManagementPanel({
                 </div>
               )}
 
-              {hasLoadedFiles && (!filesByType[activeTab] || filesByType[activeTab].length === 0) ? (
+              {hasLoadedFiles && !hasFiles ? (
                 <div className="text-center py-8">
                   <File className="h-12 w-12 text-gray-600 mx-auto mb-3" />
                   <p className="text-gray-400">{UI_TEXT.EMPTY_STATE_TITLE}</p>
@@ -312,7 +244,7 @@ export default function FileManagementPanel({
 
       <div className="mt-4 flex justify-end">
         <button
-          onClick={handleCalibrationProgress}
+          onClick={handleCalibrationClick}
           className={CSS_CLASSES.BUTTON_PRIMARY}
         >
           {UI_TEXT.PROCEED_TO_CALIBRATION}
@@ -332,7 +264,7 @@ export default function FileManagementPanel({
             <p className="text-gray-300 mb-4">{UI_TEXT.CALIBRATION_WARNING_QUESTION}</p>
             <div className="flex justify-end space-x-4">
               <button
-                onClick={() => setShowCalibrationWarning(false)}
+                onClick={handleCancelCalibration}
                 className={CSS_CLASSES.BUTTON_SECONDARY}
               >
                 {UI_TEXT.CANCEL_BUTTON}
@@ -384,7 +316,7 @@ export default function FileManagementPanel({
             <p className="text-gray-300 mb-6">{previewError}</p>
             <div className="flex justify-end">
               <button
-                onClick={() => setPreviewError(null)}
+                onClick={clearPreviewError}
                 className={CSS_CLASSES.BUTTON_SECONDARY}
               >
                 {UI_TEXT.CLOSE_BUTTON}
