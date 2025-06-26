@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import {
   Dialog,
   DialogContent,
@@ -7,264 +7,163 @@ import {
   DialogDescription,
   DialogFooter,
 } from './ui/dialog';
-import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './ui/tooltip';
+import { TooltipProvider } from './ui/tooltip';
 import { useProjects } from '@/src/hooks/useProjects';
-import { validateFitsFile } from '@/src/utils/storage';
 import { useUserStore } from '@/src/store/user';
 
 // Import extracted types and constants
 import {
-  DarkFileWithMetadata,
-  FileMetadata,
   CreateSuperdarkUIProps,
-  UploadStatus,
-  UploadProgress,
-  CompatibilityWarnings,
-  ValidationResult,
-  Project
+  DarkFileWithMetadata
 } from './superdark/types/superdark.types';
 import {
-  ADVANCED_DARK_STACKING_METHODS,
-  TEMPERATURE_TOLERANCE,
-  GAIN_TOLERANCE,
-  REQUIRED_METADATA_FIELDS,
-  DEFAULT_SUPERDARK_STACKING,
-  DEFAULT_SUPERDARK_SIGMA
+  ADVANCED_DARK_STACKING_METHODS
 } from './superdark/constants/superdarkConstants';
 
-// Import services
+// Import custom hooks
 import {
-  FileUploadService,
-  MetadataService,
-  ValidationService,
-  JobService
-} from './superdark/services';
+  useFileManagement,
+  useUploadState,
+  useFormState,
+  useModalOperations
+} from './superdark/hooks';
 
-const CreateSuperdarkUI: React.FC<CreateSuperdarkUIProps> = ({ showSuperdarkModal, setShowSuperdarkModal, userId, projectId, onSuperdarkCreated }) => {
-    const { user } = useUserStore();
-    const { projects, isLoading: projectsLoading, fetchProjects } = useProjects(user?.id, !!user);
-    const [superdarkName, setSuperdarkName] = useState('');
-    const [superdarkStacking, setSuperdarkStacking] = useState(DEFAULT_SUPERDARK_STACKING);
-    const [superdarkSigma, setSuperdarkSigma] = useState(DEFAULT_SUPERDARK_SIGMA);
-    const [superdarkWarnings, setSuperdarkWarnings] = useState<string[]>([]);
-    const [isCreatingSuperdark, setIsCreatingSuperdark] = useState(false);
-    const [availableDarks, setAvailableDarks] = useState<DarkFileWithMetadata[]>([]);
-    const [selectedDarkPaths, setSelectedDarkPaths] = useState<string[]>([]);
-    const [tempFiles, setTempFiles] = useState<DarkFileWithMetadata[]>([]);
+const CreateSuperdarkUI: React.FC<CreateSuperdarkUIProps> = ({ 
+  showSuperdarkModal, 
+  setShowSuperdarkModal, 
+  projectId, 
+  onSuperdarkCreated 
+}) => {
+  const { user } = useUserStore();
+  const { projects } = useProjects(user?.id, !!user);
+  
+  // Custom hooks for state management
+  const fileManagement = useFileManagement(showSuperdarkModal, user?.id, projects);
+  const uploadState = useUploadState();
+  const formState = useFormState();
+  const modalOperations = useModalOperations();
+
+  // Destructure hook returns for cleaner code
+  const {
+    tempFiles,
+    selectedDarkPaths,
+    allFiles,
+    bestGroup,
+    handleDarkCheckbox,
+    addTempFiles,
+    removeTempFile,
+    resetSelection
+  } = fileManagement;
+
+  const {
+    isUploading,
+    uploadProgress,
+    uploadedCount,
+    totalToUpload,
+    compatibilityWarnings,
+    handleFileUpload,
+    removeCompatibilityWarning
+  } = uploadState;
+
+  const {
+    superdarkName,
+    setSuperdarkName,
+    superdarkStacking,
+    setSuperdarkStacking,
+    superdarkSigma,
+    setSuperdarkSigma,
+    superdarkWarnings,
+    addWarning,
+    removeWarningsContaining,
+    resetForm,
+    isFormValid
+  } = formState;
+
+  const {
+    isCreatingSuperdark,
+    deleteTempFile: deleteTempFileOperation,
+    handleModalClose
+  } = modalOperations;
+
+  // Handle file upload
+  const handleSuperdarkUpload = async (files: File[]) => {
+    if (!user?.id) return;
     
-    // Upload progress states
-    const [isUploading, setIsUploading] = useState(false);
-    const [uploadProgress, setUploadProgress] = useState<UploadProgress>({});
-    const [uploadedCount, setUploadedCount] = useState(0);
-    const [totalToUpload, setTotalToUpload] = useState(0);
-    const [compatibilityWarnings, setCompatibilityWarnings] = useState<CompatibilityWarnings>({});
+    await handleFileUpload(
+      files,
+      user.id,
+      projectId,
+      fileManagement.availableDarks,
+      tempFiles,
+      addTempFiles,
+      addWarning
+    );
+  };
 
-    useEffect(() => {
-        if (!showSuperdarkModal || !user?.id || !projects || projects.length === 0) return;
-        
-        const fetchDarks = async () => {
-            const allDarks = await MetadataService.fetchAllProjectDarks(projects.filter(p => p.title) as Project[], user.id);
-            setAvailableDarks(allDarks);
-        };
+  // Delete a specific temporary file
+  const deleteTempFile = async (tempFile: DarkFileWithMetadata) => {
+    if (!user?.id) return;
     
-        fetchDarks();
-      }, [showSuperdarkModal, user?.id, projects]);
+    await deleteTempFileOperation(
+      tempFile,
+      user.id,
+      (deletedFile) => {
+        removeTempFile(deletedFile);
+        removeCompatibilityWarning(deletedFile.name);
+        removeWarningsContaining(deletedFile.name);
+      },
+      addWarning
+    );
+  };
 
-      const handleDarkCheckbox = (path: string, checked: boolean) => {
-        setSelectedDarkPaths(prev => checked ? [...prev, path] : prev.filter(p => p !== path));
-      };
+  // Submit superdark job
+  const submitSuperdarkJob = async () => {
+    if (!user?.id) return;
+    
+    const payload = {
+      name: superdarkName.trim(),
+      selectedDarkPaths,
+      stackingMethod: superdarkStacking,
+      sigmaThreshold: superdarkSigma,
+      userId: user.id,
+      tempFiles: tempFiles.map(tf => tf.path)
+    };
 
-      const handleSuperdarkUpload = async (files: File[]) => {
-        if (!user?.id) return;
+    await modalOperations.submitSuperdarkJob(
+      payload,
+      projectId,
+      async () => {
+        // Success callback
+        await modalOperations.cleanupTempFiles(tempFiles, user.id);
         
-        setIsUploading(true);
-        setTotalToUpload(files.length);
-        setUploadedCount(0);
-        setUploadProgress({});
-        setCompatibilityWarnings({});
-        
-        const newTempFiles: DarkFileWithMetadata[] = [];
-        
-        for (let i = 0; i < files.length; i++) {
-          const file = files[i];
-          const fileName = file.name;
-          
-          try {
-            // Update progress: validating
-            setUploadProgress(prev => ({ ...prev, [fileName]: 'validating' }));
-            
-            // Validate FITS file
-            const validation = await validateFitsFile(file, projectId, user.id);
-            if (!validation.valid) {
-              throw new Error(validation.message || 'Invalid FITS file');
-            }
-            
-            // Update progress: uploading
-            setUploadProgress(prev => ({ ...prev, [fileName]: 'uploading' }));
-            
-            // Upload to temp storage using service
-            const tempPath = await FileUploadService.uploadToTempStorage(file, user.id);
-            
-            // Get metadata using service
-            const metadata = await MetadataService.getTempFileMetadata(tempPath, user.id);
-            
-            if (!metadata) {
-              throw new Error('Failed to analyze uploaded file');
-            }
-            
-            // Create temp file object
-            const tempFile: DarkFileWithMetadata = {
-              name: fileName,
-              path: tempPath,
-              project: 'Uploaded',
-              projectId: 'temp',
-              camera: metadata.metadata?.instrument || metadata.metadata?.INSTRUME || 'Unknown',
-              binning: metadata.metadata?.binning || `${metadata.metadata?.XBINNING || 1}x${metadata.metadata?.YBINNING || 1}`,
-              gain: metadata.metadata?.gain || metadata.metadata?.GAIN || 'Unknown',
-              temp: metadata.metadata?.temperature !== undefined
-                ? Number(metadata.metadata.temperature).toFixed(1)
-                : metadata.metadata?.['CCD-TEMP'] !== undefined
-                ? Number(metadata.metadata['CCD-TEMP']).toFixed(1)
-                : 'Unknown',
-              exposure: metadata.metadata?.exposure_time !== undefined
-                ? Number(metadata.metadata.exposure_time).toFixed(1)
-                : metadata.metadata?.EXPTIME !== undefined
-                ? Number(metadata.metadata.EXPTIME).toFixed(1)
-                : 'Unknown',
-              isTemporary: true
-            };
-            
-            // Validate compatibility using service
-            const compatibilityResult = ValidationService.validateFrameCompatibility(tempFile, [...availableDarks, ...newTempFiles]);
-            
-            if (compatibilityResult.warnings.length > 0) {
-              setCompatibilityWarnings(prev => ({
-                ...prev,
-                [fileName]: compatibilityResult.warnings
-              }));
-              setUploadProgress(prev => ({ ...prev, [fileName]: 'warning' }));
-            } else {
-              setUploadProgress(prev => ({ ...prev, [fileName]: 'complete' }));
-            }
-            
-            newTempFiles.push(tempFile);
-            setUploadedCount(prev => prev + 1);
-            
-          } catch (error) {
-            console.error(`Upload failed for ${fileName}:`, error);
-            setUploadProgress(prev => ({ ...prev, [fileName]: 'error' }));
-            setSuperdarkWarnings(prev => [...prev, `Failed to upload ${fileName}: ${error}`]);
-          }
+        if (onSuperdarkCreated) {
+          onSuperdarkCreated();
         }
         
-        // Add all successfully uploaded files
-        setTempFiles(prev => [...prev, ...newTempFiles]);
-        setIsUploading(false);
-      };
-
-      // Clean up temp files using service
-      const cleanupTempFiles = async () => {
-        if (!user?.id || tempFiles.length === 0) return;
-        
-        try {
-          await FileUploadService.cleanupTempFiles(tempFiles, user.id);
-          setTempFiles([]);
-        } catch (error) {
-          console.error('Error cleaning up temp files:', error);
-        }
-      };
-
-      // Delete a specific temporary file using service
-      const deleteTempFile = async (tempFile: DarkFileWithMetadata) => {
-        if (!user?.id) return;
-        
-        try {
-          await FileUploadService.deleteTempFile(tempFile, user.id);
-          
-          // Remove from temp files list
-          setTempFiles(prev => prev.filter(tf => tf.path !== tempFile.path));
-          
-          // Remove from selected paths if it was selected
-          setSelectedDarkPaths(prev => prev.filter(path => path !== tempFile.path));
-          
-          // Remove from compatibility warnings
-          setCompatibilityWarnings(prev => {
-            const updated = { ...prev };
-            delete updated[tempFile.name];
-            return updated;
-          });
-          
-          // Remove from superdark warnings
-          setSuperdarkWarnings(prev => prev.filter(w => !w.includes(tempFile.name)));
-          
-        } catch (error) {
-          console.error(`Failed to delete temp file ${tempFile.path}:`, error);
-          setSuperdarkWarnings(prev => [...prev, `Failed to delete ${tempFile.name}: ${error}`]);
-        }
-      };
-
-      const submitSuperdarkJob = async () => {
-        setIsCreatingSuperdark(true);
-        try {
-          if (!user?.id) throw new Error('User not authenticated');
-          if (!superdarkName.trim()) throw new Error('Superdark name is required');
-          if (selectedDarkPaths.length === 0) throw new Error('No dark frames selected');
-    
-          // Prepare the request payload
-          const payload = {
-            name: superdarkName.trim(),
-            selectedDarkPaths,
-            stackingMethod: superdarkStacking,
-            sigmaThreshold: superdarkSigma,
-            userId: user.id,
-            tempFiles: tempFiles.map(tf => tf.path) // Include temp files for cleanup
-          };
-    
-          // Submit job using service
-          const result = await JobService.submitSuperdarkJob(payload, projectId);
-          
-          // Success - clean up temp files and clear the modal
-          await cleanupTempFiles();
-          
-          alert(`Superdark "${superdarkName}" creation started successfully! Job ID: ${result.jobId}\nEstimated time: ${result.estimatedTime}`);
-          
-          // Refresh the superdarks list in the parent component
-          if (onSuperdarkCreated) {
-            onSuperdarkCreated();
-          }
-          
-          setShowSuperdarkModal(false);
-          setSelectedDarkPaths([]);
-          setSuperdarkName('');
-          setSuperdarkWarnings([]);
-          
-        } catch (e) {
-          const err = e as Error;
-          console.error('[DEBUG] Superdark creation error:', err);
-          setSuperdarkWarnings([err.message || 'Failed to create Superdark']);
-        } finally {
-          setIsCreatingSuperdark(false);
-        }
-      };
-
-      // Handle modal close - clean up temp files
-      const handleModalClose = async () => {
-        await cleanupTempFiles();
         setShowSuperdarkModal(false);
-        setSelectedDarkPaths([]);
-        setSuperdarkName('');
-        setSuperdarkWarnings([]);
-      };
+        resetSelection();
+        resetForm();
+      },
+      addWarning
+    );
+  };
 
-      // Combine permanent and temporary files for display
-      const allFiles = [...availableDarks, ...tempFiles];
+  // Handle modal close
+  const onModalClose = async () => {
+    if (!user?.id) return;
+    
+    await handleModalClose(
+      tempFiles,
+      user.id,
+      setShowSuperdarkModal,
+      resetForm,
+      resetSelection
+    );
+  };
 
-      // Get the best matching group for highlighting using service
-      const { bestGroup } = ValidationService.groupByMatchingFrames(allFiles);
-
-    return (
-        <TooltipProvider>
-        <Dialog open={showSuperdarkModal} onOpenChange={handleModalClose}>
+  return (
+    <TooltipProvider>
+      <Dialog open={showSuperdarkModal} onOpenChange={onModalClose}>
         <DialogContent className="max-w-5xl w-full p-8 rounded-2xl shadow-2xl border border-[#232946]/60 bg-[#10131a]" style={{ maxHeight: '80vh', overflow: 'auto' }}>
           <DialogHeader>
             <DialogTitle className="text-2xl">Create Superdark</DialogTitle>
@@ -376,7 +275,7 @@ const CreateSuperdarkUI: React.FC<CreateSuperdarkUIProps> = ({ showSuperdarkModa
                   </tr>
                 </thead>
                 <tbody>
-                  {allFiles.map((file, index) => {
+                  {allFiles.map((file) => {
                     const isInBestGroup = bestGroup.some(bf => bf.path === file.path);
                     const isSelected = selectedDarkPaths.includes(file.path);
                     return (
@@ -473,23 +372,23 @@ const CreateSuperdarkUI: React.FC<CreateSuperdarkUIProps> = ({ showSuperdarkModa
 
           <DialogFooter className="flex justify-between">
             <button
-              onClick={handleModalClose}
+              onClick={onModalClose}
               className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
             >
               Cancel
             </button>
             <button
               onClick={submitSuperdarkJob}
-              disabled={isCreatingSuperdark || selectedDarkPaths.length === 0 || !superdarkName.trim()}
+              disabled={isCreatingSuperdark || !isFormValid(selectedDarkPaths)}
               className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isCreatingSuperdark ? 'Creating...' : 'Create Superdark'}
             </button>
           </DialogFooter>
         </DialogContent>
-        </Dialog>
-        </TooltipProvider>
-    );
+      </Dialog>
+    </TooltipProvider>
+  );
 };
 
 export default CreateSuperdarkUI;

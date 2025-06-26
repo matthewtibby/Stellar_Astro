@@ -78,8 +78,24 @@ export interface JobResult {
   estimatedTime: string;
 }
 
-// Project types (for compatibility)
+// Project types (compatible with actual project type)
 export interface Project {
   id: string;
-  title: string;
+  name: string;
+  title?: string;
+  target?: unknown;
+  telescope?: unknown;
+  camera?: unknown;
+  filters?: unknown[];
+  createdAt: Date;
+  updatedAt: Date;
+  status: 'draft' | 'in_progress' | 'completed' | 'archived' | 'deleted';
+  steps: {
+    id: string;
+    name: string;
+    status: 'pending' | 'in_progress' | 'completed';
+    completedAt?: Date | string;
+  }[];
+  isFavorite?: boolean;
+  tags?: string[];
 }
