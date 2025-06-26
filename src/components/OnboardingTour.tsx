@@ -1,32 +1,15 @@
 "use client"
 
 import * as React from 'react';
-import { AnimatePresence, motion } from "framer-motion"
-import { 
-  ArrowRight, 
-  CheckCircle2, 
-  ChevronLeft, 
-  ChevronRight, 
-  Compass, 
-  Lightbulb, 
-  Sparkles, 
-  X 
-} from "lucide-react"
+import { AnimatePresence } from "framer-motion"
 import { useEffect } from "react"
-import { cn } from "@/lib/utils"
 
 // Import extracted constants and types - Phase 1
 import {
-  DASHBOARD_TOUR_STEPS,
-  CSS_CLASSES,
-  UI_TEXT,
-  TOUR_CONFIG,
   ERROR_MESSAGES,
-  ICON_SIZES,
 } from './onboarding-tour/constants';
 
 import type {
-  DashboardTourStep,
   DashboardTourContextType,
   DashboardTourProviderProps,
   DashboardTourWelcomeDialogProps,
@@ -34,8 +17,6 @@ import type {
 
 // Import extracted services - Phase 2
 import {
-  AnimationService,
-  TourNavigationService,
   TourContentService,
 } from './onboarding-tour/services';
 
@@ -44,9 +25,17 @@ import {
   useTourState,
   useElementPositioning,
   useTourNavigation,
-  useTourContent,
   useAnimationState,
 } from './onboarding-tour/hooks';
+
+// Import extracted UI components - Phase 4
+import {
+  TourOverlay,
+  TourModal,
+  ConfettiAnimation,
+  WelcomeDialog,
+  DemoExample,
+} from './onboarding-tour/components';
 
 // Re-export for backward compatibility
 export { DASHBOARD_TOUR_STEPS } from './onboarding-tour/constants';
@@ -98,125 +87,26 @@ export function DashboardTourProvider({
       }}
     >
       {children}
+      
+      {/* Phase 4: Use extracted TourModal component */}
       <AnimatePresence>
         {navigation.isActive && positioning.elementPosition && (
-          <>
-            <div className={CSS_CLASSES.OVERLAY}>
-              <div className={CSS_CLASSES.MODAL_CONTAINER}>
-                <div className={CSS_CLASSES.MODAL_WRAPPER}>
-                  <motion.div
-                    {...AnimationService.getOverlayAnimation()}
-                  >
-                    <div className={CSS_CLASSES.MODAL_WRAPPER}>
-                      <motion.div
-                        {...AnimationService.getModalAnimation()}
-                        style={{
-                          position: "fixed",
-                          top: positioning.elementPosition.top,
-                          left: positioning.elementPosition.left,
-                          width: positioning.elementPosition.width,
-                          height: positioning.elementPosition.height,
-                        }}
-                      >
-                        <div className={CSS_CLASSES.MODAL_CONTENT}>
-                          <button
-                            className={CSS_CLASSES.CLOSE_BUTTON}
-                            onClick={navigation.endTour}
-                            aria-label={UI_TEXT.ARIA_LABELS.CLOSE_TOUR}
-                          >
-                            <X className={ICON_SIZES.MEDIUM} />
-                          </button>
-                          
-                          <div className={CSS_CLASSES.HEADER_SECTION}>
-                            {TourContentService.getStepIcon(steps[currentStep]) || <Lightbulb className={`${ICON_SIZES.LARGE} text-primary`} />}
-                            <h3 className={CSS_CLASSES.TITLE}>{steps[currentStep]?.title}</h3>
-                          </div>
-                          
-                          <AnimatePresence mode="wait">
-                            <div>
-                              <motion.div
-                                key={`tour-content-${currentStep}`}
-                                {...AnimationService.getContentAnimation()}
-                                style={{ 
-                                  filter: currentStep === -1 ? TOUR_CONFIG.BLUR_FILTERS.INACTIVE : TOUR_CONFIG.BLUR_FILTERS.ACTIVE, 
-                                  minHeight: TOUR_CONFIG.MIN_CONTENT_HEIGHT 
-                                }}
-                              >
-                                {TourContentService.getStepContent(steps[currentStep])}
-                              </motion.div>
-                              
-                              <div className={CSS_CLASSES.CONTENT_SECTION}>
-                                <div className={CSS_CLASSES.PROGRESS_BAR}>
-                                  <div
-                                    className={CSS_CLASSES.PROGRESS_FILL}
-                                    style={{ width: `${TourNavigationService.calculateProgress(currentStep, steps.length)}%` }}
-                                  ></div>
-                                </div>
-                                
-                                <div className={CSS_CLASSES.NAVIGATION_SECTION}>
-                                  <div className={CSS_CLASSES.STEP_INDICATORS}>
-                                    {steps.map((_, index) => (
-                                      <button
-                                        key={index}
-                                        onClick={() => navigation.skipToStep(index)}
-                                        className={cn(
-                                          CSS_CLASSES.STEP_DOT,
-                                          TourNavigationService.getStepStatus(index, currentStep) === 'active'
-                                            ? CSS_CLASSES.STEP_ACTIVE
-                                            : TourNavigationService.getStepStatus(index, currentStep) === 'completed'
-                                              ? CSS_CLASSES.STEP_COMPLETED
-                                              : CSS_CLASSES.STEP_INACTIVE
-                                        )}
-                                        aria-label={`${UI_TEXT.ARIA_LABELS.GO_TO_STEP} ${index + 1}`}
-                                      />
-                                    ))}
-                                  </div>
-                                  
-                                  <div className={CSS_CLASSES.NAVIGATION_BUTTONS}>
-                                    {TourNavigationService.canGoBack(currentStep) && (
-                                      <button
-                                        onClick={navigation.previousStep}
-                                        className={CSS_CLASSES.BACK_BUTTON}
-                                        aria-label={UI_TEXT.ARIA_LABELS.BACK_STEP}
-                                      >
-                                        <ChevronLeft className={`mr-1 ${ICON_SIZES.SMALL}`} />
-                                        {UI_TEXT.NAVIGATION.BACK}
-                                      </button>
-                                    )}
-                                    <button
-                                      onClick={navigation.nextStep}
-                                      className={CSS_CLASSES.NEXT_BUTTON}
-                                      aria-label={TourNavigationService.isLastStep(currentStep, steps.length) ? UI_TEXT.ARIA_LABELS.FINISH_TOUR : UI_TEXT.ARIA_LABELS.NEXT_STEP}
-                                    >
-                                      {TourNavigationService.isLastStep(currentStep, steps.length) ? (
-                                        <>
-                                          {UI_TEXT.NAVIGATION.FINISH}
-                                          <CheckCircle2 className={`ml-1 ${ICON_SIZES.SMALL}`} />
-                                        </>
-                                      ) : (
-                                        <>
-                                          {UI_TEXT.NAVIGATION.NEXT}
-                                          <ChevronRight className={`ml-1 ${ICON_SIZES.SMALL}`} />
-                                        </>
-                                      )}
-                                    </button>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </AnimatePresence>
-                        </div>
-                      </motion.div>
-                    </div>
-                  </motion.div>
-                </div>
-              </div>
-            </div>
-          </>
+          <TourOverlay isVisible={true}>
+            <TourModal
+              currentStep={currentStep}
+              steps={steps}
+              elementPosition={positioning.elementPosition}
+              onNext={navigation.nextStep}
+              onPrevious={navigation.previousStep}
+              onClose={navigation.endTour}
+              onSkipToStep={navigation.skipToStep}
+            />
+          </TourOverlay>
         )}
       </AnimatePresence>
       
-      {showConfetti && <Confetti />}
+      {/* Phase 4: Use extracted ConfettiAnimation component */}
+      <ConfettiAnimation isVisible={showConfetti} />
     </DashboardTourContext.Provider>
   )
 }
@@ -236,63 +126,25 @@ export function DashboardTourWelcomeDialog({ setIsOpen }: DashboardTourWelcomeDi
     return null
   }
 
+  const handleStart = () => {
+    startTour()
+    setIsOpen(false)
+  }
+
   const handleSkip = () => {
     setIsOpen(false)
   }
 
+  // Phase 4: Use extracted WelcomeDialog component
   return (
-    <div className={CSS_CLASSES.WELCOME_CONTAINER}>
-      <div className={CSS_CLASSES.BACKDROP}></div>
-      <div className={CSS_CLASSES.MODAL_CONTAINER}>
-        <div className={CSS_CLASSES.MODAL_WRAPPER}>
-          <motion.div
-            {...AnimationService.getWelcomeDialogAnimation()}
-          >
-            <div className={CSS_CLASSES.WELCOME_MODAL}>
-              <div className={CSS_CLASSES.WELCOME_HEADER}>
-                <motion.div
-                  {...AnimationService.getCompassAnimation()}
-                  style={{ filter: TOUR_CONFIG.BLUR_FILTERS.ACTIVE, position: "absolute", right: 0, top: 0 }}
-                >
-                  <Compass className={`${ICON_SIZES.COMPASS} text-primary`} />
-                </motion.div>
-                <motion.div
-                  {...AnimationService.getSparklesAnimation()}
-                  style={{ position: "absolute", right: 0, top: 0 }}
-                >
-                  <Sparkles className={`${ICON_SIZES.EXTRA_LARGE} text-primary`} />
-                </motion.div>
-              </div>
-              <div className={CSS_CLASSES.WELCOME_TEXT_CENTER}>
-                <h2 className={CSS_CLASSES.WELCOME_TITLE}>{UI_TEXT.WELCOME.TITLE}</h2>
-                <p className={CSS_CLASSES.WELCOME_DESCRIPTION}>
-                  {UI_TEXT.WELCOME.DESCRIPTION}
-                </p>
-                <div className={CSS_CLASSES.WELCOME_BUTTONS}>
-                  <button
-                    onClick={startTour}
-                    className={CSS_CLASSES.START_BUTTON}
-                  >
-                    {UI_TEXT.WELCOME.START_BUTTON}
-                    <ArrowRight className={`ml-2 ${ICON_SIZES.MEDIUM}`} />
-                  </button>
-                  <button
-                    onClick={handleSkip}
-                    className={CSS_CLASSES.SKIP_BUTTON}
-                  >
-                    {UI_TEXT.WELCOME.SKIP_BUTTON}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        </div>
-      </div>
-    </div>
+    <WelcomeDialog 
+      onStart={handleStart}
+      onSkip={handleSkip}
+    />
   )
 }
 
-// Example usage component with sample dashboard tour steps
+// Phase 4: Use extracted DemoExample component
 export function DashboardTourExample() {
   const { setSteps } = useDashboardTour()
 
@@ -303,59 +155,7 @@ export function DashboardTourExample() {
     }
   }, [setSteps])
 
-  return (
-    <div className={CSS_CLASSES.DEMO_CONTAINER}>
-      <div className={CSS_CLASSES.DEMO_CONTENT}>
-        <div className={CSS_CLASSES.DEMO_HEADER}>
-          <h1 className={CSS_CLASSES.DEMO_TITLE}>{UI_TEXT.DEMO.TITLE}</h1>
-          <p className={CSS_CLASSES.DEMO_DESCRIPTION}>
-            {UI_TEXT.DEMO.DESCRIPTION}
-          </p>
-        </div>
-
-        <div className={CSS_CLASSES.DEMO_GRID}>
-          <div id={DASHBOARD_TOUR_STEPS.SIDEBAR_NAVIGATION} className={CSS_CLASSES.DEMO_ITEM}>
-            <div className={CSS_CLASSES.DEMO_ITEM_TEXT}>{UI_TEXT.DEMO.SECTIONS.SIDEBAR_NAVIGATION}</div>
-          </div>
-
-          <div id={DASHBOARD_TOUR_STEPS.ANALYTICS_OVERVIEW} className={CSS_CLASSES.DEMO_ITEM}>
-            <div className={CSS_CLASSES.DEMO_ITEM_TEXT}>{UI_TEXT.DEMO.SECTIONS.ANALYTICS_OVERVIEW}</div>
-          </div>
-
-          <div id={DASHBOARD_TOUR_STEPS.QUICK_ACTIONS} className={CSS_CLASSES.DEMO_ITEM}>
-            <div className={CSS_CLASSES.DEMO_ITEM_TEXT}>{UI_TEXT.DEMO.SECTIONS.QUICK_ACTIONS}</div>
-          </div>
-
-          <div id={DASHBOARD_TOUR_STEPS.RECENT_ACTIVITY} className={CSS_CLASSES.DEMO_ITEM}>
-            <div className={CSS_CLASSES.DEMO_ITEM_TEXT}>{UI_TEXT.DEMO.SECTIONS.RECENT_ACTIVITY}</div>
-          </div>
-
-          <div id={DASHBOARD_TOUR_STEPS.USER_SETTINGS} className={CSS_CLASSES.DEMO_ITEM}>
-            <div className={CSS_CLASSES.DEMO_ITEM_TEXT}>{UI_TEXT.DEMO.SECTIONS.USER_SETTINGS}</div>
-          </div>
-        </div>
-      </div>
-
-      <DashboardTourWelcomeDialog setIsOpen={() => {}} />
-    </div>
-  )
-}
-
-// Simple confetti animation component
-function Confetti() {
-  const particles = AnimationService.generateConfettiParticles(100)
-  
-  return (
-    <div className={CSS_CLASSES.CONFETTI_CONTAINER}>
-      {particles.map((particle) => (
-        <div className={CSS_CLASSES.CONFETTI_PARTICLE} key={particle.id}>
-          <motion.div
-            {...AnimationService.getConfettiAnimation(particle)}
-          ></motion.div>
-        </div>
-      ))}
-    </div>
-  )
+  return <DemoExample />
 }
 
 export default function DashboardTourDemo() {

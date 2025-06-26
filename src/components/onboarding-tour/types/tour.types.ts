@@ -229,4 +229,37 @@ export interface TourConfig {
     active: string;
     inactive: string;
   };
+}
+
+// Additional component prop types for Phase 4
+export interface ConfettiAnimationProps {
+  isVisible: boolean;
+  particleCount?: number;
+  duration?: number;
+}
+
+export interface WelcomeDialogProps {
+  onStart: () => void;
+  onSkip: () => void;
+}
+
+export interface DemoExampleProps {
+  type?: 'telescope' | 'camera' | 'processing' | 'default';
+  className?: string;
 } 
+// Additional component prop types for Phase 4
+export interface ConfettiAnimationProps {
+  isVisible: boolean;
+  particleCount?: number;
+  duration?: number;
+}
+
+export interface WelcomeDialogProps {
+  onStart: () => void;
+  onSkip: () => void;
+}
+
+export interface DemoExampleProps {
+  type?: "telescope" | "camera" | "processing" | "default";
+  className?: string;
+}
