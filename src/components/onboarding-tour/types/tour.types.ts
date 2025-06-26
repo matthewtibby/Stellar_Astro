@@ -263,3 +263,18 @@ export interface DemoExampleProps {
   type?: "telescope" | "camera" | "processing" | "default";
   className?: string;
 }
+
+// Phase 5 optimization types
+export interface TourRendererProps {
+  isActive: boolean;
+  elementPosition: ElementPosition | null;
+  currentStep: number;
+  steps: DashboardTourStep[];
+  navigation: {
+    nextStep: () => void;
+    previousStep: () => void;
+    endTour: () => void;
+    skipToStep: (stepIndex: number) => void;
+  };
+  showConfetti: boolean;
+}

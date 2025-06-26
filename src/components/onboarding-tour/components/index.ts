@@ -7,3 +7,4 @@ export { TourModal } from "./TourModal";
 export { ConfettiAnimation } from "./ConfettiAnimation";
 export { WelcomeDialog } from "./WelcomeDialog";
 export { DemoExample } from "./DemoExample";
+export { TourRenderer } from "./TourRenderer";
