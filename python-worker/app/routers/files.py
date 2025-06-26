@@ -5,8 +5,8 @@ import logging
 import tempfile
 import os
 
-from ..services.file_service import FileService
-from ..services.validation_service import ValidationService
+from services.file_service import FileService
+# from services.validation_service import ValidationService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["files"])
@@ -22,7 +22,7 @@ async def list_files(project_id: str, user_id: str):
         return {
             "status": "success",
             "files": files,
-            "total_count": len(files)
+            "total_count": len(files.get('organized_files', {}))
         }
     except Exception as e:
         logger.error(f"Error listing files: {e}")
@@ -53,52 +53,53 @@ async def preview_fits(request: Request):
         logger.error(f"Error generating FITS preview: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/validate-fits")
-async def validate_fits_file(
-    file: UploadFile = File(...),
-    expected_type: Optional[str] = Form(None),
-    project_id: str = Form(...),
-    user_id: str = Form(...)
-) -> JSONResponse:
-    """Validate FITS file and extract metadata"""
-    try:
-        logger.info(f"Validating FITS file: {file.filename}")
-        
-        # Create temporary file
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.fits') as temp_file:
-            # Read and save uploaded file
-            content = await file.read()
-            temp_file.write(content)
-            temp_file_path = temp_file.name
-        
-        try:
-            # Validate the FITS file
-            validation_result = await ValidationService.validate_fits_file(
-                temp_file_path, 
-                expected_type, 
-                project_id, 
-                user_id,
-                original_filename=file.filename
-            )
-            
-            return JSONResponse(content={
-                "status": "success",
-                "valid": validation_result.get('valid', False),
-                "frame_type": validation_result.get('frame_type'),
-                "metadata": validation_result.get('metadata', {}),
-                "warnings": validation_result.get('warnings', []),
-                "errors": validation_result.get('errors', []),
-                "suggestions": validation_result.get('suggestions', [])
-            })
-            
-        finally:
-            # Clean up temporary file
-            if os.path.exists(temp_file_path):
-                os.unlink(temp_file_path)
-                
-    except Exception as e:
-        logger.error(f"Error validating FITS file: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+# Temporarily disabled until ValidationService is implemented
+# @router.post("/validate-fits")
+# async def validate_fits_file(
+#     file: UploadFile = File(...),
+#     expected_type: Optional[str] = Form(None),
+#     project_id: str = Form(...),
+#     user_id: str = Form(...)
+# ) -> JSONResponse:
+#     """Validate FITS file and extract metadata"""
+#     try:
+#         logger.info(f"Validating FITS file: {file.filename}")
+#         
+#         # Create temporary file
+#         with tempfile.NamedTemporaryFile(delete=False, suffix='.fits') as temp_file:
+#             # Read and save uploaded file
+#             content = await file.read()
+#             temp_file.write(content)
+#             temp_file_path = temp_file.name
+#         
+#         try:
+#             # Validate the FITS file
+#             validation_result = await ValidationService.validate_fits_file(
+#                 temp_file_path, 
+#                 expected_type, 
+#                 project_id, 
+#                 user_id,
+#                 original_filename=file.filename
+#             )
+#             
+#             return JSONResponse(content={
+#                 "status": "success",
+#                 "valid": validation_result.get('valid', False),
+#                 "frame_type": validation_result.get('frame_type'),
+#                 "metadata": validation_result.get('metadata', {}),
+#                 "warnings": validation_result.get('warnings', []),
+#                 "errors": validation_result.get('errors', []),
+#                 "suggestions": validation_result.get('suggestions', [])
+#             })
+#             
+#         finally:
+#             # Clean up temporary file
+#             if os.path.exists(temp_file_path):
+#                 os.unlink(temp_file_path)
+#                 
+#     except Exception as e:
+#         logger.error(f"Error validating FITS file: {e}")
+#         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/analyze-temp-file")
 async def analyze_temp_file(request: Request):

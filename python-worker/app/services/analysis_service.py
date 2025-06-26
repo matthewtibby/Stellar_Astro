@@ -8,10 +8,10 @@ from typing import Dict, Any, Optional, List
 from astropy.io import fits
 import numpy as np
 
-from ..models.requests import HistogramAnalysisRequest, GradientAnalysisRequest
-from ..supabase_io import download_file
-from ..histogram_analysis import analyze_histogram
-from ..gradient_analysis import analyze_gradient
+from models.requests import HistogramAnalysisRequest, GradientAnalysisRequest
+from supabase_io import download_file
+from histogram_analysis import analyze_calibration_frame_histograms, HistogramAnalyzer
+from gradient_analysis import analyze_calibration_frame_gradients
 
 logger = logging.getLogger(__name__)
 
@@ -93,24 +93,13 @@ class AnalysisService:
                 
                 await cls.update_job_progress(job_id, 30)
                 
-                # Analyze histograms
-                frame_results = []
-                for i, local_file in enumerate(local_files):
-                    if await cls._is_job_cancelled(job_id):
-                        logger.info(f"Histogram analysis job {job_id} cancelled")
-                        return
-                    
-                    progress = 30 + int((i / len(local_files)) * 60)
-                    await cls.update_job_progress(job_id, progress)
-                    
-                    result = await cls._analyze_histogram_single(local_file, request.frame_type)
-                    if result:
-                        frame_results.append(result)
+                # Analyze histograms using the correct function
+                result = analyze_calibration_frame_histograms(local_files, request.frame_type)
                 
                 await cls.update_job_progress(job_id, 95)
                 
                 # Generate summary
-                summary = cls._generate_histogram_summary({'frame_results': frame_results})
+                summary = result
                 
                 await cls.update_job_progress(job_id, 100)
                 await cls.insert_job(
@@ -118,7 +107,7 @@ class AnalysisService:
                     status="completed", 
                     result=summary,
                     summary=summary.get('summary', {}),
-                    analysis_results={'frame_results': frame_results}
+                    analysis_results=summary.get('frame_results', [])
                 )
                 
         except Exception as e:
@@ -214,17 +203,28 @@ class AnalysisService:
     async def _analyze_histogram_single(cls, local_file: str, frame_type: Optional[str]) -> Optional[Dict]:
         """Analyze histogram for a single file"""
         try:
-            # Use existing histogram analysis function
-            result = analyze_histogram(local_file, frame_type=frame_type)
+            # Use HistogramAnalyzer for single file analysis
+            analyzer = HistogramAnalyzer()
+            result = analyzer.analyze_frame_histogram(local_file, frame_type=frame_type)
             
             return {
                 'file': os.path.basename(local_file),
                 'frame_type': frame_type or 'auto-detected',
-                'histogram_data': result.get('histogram_data', {}),
-                'statistics': result.get('statistics', {}),
-                'analysis': result.get('analysis', {}),
-                'recommendations': result.get('recommendations', []),
-                'issues': result.get('issues', [])
+                'histogram_data': result.histogram.tolist() if result.histogram is not None else [],
+                'statistics': {
+                    'mean': result.mean,
+                    'median': result.median,
+                    'std': result.std,
+                    'skewness': result.skewness,
+                    'kurtosis': result.kurtosis
+                },
+                'analysis': {
+                    'histogram_score': result.histogram_score,
+                    'distribution_type': result.distribution_type,
+                    'peak_count': result.peak_count
+                },
+                'recommendations': result.recommendations,
+                'issues': result.issues_detected
             }
             
         except Exception as e:
@@ -240,17 +240,16 @@ class AnalysisService:
         """Analyze gradient for a single file"""
         try:
             # Use existing gradient analysis function
-            result = analyze_gradient(local_file, frame_type=frame_type)
+            result = analyze_calibration_frame_gradients(local_file, frame_type=frame_type)
             
             return {
                 'file': os.path.basename(local_file),
                 'frame_type': frame_type or 'auto-detected',
-                'gradient_score': result.get('gradient_score', 0.0),
-                'gradient_direction': result.get('gradient_direction', 'unknown'),
-                'gradient_strength': result.get('gradient_strength', 0.0),
-                'analysis': result.get('analysis', {}),
-                'issues': result.get('issues', []),
-                'recommendations': result.get('recommendations', [])
+                'gradient_score': result.gradient_score,
+                'uniformity_score': result.uniformity_score,
+                'analysis': result.statistics,
+                'issues': result.detected_issues,
+                'recommendations': result.recommendations
             }
             
         except Exception as e:
@@ -283,7 +282,7 @@ class AnalysisService:
         # Count issue types
         issue_counts = {}
         for issue in total_issues:
-            issue_type = issue.get('type', 'unknown')
+            issue_type = issue.get('type', 'unknown') if isinstance(issue, dict) else str(issue)
             issue_counts[issue_type] = issue_counts.get(issue_type, 0) + 1
         
         return {
@@ -296,7 +295,7 @@ class AnalysisService:
             'common_recommendations': list(set(total_recommendations)),
             'summary': {
                 'overall_quality': cls._assess_overall_quality(successful_analyses),
-                'major_issues': [issue for issue in total_issues if issue.get('severity') == 'high'],
+                'major_issues': [issue for issue in total_issues if isinstance(issue, dict) and issue.get('severity') == 'high'],
                 'frame_count': len(successful_analyses)
             }
         }
@@ -326,16 +325,18 @@ class AnalysisService:
         
         issue_counts = {}
         for issue in total_issues:
-            issue_type = issue.get('type', 'unknown')
+            issue_type = issue if isinstance(issue, str) else str(issue)
             issue_counts[issue_type] = issue_counts.get(issue_type, 0) + 1
         
         # Generate overall recommendation
-        if avg_gradient_score > 0.7:
-            overall_recommendation = "Significant gradients detected. Consider flat field correction."
-        elif avg_gradient_score > 0.3:
-            overall_recommendation = "Moderate gradients detected. Monitor for consistency."
+        if avg_gradient_score > 7.0:
+            overall_recommendation = "Excellent uniformity. Frames are well-suited for calibration."
+        elif avg_gradient_score > 5.0:
+            overall_recommendation = "Good uniformity. Minor gradients detected but acceptable."
+        elif avg_gradient_score > 3.0:
+            overall_recommendation = "Moderate gradients detected. Consider flat field correction."
         else:
-            overall_recommendation = "Minimal gradients detected. Frames appear uniform."
+            overall_recommendation = "Significant gradients detected. Review acquisition setup."
         
         return {
             'total_files': len(results),
@@ -354,8 +355,8 @@ class AnalysisService:
             },
             'overall_recommendation': overall_recommendation,
             'summary': {
-                'gradient_severity': 'high' if avg_gradient_score > 0.7 else 'medium' if avg_gradient_score > 0.3 else 'low',
-                'uniformity_assessment': 'poor' if avg_gradient_score > 0.5 else 'good'
+                'gradient_severity': 'low' if avg_gradient_score > 7.0 else 'medium' if avg_gradient_score > 3.0 else 'high',
+                'uniformity_assessment': 'excellent' if avg_gradient_score > 7.0 else 'good' if avg_gradient_score > 5.0 else 'poor'
             }
         }
     

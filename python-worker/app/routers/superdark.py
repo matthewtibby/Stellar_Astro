@@ -2,7 +2,7 @@ from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse
 import logging
 
-from ..services.superdark_service import SuperdarkService
+from services.superdark_service import SuperdarkService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/superdark", tags=["superdark"])

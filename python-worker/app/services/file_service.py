@@ -8,11 +8,12 @@ from typing import Dict, Any, Optional, List
 from astropy.io import fits
 import numpy as np
 
-from ..models.requests import OutlierDetectRequest, FrameConsistencyRequest, TrailDetectRequest
-from ..supabase_io import download_file, list_files, save_fits_metadata, get_fits_metadata
-from ..outlier_rejection import detect_outliers
-from ..frame_consistency import analyze_frame_consistency
-from ..create_trail_fits import detect_trails
+from models.requests import OutlierDetectRequest, FrameConsistencyRequest, TrailDetectRequest
+from supabase_io import download_file, list_files
+from main import save_fits_metadata, get_fits_metadata
+from outlier_rejection import detect_outlier_frames
+from frame_consistency import analyze_frame_consistency
+from trail_detection import detect_trails
 
 logger = logging.getLogger(__name__)
 
@@ -148,7 +149,7 @@ class FileService:
                     return {'success': False, 'error': 'No files downloaded successfully'}
                 
                 # Perform outlier detection
-                outlier_result = detect_outliers(
+                outlier_result = detect_outlier_frames(
                     local_files,
                     sigma_thresh=request.sigma_thresh,
                     frame_type=request.frame_type
@@ -457,5 +458,126 @@ class FileService:
         try:
             return await get_fits_metadata(file_path)
         except Exception as e:
-            logger.error(f"Error getting metadata for {file_path}: {e}")
-            return None 
+            logger.error(f"Error getting file metadata for {file_path}: {e}")
+            return None
+
+    @classmethod
+    async def generate_fits_preview(cls, signed_url: str) -> Dict[str, Any]:
+        """Generate preview for FITS file from signed URL"""
+        try:
+            import requests
+            import tempfile
+            
+            # Download file from signed URL
+            response = requests.get(signed_url)
+            response.raise_for_status()
+            
+            with tempfile.NamedTemporaryFile(suffix='.fits', delete=False) as temp_file:
+                temp_file.write(response.content)
+                temp_file_path = temp_file.name
+            
+            try:
+                with fits.open(temp_file_path) as hdul:
+                    header = hdul[0].header
+                    data = hdul[0].data
+                    
+                    # Extract metadata
+                    metadata = cls._extract_fits_metadata(header)
+                    
+                    # Generate basic statistics
+                    if data is not None:
+                        statistics = {
+                            'mean': float(np.mean(data)),
+                            'median': float(np.median(data)),
+                            'std': float(np.std(data)),
+                            'min': float(np.min(data)),
+                            'max': float(np.max(data)),
+                            'shape': list(data.shape)
+                        }
+                    else:
+                        statistics = {}
+                    
+                    # TODO: Generate actual preview image and upload to storage
+                    preview_url = None
+                    
+                    return {
+                        'preview_url': preview_url,
+                        'metadata': metadata,
+                        'statistics': statistics
+                    }
+                    
+            finally:
+                # Clean up temporary file
+                if os.path.exists(temp_file_path):
+                    os.unlink(temp_file_path)
+                    
+        except Exception as e:
+            logger.error(f"Error generating FITS preview: {e}")
+            return {
+                'preview_url': None,
+                'metadata': {},
+                'statistics': {},
+                'error': str(e)
+            }
+    
+    @classmethod
+    async def analyze_temp_file(cls, temp_path: str) -> Dict[str, Any]:
+        """Analyze a temporary FITS file"""
+        try:
+            if not os.path.exists(temp_path):
+                return {
+                    'analysis': {},
+                    'metadata': {},
+                    'frame_type': 'unknown',
+                    'quality_score': 0,
+                    'error': 'File not found'
+                }
+            
+            with fits.open(temp_path) as hdul:
+                header = hdul[0].header
+                data = hdul[0].data
+                
+                # Extract metadata
+                metadata = cls._extract_fits_metadata(header)
+                
+                # Detect frame type
+                frame_type = cls._detect_frame_type(header, data)
+                
+                # Perform quality checks
+                quality_issues = cls._check_fits_quality(header, data)
+                
+                # Generate basic analysis
+                if data is not None:
+                    analysis = {
+                        'mean': float(np.mean(data)),
+                        'median': float(np.median(data)),
+                        'std': float(np.std(data)),
+                        'min': float(np.min(data)),
+                        'max': float(np.max(data)),
+                        'shape': list(data.shape),
+                        'data_type': str(data.dtype)
+                    }
+                    
+                    # Calculate basic quality score (0-10)
+                    quality_score = 10.0 - min(10.0, len(quality_issues) * 2.0)
+                else:
+                    analysis = {}
+                    quality_score = 0.0
+                
+                return {
+                    'analysis': analysis,
+                    'metadata': metadata,
+                    'frame_type': frame_type,
+                    'quality_score': quality_score,
+                    'quality_issues': quality_issues
+                }
+                
+        except Exception as e:
+            logger.error(f"Error analyzing temp file {temp_path}: {e}")
+            return {
+                'analysis': {},
+                'metadata': {},
+                'frame_type': 'unknown',
+                'quality_score': 0,
+                'error': str(e)
+            } 

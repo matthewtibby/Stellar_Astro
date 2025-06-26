@@ -9,10 +9,10 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Any, Optional, List
 from astropy.io import fits
 
-from ..models.requests import CalibrationJobRequest
-from ..supabase_io import download_file, list_files
-from ..fits_analysis import analyze_fits_headers, infer_frame_type
-from ..calibration_worker import stack_frames
+from models.requests import CalibrationJobRequest
+from supabase_io import download_file, list_files
+from fits_analysis import analyze_fits_headers, infer_frame_type
+from calibration_worker import stack_frames
 
 logger = logging.getLogger(__name__)
 

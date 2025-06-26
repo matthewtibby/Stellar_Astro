@@ -3,8 +3,8 @@ from fastapi.responses import JSONResponse
 import uuid
 import logging
 
-from ..models.requests import HistogramAnalysisRequest, GradientAnalysisRequest
-from ..services.analysis_service import AnalysisService
+from models.requests import HistogramAnalysisRequest, GradientAnalysisRequest
+from services.analysis_service import AnalysisService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["analysis"])

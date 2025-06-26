@@ -19,16 +19,16 @@ import matplotlib.pyplot as plt
 from PIL import Image
 import numpy as np
 import json
-from .db import init_db, get_db
+from db import init_db, get_db
 from contextlib import asynccontextmanager
 import random
 import string
-from .fits_analysis import analyze_fits_headers, detect_camera, KNOWN_CAMERAS
-from .calibration_worker import create_master_frame, save_master_frame, save_master_preview, analyze_frames, recommend_stacking, infer_frame_type
-from .supabase_io import download_file, upload_file
-from .cosmetic_masking import compute_bad_pixel_mask, compute_bad_column_mask, compute_bad_row_mask, apply_masks
-from .patterned_noise_removal import remove_gradients_median, remove_striping_fourier, remove_background_polynomial, detect_pattern_type, apply_combined_correction
-from .histogram_analysis import analyze_calibration_frame_histograms
+from fits_analysis import analyze_fits_headers, detect_camera, KNOWN_CAMERAS
+from calibration_worker import create_master_frame, save_master_frame, save_master_preview, analyze_frames, recommend_stacking, infer_frame_type
+from supabase_io import download_file, upload_file
+from cosmetic_masking import compute_bad_pixel_mask, compute_bad_column_mask, compute_bad_row_mask, apply_masks
+from patterned_noise_removal import remove_gradients_median, remove_striping_fourier, remove_background_polynomial, detect_pattern_type, apply_combined_correction
+from histogram_analysis import analyze_calibration_frame_histograms
 
 async def download_file_with_fallback(bucket: str, remote_path: str, local_path: str, request_info: dict) -> bool:
     """
@@ -73,11 +73,11 @@ from datetime import datetime
 import glob
 from concurrent.futures import ThreadPoolExecutor
 from fastapi import APIRouter
-from .trail_detection import detect_trails
-from .outlier_rejection import detect_outlier_frames
-from .frame_consistency import analyze_frame_consistency, suggest_frame_selection
-from .cosmic_ray_detection import CosmicRayDetector, validate_cosmic_ray_parameters
-from .gradient_analysis import analyze_calibration_frame_gradients, GradientAnalysisResult
+from trail_detection import detect_trails
+from outlier_rejection import detect_outlier_frames
+from frame_consistency import analyze_frame_consistency, suggest_frame_selection
+from cosmic_ray_detection import CosmicRayDetector, validate_cosmic_ray_parameters
+from gradient_analysis import analyze_calibration_frame_gradients, GradientAnalysisResult
 
 logger = logging.getLogger(__name__)
 

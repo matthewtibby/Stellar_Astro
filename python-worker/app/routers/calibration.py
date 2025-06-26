@@ -5,8 +5,8 @@ from typing import Optional
 import uuid
 import logging
 
-from ..models.requests import CalibrationJobRequest, CancelJobRequest
-from ..services.calibration_service import CalibrationService
+from models.requests import CalibrationJobRequest, CancelJobRequest
+from services.calibration_service import CalibrationService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/jobs", tags=["calibration"])

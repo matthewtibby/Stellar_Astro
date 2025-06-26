@@ -7,10 +7,11 @@ import uuid
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 from astropy.io import fits
+import numpy as np
 
-from ..models.requests import CosmicRayDetectionRequest
-from ..supabase_io import download_file
-from ..cosmic_ray_detection import detect_cosmic_rays_lacosmic
+from models.requests import CosmicRayDetectionRequest
+from supabase_io import download_file
+from cosmic_ray_detection import detect_cosmic_rays_simple, CosmicRayDetector
 
 logger = logging.getLogger(__name__)
 
@@ -232,12 +233,12 @@ class CosmicRayService:
     async def _detect_cosmic_rays_single(cls, local_file: str, params: dict, tmpdir: str) -> Optional[Dict]:
         """Detect cosmic rays in a single file"""
         try:
-            method = params.get('method', 'lacosmic')
+            method = params.get('method', 'simple')
             
-            if method == 'lacosmic':
+            if method == 'simple':
+                return cls._run_simple_detection(local_file, params, tmpdir)
+            elif method == 'lacosmic':
                 return cls._run_lacosmic_detection(local_file, params, tmpdir)
-            elif method == 'sigma_clip':
-                return cls._run_sigma_clip_detection(local_file, params, tmpdir)
             else:
                 logger.warning(f"Unknown cosmic ray detection method: {method}")
                 return None
@@ -247,11 +248,42 @@ class CosmicRayService:
             return None
     
     @classmethod
-    def _run_lacosmic_detection(cls, local_file: str, params: dict, tmpdir: str) -> Dict:
-        """Run L.A.Cosmic detection"""
+    def _run_simple_detection(cls, local_file: str, params: dict, tmpdir: str) -> Dict:
+        """Run simple cosmic ray detection"""
         try:
             # Use existing cosmic ray detection function
-            result = detect_cosmic_rays_lacosmic(
+            result = detect_cosmic_rays_simple(
+                local_file,
+                sigma_thresh=params.get('sigma_thresh', 5.0),
+                box_size=params.get('box_size', 11),
+                filter_size=params.get('filter_size', 3)
+            )
+            
+            return {
+                'file': os.path.basename(local_file),
+                'method': 'simple',
+                'cosmic_rays_detected': result.get('cosmic_rays_detected', 0),
+                'cleaned_image_path': result.get('cleaned_image_path'),
+                'mask_path': result.get('mask_path'),
+                'statistics': result.get('statistics', {}),
+                'parameters_used': params
+            }
+            
+        except Exception as e:
+            logger.error(f"Simple detection failed for {local_file}: {e}")
+            return {
+                'file': os.path.basename(local_file),
+                'method': 'simple',
+                'error': str(e)
+            }
+    
+    @classmethod
+    def _run_lacosmic_detection(cls, local_file: str, params: dict, tmpdir: str) -> Dict:
+        """Run L.A.Cosmic detection using CosmicRayDetector"""
+        try:
+            # Use CosmicRayDetector class if available
+            detector = CosmicRayDetector()
+            result = detector.detect_and_clean(
                 local_file,
                 sigma_clip=params.get('sigma_clip', 4.5),
                 sigma_frac=params.get('sigma_frac', 0.3),
@@ -259,9 +291,7 @@ class CosmicRayService:
                 gain=params.get('gain', 1.0),
                 readnoise=params.get('readnoise', 6.5),
                 satlevel=params.get('satlevel', 65535.0),
-                niter=params.get('niter', 4),
-                save_cleaned=params.get('save_cleaned', True),
-                save_masks=params.get('save_masks', True)
+                niter=params.get('niter', 4)
             )
             
             return {
@@ -281,16 +311,6 @@ class CosmicRayService:
                 'method': 'lacosmic',
                 'error': str(e)
             }
-    
-    @classmethod
-    def _run_sigma_clip_detection(cls, local_file: str, params: dict, tmpdir: str) -> Dict:
-        """Run sigma clipping detection"""
-        # TODO: Implement sigma clipping method
-        return {
-            'file': os.path.basename(local_file),
-            'method': 'sigma_clip',
-            'error': 'Sigma clipping method not yet implemented'
-        }
     
     @classmethod
     async def _run_multi_method_detection(cls, local_file: str, request: CosmicRayDetectionRequest, 
@@ -344,28 +364,24 @@ class CosmicRayService:
                 std_dev = float(data.std())
                 median = float(np.median(data))
                 
-                # Adjust sigma_clip based on image noise
-                sigma_clip = 4.5
+                # Adjust sigma_thresh based on image noise
+                sigma_thresh = 5.0
                 if std_dev > 50:
-                    sigma_clip = 5.5  # Higher threshold for noisy images
+                    sigma_thresh = 6.0  # Higher threshold for noisy images
                 elif std_dev < 10:
-                    sigma_clip = 3.5  # Lower threshold for clean images
+                    sigma_thresh = 4.0  # Lower threshold for clean images
                 
                 # Adjust gain from header if available
                 gain = header.get('GAIN', request.gain)
                 readnoise = header.get('RDNOISE', request.readnoise)
                 
                 return {
-                    'sigma_clip': sigma_clip,
-                    'sigma_frac': request.sigma_frac,
-                    'objlim': request.objlim,
+                    'sigma_thresh': sigma_thresh,
+                    'box_size': request.box_size if hasattr(request, 'box_size') else 11,
+                    'filter_size': request.filter_size if hasattr(request, 'filter_size') else 3,
                     'gain': gain,
                     'readnoise': readnoise,
-                    'satlevel': request.satlevel,
-                    'niter': request.niter,
                     'method': request.method,
-                    'save_cleaned': request.save_cleaned,
-                    'save_masks': request.save_masks
                 }
         except Exception as e:
             logger.warning(f"Auto-tuning failed for {local_file}: {e}")
@@ -375,16 +391,12 @@ class CosmicRayService:
     def _get_default_params(cls, request: CosmicRayDetectionRequest) -> dict:
         """Get default parameters from request"""
         return {
-            'sigma_clip': request.sigma_clip,
-            'sigma_frac': request.sigma_frac,
-            'objlim': request.objlim,
-            'gain': request.gain,
-            'readnoise': request.readnoise,
-            'satlevel': request.satlevel,
-            'niter': request.niter,
-            'method': request.method,
-            'save_cleaned': request.save_cleaned,
-            'save_masks': request.save_masks
+            'sigma_thresh': request.sigma_thresh if hasattr(request, 'sigma_thresh') else 5.0,
+            'box_size': request.box_size if hasattr(request, 'box_size') else 11,
+            'filter_size': request.filter_size if hasattr(request, 'filter_size') else 3,
+            'gain': request.gain if hasattr(request, 'gain') else 1.0,
+            'readnoise': request.readnoise if hasattr(request, 'readnoise') else 6.5,
+            'method': request.method if hasattr(request, 'method') else 'simple',
         }
     
     @classmethod
@@ -434,7 +446,7 @@ class CosmicRayService:
         base_summary = cls._generate_cosmic_ray_summary(results)
         
         # Add enhanced metrics
-        if request.analyze_image_quality:
+        if hasattr(request, 'analyze_image_quality') and request.analyze_image_quality:
             quality_metrics = [r.get('image_quality', {}) for r in results if r.get('image_quality')]
             if quality_metrics:
                 base_summary['image_quality_metrics'] = {
@@ -448,27 +460,29 @@ class CosmicRayService:
     def _generate_recommendations(cls, results: List[Dict]) -> Dict:
         """Generate parameter recommendations based on results"""
         if not results:
-            return {'error': 'No results to analyze'}
+            return {'parameter_suggestions': {}, 'general_recommendations': []}
         
-        # Analyze success rates and cosmic ray counts to suggest parameter adjustments
         successful_results = [r for r in results if 'error' not in r]
         
-        if not successful_results:
-            return {'error': 'No successful detections to analyze'}
-        
-        avg_cosmic_rays = sum(r.get('cosmic_rays_detected', 0) for r in successful_results) / len(successful_results)
-        
         recommendations = {
-            'parameter_suggestions': {},
-            'general_advice': []
+            'parameter_suggestions': {
+                'sigma_thresh': 'Consider adjusting sigma threshold based on noise levels',
+                'method': 'Try different detection methods for comparison'
+            },
+            'general_recommendations': [
+                'Review detection results for over/under-detection',
+                'Consider manual inspection of flagged cosmic rays',
+                'Use cleaned images for further processing'
+            ]
         }
         
-        if avg_cosmic_rays > 1000:
-            recommendations['parameter_suggestions']['sigma_clip'] = 'Consider increasing sigma_clip to 5.0+ for very noisy images'
-            recommendations['general_advice'].append('High cosmic ray count detected - verify these are not hot pixels')
-        elif avg_cosmic_rays < 10:
-            recommendations['parameter_suggestions']['sigma_clip'] = 'Consider decreasing sigma_clip to 3.5-4.0 for cleaner detection'
-            recommendations['general_advice'].append('Low cosmic ray count - parameters may be too conservative')
+        # Add specific recommendations based on detection rates
+        avg_detections = sum(r.get('cosmic_rays_detected', 0) for r in successful_results) / max(len(successful_results), 1)
+        
+        if avg_detections > 1000:
+            recommendations['general_recommendations'].append('High cosmic ray count detected - check detection threshold')
+        elif avg_detections < 10:
+            recommendations['general_recommendations'].append('Low cosmic ray count - consider lowering detection threshold')
         
         return recommendations
     

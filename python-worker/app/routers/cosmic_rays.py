@@ -3,8 +3,8 @@ from fastapi.responses import JSONResponse
 import uuid
 import logging
 
-from ..models.requests import CosmicRayDetectionRequest
-from ..services.cosmic_ray_service import CosmicRayService
+from models.requests import CosmicRayDetectionRequest
+from services.cosmic_ray_service import CosmicRayService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/cosmic-rays", tags=["cosmic-rays"])

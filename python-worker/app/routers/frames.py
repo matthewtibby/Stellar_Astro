@@ -2,8 +2,8 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 import logging
 
-from ..models.requests import OutlierDetectRequest, FrameConsistencyRequest
-from ..services.frame_service import FrameService
+from models.requests import OutlierDetectRequest, FrameConsistencyRequest
+from services.frame_service import FrameService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["frames"])

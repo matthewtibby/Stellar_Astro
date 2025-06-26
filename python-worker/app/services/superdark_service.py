@@ -8,8 +8,8 @@ from typing import Dict, Any, Optional, List
 from astropy.io import fits
 import numpy as np
 
-from ..supabase_io import download_file, list_files
-from ..fits_analysis import analyze_fits_headers
+from supabase_io import download_file, list_files
+from fits_analysis import analyze_fits_headers
 
 logger = logging.getLogger(__name__)
 
