@@ -12,13 +12,12 @@ import {
   Sparkles, 
   X 
 } from "lucide-react"
-import { useCallback, useEffect, useState } from "react"
+import { useEffect } from "react"
 import { cn } from "@/lib/utils"
 
 // Import extracted constants and types - Phase 1
 import {
   DASHBOARD_TOUR_STEPS,
-  ANIMATION_CONFIG,
   CSS_CLASSES,
   UI_TEXT,
   TOUR_CONFIG,
@@ -28,7 +27,6 @@ import {
 
 import type {
   DashboardTourStep,
-  ElementPosition,
   DashboardTourContextType,
   DashboardTourProviderProps,
   DashboardTourWelcomeDialogProps,
@@ -36,11 +34,19 @@ import type {
 
 // Import extracted services - Phase 2
 import {
-  PositioningService,
   AnimationService,
   TourNavigationService,
   TourContentService,
 } from './onboarding-tour/services';
+
+// Import extracted hooks - Phase 3
+import {
+  useTourState,
+  useElementPositioning,
+  useTourNavigation,
+  useTourContent,
+  useAnimationState,
+} from './onboarding-tour/hooks';
 
 // Re-export for backward compatibility
 export { DASHBOARD_TOUR_STEPS } from './onboarding-tour/constants';
@@ -53,93 +59,47 @@ export function DashboardTourProvider({
   onComplete,
   isTourCompleted = false,
 }: DashboardTourProviderProps) {
-  const [steps, setSteps] = useState<DashboardTourStep[]>([])
-  const [currentStep, setCurrentStep] = useState(-1)
-  const [elementPosition, setElementPosition] = useState<ElementPosition | null>(null)
-  const [isCompleted, setIsCompleted] = useState(isTourCompleted)
-  const [showConfetti, setShowConfetti] = useState(false)
+  // Phase 3: Use extracted hooks for state management
+  const tourState = useTourState();
+  const { steps, setSteps, currentStep, setCurrentStep, isCompleted, setIsCompleted } = tourState;
+  const { showConfetti, setShowConfetti } = useAnimationState(tourState.showConfetti, tourState.setShowConfetti);
+  
+  // Initialize completed state
+  React.useEffect(() => {
+    setIsCompleted(isTourCompleted);
+  }, [isTourCompleted, setIsCompleted]);
 
-  const updateElementPosition = useCallback(() => {
-    if (currentStep >= 0 && currentStep < steps.length) {
-      const position = PositioningService.getElementPosition(steps[currentStep]?.selectorId ?? "")
-      if (position) {
-        setElementPosition(position)
-      }
-    }
-  }, [currentStep, steps])
-
-  useEffect(() => {
-    updateElementPosition()
-    PositioningService.addEventListeners(updateElementPosition)
-
-    return () => {
-      PositioningService.removeEventListeners(updateElementPosition)
-    }
-  }, [updateElementPosition])
-
-  const nextStep = useCallback(() => {
-    setCurrentStep((prev) => {
-      const nextIndex = TourNavigationService.getNextStepIndex(prev, steps.length)
-      
-      if (TourNavigationService.shouldShowConfetti(prev, steps.length)) {
-        setShowConfetti(true)
-        setTimeout(() => setShowConfetti(false), ANIMATION_CONFIG.CONFETTI.SHOW_DURATION)
-      }
-      
-      return nextIndex
-    })
-
-    if (TourNavigationService.isLastStep(currentStep, steps.length)) {
-      setIsTourCompleted(true)
-      onComplete?.()
-    }
-  }, [steps.length, onComplete, currentStep])
-
-  const previousStep = useCallback(() => {
-    setCurrentStep((prev) => TourNavigationService.getPreviousStepIndex(prev))
-  }, [])
-
-  const skipToStep = useCallback((stepIndex: number) => {
-    if (TourNavigationService.validateStepIndex(stepIndex, steps.length)) {
-      setCurrentStep(stepIndex)
-    }
-  }, [steps.length])
-
-  const endTour = useCallback(() => {
-    setCurrentStep(-1)
-  }, [])
-
-  const startTour = useCallback(() => {
-    if (isTourCompleted) {
-      return
-    }
-    setCurrentStep(0)
-  }, [isTourCompleted])
-
-  const setIsTourCompleted = useCallback((completed: boolean) => {
-    setIsCompleted(completed)
-  }, [])
+  const positioning = useElementPositioning(currentStep, steps);
+  const navigation = useTourNavigation(
+    currentStep,
+    setCurrentStep,
+    steps,
+    isCompleted,
+    setIsCompleted,
+    setShowConfetti,
+    onComplete
+  );
 
   return (
     <DashboardTourContext.Provider
       value={{
         currentStep,
         totalSteps: steps.length,
-        nextStep,
-        previousStep,
-        endTour,
-        isActive: currentStep >= 0,
-        startTour,
+        nextStep: navigation.nextStep,
+        previousStep: navigation.previousStep,
+        endTour: navigation.endTour,
+        isActive: navigation.isActive,
+        startTour: navigation.startTour,
         setSteps,
         steps,
         isTourCompleted: isCompleted,
-        setIsTourCompleted,
-        skipToStep,
+        setIsTourCompleted: setIsCompleted,
+        skipToStep: navigation.skipToStep,
       }}
     >
       {children}
       <AnimatePresence>
-        {currentStep >= 0 && elementPosition && (
+        {navigation.isActive && positioning.elementPosition && (
           <>
             <div className={CSS_CLASSES.OVERLAY}>
               <div className={CSS_CLASSES.MODAL_CONTAINER}>
@@ -152,16 +112,16 @@ export function DashboardTourProvider({
                         {...AnimationService.getModalAnimation()}
                         style={{
                           position: "fixed",
-                          top: elementPosition.top,
-                          left: elementPosition.left,
-                          width: elementPosition.width,
-                          height: elementPosition.height,
+                          top: positioning.elementPosition.top,
+                          left: positioning.elementPosition.left,
+                          width: positioning.elementPosition.width,
+                          height: positioning.elementPosition.height,
                         }}
                       >
                         <div className={CSS_CLASSES.MODAL_CONTENT}>
                           <button
                             className={CSS_CLASSES.CLOSE_BUTTON}
-                            onClick={endTour}
+                            onClick={navigation.endTour}
                             aria-label={UI_TEXT.ARIA_LABELS.CLOSE_TOUR}
                           >
                             <X className={ICON_SIZES.MEDIUM} />
@@ -198,7 +158,7 @@ export function DashboardTourProvider({
                                     {steps.map((_, index) => (
                                       <button
                                         key={index}
-                                        onClick={() => skipToStep(index)}
+                                        onClick={() => navigation.skipToStep(index)}
                                         className={cn(
                                           CSS_CLASSES.STEP_DOT,
                                           TourNavigationService.getStepStatus(index, currentStep) === 'active'
@@ -215,7 +175,7 @@ export function DashboardTourProvider({
                                   <div className={CSS_CLASSES.NAVIGATION_BUTTONS}>
                                     {TourNavigationService.canGoBack(currentStep) && (
                                       <button
-                                        onClick={previousStep}
+                                        onClick={navigation.previousStep}
                                         className={CSS_CLASSES.BACK_BUTTON}
                                         aria-label={UI_TEXT.ARIA_LABELS.BACK_STEP}
                                       >
@@ -224,7 +184,7 @@ export function DashboardTourProvider({
                                       </button>
                                     )}
                                     <button
-                                      onClick={nextStep}
+                                      onClick={navigation.nextStep}
                                       className={CSS_CLASSES.NEXT_BUTTON}
                                       aria-label={TourNavigationService.isLastStep(currentStep, steps.length) ? UI_TEXT.ARIA_LABELS.FINISH_TOUR : UI_TEXT.ARIA_LABELS.NEXT_STEP}
                                     >
@@ -383,7 +343,7 @@ export function DashboardTourExample() {
 
 // Simple confetti animation component
 function Confetti() {
-  const particles = AnimationService.generateConfettiParticles(ANIMATION_CONFIG.CONFETTI.PARTICLE_COUNT)
+  const particles = AnimationService.generateConfettiParticles(100)
   
   return (
     <div className={CSS_CLASSES.CONFETTI_CONTAINER}>
