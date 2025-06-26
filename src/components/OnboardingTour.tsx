@@ -34,23 +34,19 @@ import type {
   DashboardTourWelcomeDialogProps,
 } from './onboarding-tour/types';
 
+// Import extracted services - Phase 2
+import {
+  PositioningService,
+  AnimationService,
+  TourNavigationService,
+  TourContentService,
+} from './onboarding-tour/services';
+
 // Re-export for backward compatibility
 export { DASHBOARD_TOUR_STEPS } from './onboarding-tour/constants';
 export type { DashboardTourStep } from './onboarding-tour/types';
 
 const DashboardTourContext = React.createContext<DashboardTourContextType | null>(null)
-
-function getElementPosition(id: string): ElementPosition | null {
-  const element = document.getElementById(id)
-  if (!element) return null
-  const rect = element.getBoundingClientRect()
-  return {
-    top: rect.top,
-    left: rect.left,
-    width: rect.width,
-    height: rect.height,
-  }
-}
 
 export function DashboardTourProvider({
   children,
@@ -65,7 +61,7 @@ export function DashboardTourProvider({
 
   const updateElementPosition = useCallback(() => {
     if (currentStep >= 0 && currentStep < steps.length) {
-      const position = getElementPosition(steps[currentStep]?.selectorId ?? "")
+      const position = PositioningService.getElementPosition(steps[currentStep]?.selectorId ?? "")
       if (position) {
         setElementPosition(position)
       }
@@ -74,37 +70,37 @@ export function DashboardTourProvider({
 
   useEffect(() => {
     updateElementPosition()
-    window.addEventListener("resize", updateElementPosition)
-    window.addEventListener("scroll", updateElementPosition)
+    PositioningService.addEventListeners(updateElementPosition)
 
     return () => {
-      window.removeEventListener("resize", updateElementPosition)
-      window.removeEventListener("scroll", updateElementPosition)
+      PositioningService.removeEventListeners(updateElementPosition)
     }
   }, [updateElementPosition])
 
   const nextStep = useCallback(() => {
     setCurrentStep((prev) => {
-      if (prev >= steps.length - 1) {
+      const nextIndex = TourNavigationService.getNextStepIndex(prev, steps.length)
+      
+      if (TourNavigationService.shouldShowConfetti(prev, steps.length)) {
         setShowConfetti(true)
         setTimeout(() => setShowConfetti(false), ANIMATION_CONFIG.CONFETTI.SHOW_DURATION)
-        return -1
       }
-      return prev + 1
+      
+      return nextIndex
     })
 
-    if (currentStep === steps.length - 1) {
+    if (TourNavigationService.isLastStep(currentStep, steps.length)) {
       setIsTourCompleted(true)
       onComplete?.()
     }
   }, [steps.length, onComplete, currentStep])
 
   const previousStep = useCallback(() => {
-    setCurrentStep((prev) => (prev > 0 ? prev - 1 : prev))
+    setCurrentStep((prev) => TourNavigationService.getPreviousStepIndex(prev))
   }, [])
 
   const skipToStep = useCallback((stepIndex: number) => {
-    if (stepIndex >= 0 && stepIndex < steps.length) {
+    if (TourNavigationService.validateStepIndex(stepIndex, steps.length)) {
       setCurrentStep(stepIndex)
     }
   }, [steps.length])
@@ -149,15 +145,11 @@ export function DashboardTourProvider({
               <div className={CSS_CLASSES.MODAL_CONTAINER}>
                 <div className={CSS_CLASSES.MODAL_WRAPPER}>
                   <motion.div
-                    initial={ANIMATION_CONFIG.OVERLAY.INITIAL}
-                    animate={ANIMATION_CONFIG.OVERLAY.ANIMATE}
-                    exit={ANIMATION_CONFIG.OVERLAY.EXIT}
+                    {...AnimationService.getOverlayAnimation()}
                   >
                     <div className={CSS_CLASSES.MODAL_WRAPPER}>
                       <motion.div
-                        initial={ANIMATION_CONFIG.MODAL.INITIAL}
-                        animate={ANIMATION_CONFIG.MODAL.ANIMATE}
-                        exit={ANIMATION_CONFIG.MODAL.EXIT}
+                        {...AnimationService.getModalAnimation()}
                         style={{
                           position: "fixed",
                           top: elementPosition.top,
@@ -176,7 +168,7 @@ export function DashboardTourProvider({
                           </button>
                           
                           <div className={CSS_CLASSES.HEADER_SECTION}>
-                            {steps[currentStep]?.icon || <Lightbulb className={`${ICON_SIZES.LARGE} text-primary`} />}
+                            {TourContentService.getStepIcon(steps[currentStep]) || <Lightbulb className={`${ICON_SIZES.LARGE} text-primary`} />}
                             <h3 className={CSS_CLASSES.TITLE}>{steps[currentStep]?.title}</h3>
                           </div>
                           
@@ -184,23 +176,20 @@ export function DashboardTourProvider({
                             <div>
                               <motion.div
                                 key={`tour-content-${currentStep}`}
-                                initial={ANIMATION_CONFIG.CONTENT.INITIAL}
-                                animate={ANIMATION_CONFIG.CONTENT.ANIMATE}
-                                exit={ANIMATION_CONFIG.CONTENT.EXIT}
+                                {...AnimationService.getContentAnimation()}
                                 style={{ 
                                   filter: currentStep === -1 ? TOUR_CONFIG.BLUR_FILTERS.INACTIVE : TOUR_CONFIG.BLUR_FILTERS.ACTIVE, 
                                   minHeight: TOUR_CONFIG.MIN_CONTENT_HEIGHT 
                                 }}
-                                transition={ANIMATION_CONFIG.CONTENT.TRANSITION}
                               >
-                                {steps[currentStep]?.content}
+                                {TourContentService.getStepContent(steps[currentStep])}
                               </motion.div>
                               
                               <div className={CSS_CLASSES.CONTENT_SECTION}>
                                 <div className={CSS_CLASSES.PROGRESS_BAR}>
                                   <div
                                     className={CSS_CLASSES.PROGRESS_FILL}
-                                    style={{ width: `${((currentStep + 1) / steps.length) * 100}%` }}
+                                    style={{ width: `${TourNavigationService.calculateProgress(currentStep, steps.length)}%` }}
                                   ></div>
                                 </div>
                                 
@@ -212,9 +201,9 @@ export function DashboardTourProvider({
                                         onClick={() => skipToStep(index)}
                                         className={cn(
                                           CSS_CLASSES.STEP_DOT,
-                                          index === currentStep 
+                                          TourNavigationService.getStepStatus(index, currentStep) === 'active'
                                             ? CSS_CLASSES.STEP_ACTIVE
-                                            : index < currentStep 
+                                            : TourNavigationService.getStepStatus(index, currentStep) === 'completed'
                                               ? CSS_CLASSES.STEP_COMPLETED
                                               : CSS_CLASSES.STEP_INACTIVE
                                         )}
@@ -224,7 +213,7 @@ export function DashboardTourProvider({
                                   </div>
                                   
                                   <div className={CSS_CLASSES.NAVIGATION_BUTTONS}>
-                                    {currentStep > 0 && (
+                                    {TourNavigationService.canGoBack(currentStep) && (
                                       <button
                                         onClick={previousStep}
                                         className={CSS_CLASSES.BACK_BUTTON}
@@ -237,9 +226,9 @@ export function DashboardTourProvider({
                                     <button
                                       onClick={nextStep}
                                       className={CSS_CLASSES.NEXT_BUTTON}
-                                      aria-label={currentStep === steps.length - 1 ? UI_TEXT.ARIA_LABELS.FINISH_TOUR : UI_TEXT.ARIA_LABELS.NEXT_STEP}
+                                      aria-label={TourNavigationService.isLastStep(currentStep, steps.length) ? UI_TEXT.ARIA_LABELS.FINISH_TOUR : UI_TEXT.ARIA_LABELS.NEXT_STEP}
                                     >
-                                      {currentStep === steps.length - 1 ? (
+                                      {TourNavigationService.isLastStep(currentStep, steps.length) ? (
                                         <>
                                           {UI_TEXT.NAVIGATION.FINISH}
                                           <CheckCircle2 className={`ml-1 ${ICON_SIZES.SMALL}`} />
@@ -297,25 +286,19 @@ export function DashboardTourWelcomeDialog({ setIsOpen }: DashboardTourWelcomeDi
       <div className={CSS_CLASSES.MODAL_CONTAINER}>
         <div className={CSS_CLASSES.MODAL_WRAPPER}>
           <motion.div
-            initial={ANIMATION_CONFIG.WELCOME_DIALOG.INITIAL}
-            animate={ANIMATION_CONFIG.WELCOME_DIALOG.ANIMATE}
-            transition={ANIMATION_CONFIG.WELCOME_DIALOG.TRANSITION}
+            {...AnimationService.getWelcomeDialogAnimation()}
           >
             <div className={CSS_CLASSES.WELCOME_MODAL}>
               <div className={CSS_CLASSES.WELCOME_HEADER}>
                 <motion.div
-                  initial={ANIMATION_CONFIG.COMPASS.INITIAL}
-                  animate={ANIMATION_CONFIG.COMPASS.ANIMATE}
+                  {...AnimationService.getCompassAnimation()}
                   style={{ filter: TOUR_CONFIG.BLUR_FILTERS.ACTIVE, position: "absolute", right: 0, top: 0 }}
-                  transition={ANIMATION_CONFIG.COMPASS.TRANSITION}
                 >
                   <Compass className={`${ICON_SIZES.COMPASS} text-primary`} />
                 </motion.div>
                 <motion.div
-                  initial={ANIMATION_CONFIG.SPARKLES.INITIAL}
-                  animate={ANIMATION_CONFIG.SPARKLES.ANIMATE}
+                  {...AnimationService.getSparklesAnimation()}
                   style={{ position: "absolute", right: 0, top: 0 }}
-                  transition={ANIMATION_CONFIG.SPARKLES.TRANSITION}
                 >
                   <Sparkles className={`${ICON_SIZES.EXTRA_LARGE} text-primary`} />
                 </motion.div>
@@ -354,70 +337,10 @@ export function DashboardTourExample() {
   const { setSteps } = useDashboardTour()
 
   useEffect(() => {
-    setSteps([
-      {
-        title: "Navigation Sidebar",
-        content: (
-          <div className="space-y-2">
-            <p className="text-sm text-muted-foreground">
-              Access all your important sections from here. Click on any icon to navigate to that section.
-            </p>
-          </div>
-        ),
-        selectorId: DASHBOARD_TOUR_STEPS.SIDEBAR_NAVIGATION,
-        position: "right",
-        icon: <Compass className={`${ICON_SIZES.LARGE} text-primary`} />,
-      },
-      {
-        title: "Analytics Overview",
-        content: (
-          <div className="space-y-2">
-            <p className="text-sm text-muted-foreground">
-              Get a quick snapshot of your key metrics and performance indicators. Hover over charts for more details.
-            </p>
-          </div>
-        ),
-        selectorId: DASHBOARD_TOUR_STEPS.ANALYTICS_OVERVIEW,
-        position: "bottom",
-        icon: <Sparkles className={`${ICON_SIZES.LARGE} text-primary`} />,
-      },
-      {
-        title: "Quick Actions",
-        content: (
-          <div className="space-y-2">
-            <p className="text-sm text-muted-foreground">
-              Perform common tasks without navigating away from the dashboard. Try clicking on any action button.
-            </p>
-          </div>
-        ),
-        selectorId: DASHBOARD_TOUR_STEPS.QUICK_ACTIONS,
-        position: "bottom",
-      },
-      {
-        title: "Recent Activity",
-        content: (
-          <div className="space-y-2">
-            <p className="text-sm text-muted-foreground">
-              Stay updated with the latest changes and activities. Click on any item to see more details.
-            </p>
-          </div>
-        ),
-        selectorId: DASHBOARD_TOUR_STEPS.RECENT_ACTIVITY,
-        position: "top",
-      },
-      {
-        title: "User Settings",
-        content: (
-          <div className="space-y-2">
-            <p className="text-sm text-muted-foreground">
-              Customize your experience and manage your account preferences from here.
-            </p>
-          </div>
-        ),
-        selectorId: DASHBOARD_TOUR_STEPS.USER_SETTINGS,
-        position: "left",
-      },
-    ])
+    const defaultSteps = TourContentService.createDefaultSteps()
+    if (TourContentService.validateSteps(defaultSteps)) {
+      setSteps(defaultSteps)
+    }
   }, [setSteps])
 
   return (
@@ -460,19 +383,14 @@ export function DashboardTourExample() {
 
 // Simple confetti animation component
 function Confetti() {
+  const particles = AnimationService.generateConfettiParticles(ANIMATION_CONFIG.CONFETTI.PARTICLE_COUNT)
+  
   return (
     <div className={CSS_CLASSES.CONFETTI_CONTAINER}>
-      {Array.from({ length: ANIMATION_CONFIG.CONFETTI.PARTICLE_COUNT }).map((_, i) => (
-        <div className={CSS_CLASSES.CONFETTI_PARTICLE} key={i}>
+      {particles.map((particle) => (
+        <div className={CSS_CLASSES.CONFETTI_PARTICLE} key={particle.id}>
           <motion.div
-            initial={{ top: "-10%", left: `${Math.random() * 100}%` }}
-            animate={{ top: "100%", left: `${Math.random() * 100}%`, rotate: Math.random() * 360 }}
-            style={{ backgroundColor: `hsl(${Math.random() * 360}, 100%, 50%)`, position: "absolute" }}
-            transition={{
-              duration: Math.random() * ANIMATION_CONFIG.CONFETTI.FALL_DURATION.min + ANIMATION_CONFIG.CONFETTI.FALL_DURATION.max,
-              ease: "easeOut",
-              delay: Math.random() * ANIMATION_CONFIG.CONFETTI.DELAY_MAX,
-            }}
+            {...AnimationService.getConfettiAnimation(particle)}
           ></motion.div>
         </div>
       ))}
