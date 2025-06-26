@@ -1,4 +1,4 @@
-import { FileType } from '@/src/types/store';
+import { FileType } from '../../../types/store';
 
 // File type constants
 export const INITIAL_FILE_TYPES: FileType[] = ['light', 'dark', 'bias', 'flat'];

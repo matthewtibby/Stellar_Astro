@@ -1,4 +1,7 @@
-import { FileType, StorageFile } from '@/src/types/store';
+import { FileType, StorageFile } from '../../../types/store';
+
+// Re-export types for service layer
+export { FileType, StorageFile };
 
 // Main component props
 export interface FileManagementPanelProps {
@@ -13,20 +16,8 @@ export interface ExpandedFiles {
   [key: string]: boolean;
 }
 
-export interface FilesByType extends Record<FileType, StorageFile[]> {
-  'light': StorageFile[];
-  'dark': StorageFile[];
-  'bias': StorageFile[];
-  'flat': StorageFile[];
-  'master-dark': StorageFile[];
-  'master-bias': StorageFile[];
-  'master-flat': StorageFile[];
-  'calibrated': StorageFile[];
-  'stacked': StorageFile[];
-  'aligned': StorageFile[];
-  'pre-processed': StorageFile[];
-  'post-processed': StorageFile[];
-}
+// Update to be compatible with storage utility return type
+export type FilesByType = Record<FileType, StorageFile[]>;
 
 export interface PreviewCache {
   [filePath: string]: string;

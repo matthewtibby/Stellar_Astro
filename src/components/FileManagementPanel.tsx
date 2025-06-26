@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { getFilesByType, getFitsFileUrl, deleteFitsFile } from '@/src/utils/storage';
 import { File, Download, Eye, X, AlertCircle, RefreshCw } from 'lucide-react';
 import { type FileType, type StorageFile } from '@/src/types/store';
 
@@ -14,36 +13,19 @@ import {
 
 import {
   INITIAL_FILE_TYPES,
-  REQUIRED_CALIBRATION_TYPES,
   FILE_TYPE_LABELS,
-  FILE_SIZE_UNITS,
-  FILE_SIZE_THRESHOLD,
-  PREVIEW_SERVICE_URL,
   UI_TEXT,
-  ERROR_MESSAGES,
   CSS_CLASSES
 } from './file-management/constants';
 
-// Utility functions extracted to use constants
-const getFileTypeFromPath = (path: string): FileType | null => {
-  const type = path.split('/')[0] as FileType;
-  return INITIAL_FILE_TYPES.includes(type) ? type : null;
-};
-
-const getFileTypeDisplay = (type: FileType | null): string => {
-  if (!type) return 'Unknown';
-  return type.charAt(0).toUpperCase() + type.slice(1);
-};
-
-const formatFileSize = (bytes: number): string => {
-  if (bytes === 0) return '0 Bytes';
-  const i = Math.floor(Math.log(bytes) / Math.log(FILE_SIZE_THRESHOLD));
-  return parseFloat((bytes / Math.pow(FILE_SIZE_THRESHOLD, i)).toFixed(2)) + ' ' + FILE_SIZE_UNITS[i];
-};
-
-const formatDate = (dateString: string): string => {
-  return new Date(dateString).toLocaleString();
-};
+// Import services - Phase 2
+import {
+  FileOperationsService,
+  PreviewService,
+  CalibrationService,
+  FilterService,
+  UtilityService
+} from './file-management/services';
 
 export default function FileManagementPanel({ 
   projectId, 
@@ -56,20 +38,8 @@ export default function FileManagementPanel({
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [tagFilter, setTagFilter] = useState('');
 
-  const [filesByType, setFilesByType] = useState<FilesByType>({
-    'light': [],
-    'dark': [],
-    'bias': [],
-    'flat': [],
-    'master-dark': [],
-    'master-bias': [],
-    'master-flat': [],
-    'calibrated': [],
-    'stacked': [],
-    'aligned': [],
-    'pre-processed': [],
-    'post-processed': []
-  });
+  // Phase 2: Initialize with empty state, services will populate
+  const [filesByType, setFilesByType] = useState<FilesByType>({} as FilesByType);
   const [loading, setLoading] = useState(false);
   const [showCalibrationWarning, setShowCalibrationWarning] = useState(false);
   const [missingFrameTypes, setMissingFrameTypes] = useState<FileType[]>([]);
@@ -77,11 +47,12 @@ export default function FileManagementPanel({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewCache, setPreviewCache] = useState<PreviewCache>({});
 
+  // Phase 2: Replace with service calls
   const loadFiles = useCallback(async () => {
     if (!projectId) return;
     try {
       setLoading(true);
-      const files = await getFilesByType(projectId);
+      const files = await FileOperationsService.loadFiles(projectId);
       setFilesByType(files);
       setHasLoadedFiles(true);
     } catch (err) {
@@ -97,63 +68,65 @@ export default function FileManagementPanel({
     }
   }, [projectId, loadFiles]);
 
-  const handleRefresh = () => {
-    loadFiles();
-    if (onRefresh) onRefresh();
+  const handleRefresh = async () => {
+    try {
+      const files = await FileOperationsService.refreshFiles(projectId, onRefresh);
+      setFilesByType(files);
+    } catch (err) {
+      console.error('Error refreshing files:', err);
+    }
   };
 
   const handleDownload = async (file: StorageFile) => {
     try {
-      const url = await getFitsFileUrl(file.path);
-      window.open(url, '_blank');
+      await FileOperationsService.downloadFile(file);
     } catch (error) {
-      console.error(ERROR_MESSAGES.DOWNLOAD_ERROR, error);
+      console.error('Download failed:', error);
     }
   };
 
   const handleDeleteFile = async (file: StorageFile) => {
     try {
-      await deleteFitsFile(file.path);
+      await FileOperationsService.deleteFile(file);
       await loadFiles();
       if (onRefresh) onRefresh();
     } catch (error) {
-      console.error(ERROR_MESSAGES.DELETE_ERROR, error);
+      console.error('Delete failed:', error);
     }
   };
 
-  // Filter files by tag
-  const filteredFiles = tagFilter.trim()
-    ? filesByType[activeTab].filter(f => {
-        const tags = Array.isArray((f as unknown as { tags?: unknown }).tags) ? (f as unknown as { tags: string[] }).tags : [];
-        return tags.some((tag: string) => tag.toLowerCase().includes(tagFilter.toLowerCase()));
-      })
-    : filesByType[activeTab];
+  // Phase 2: Use FilterService for filtering
+  const filteredFiles = FilterService.applyFilters(
+    filesByType[activeTab] || [], 
+    tagFilter, 
+    searchTerm
+  );
 
   const handleCalibrationProgress = () => {
-    const missingTypes = REQUIRED_CALIBRATION_TYPES.filter(type => filesByType[type].length === 0);
-
-    if (filesByType['light'].length === 0) {
-      console.error(ERROR_MESSAGES.NO_LIGHT_FRAMES);
+    const result = CalibrationService.handleCalibrationProgress(filesByType);
+    
+    if (result.errorMessage) {
+      console.error(result.errorMessage);
       return;
     }
 
-    if (missingTypes.length > 0) {
-      setMissingFrameTypes(missingTypes);
+    if (!result.canProceed && result.missingTypes.length > 0) {
+      setMissingFrameTypes(result.missingTypes);
       setShowCalibrationWarning(true);
       return;
     }
 
-    console.log('Proceeding to calibration step...');
+    CalibrationService.proceedToCalibration();
   };
 
   const handleConfirmCalibration = () => {
     setShowCalibrationWarning(false);
-    console.log('Proceeding to calibration step despite missing frames...');
+    CalibrationService.proceedDespiteMissingFrames();
   };
 
   useEffect(() => {
     return () => {
-      Object.values(previewCache).forEach(url => URL.revokeObjectURL(url));
+      PreviewService.cleanupAllPreviews(previewCache);
     };
   }, [previewCache]);
 
@@ -163,44 +136,24 @@ export default function FileManagementPanel({
       setPreviewError(null);
       setPreviewUrl(null);
 
-      if (previewCache[file.path]) {
-        setPreviewUrl(previewCache[file.path]);
-        return;
-      }
-
-      const fileUrl = await getFitsFileUrl(file.path);
-      const previewResponse = await fetch(PREVIEW_SERVICE_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(fileUrl),
-      });
-      
-      if (!previewResponse.ok) {
-        const errorText = await previewResponse.text();
-        throw new Error(`${ERROR_MESSAGES.PREVIEW_FAILED} ${errorText}`);
-      }
-      
-      const imageBlob = await previewResponse.blob();
-      const imageUrl = URL.createObjectURL(imageBlob);
-      setPreviewCache(prev => ({ ...prev, [file.path]: imageUrl }));
+      const imageUrl = await PreviewService.getPreviewUrl(file, previewCache);
+      setPreviewCache(prev => PreviewService.updateCache(prev, file.path, imageUrl));
       setPreviewUrl(imageUrl);
     } catch (error) {
-      setPreviewError(error instanceof Error ? error.message : ERROR_MESSAGES.PREVIEW_FAILED);
+      setPreviewError(error instanceof Error ? error.message : 'Preview failed');
     } finally {
       setPreviewLoading(false);
     }
   };
 
   const closePreview = () => {
-    if (previewUrl) {
-      URL.revokeObjectURL(previewUrl);
-      setPreviewUrl(null);
-    }
+    PreviewService.cleanupPreview(previewUrl);
+    setPreviewUrl(null);
   };
 
   const renderFileList = (files: StorageFile[]) => {
     return files.map((file) => {
-      const fileType = getFileTypeFromPath(file.path);
+      const displayInfo = UtilityService.getFileDisplayInfo(file);
       
       return (
         <div key={file.path} className={CSS_CLASSES.FILE_ITEM}>
@@ -208,9 +161,9 @@ export default function FileManagementPanel({
             <div className="flex items-center space-x-3">
               <File className="h-5 w-5 text-gray-400" />
               <div>
-                <p className="text-sm text-white">{file.name}</p>
+                <p className="text-sm text-white">{displayInfo.name}</p>
                 <p className="text-xs text-gray-400">
-                  {formatFileSize(file.size)} • {formatDate(file.created_at)} • {getFileTypeDisplay(fileType)}
+                  {displayInfo.sizeFormatted} • {displayInfo.dateFormatted} • {displayInfo.typeDisplay}
                 </p>
               </div>
             </div>
@@ -252,10 +205,11 @@ export default function FileManagementPanel({
   };
 
   const renderFileTypeDisplay = (type: FileType) => {
-    const files = filesByType[type];
+    const files = filesByType[type] || [];
+    const count = FilterService.getFileCount(files);
     return (
       <span className="text-sm text-gray-400">
-        {files.length} files
+        {count} files
       </span>
     );
   };
@@ -328,7 +282,7 @@ export default function FileManagementPanel({
                 )}
               </div>
 
-              {hasLoadedFiles && filesByType[activeTab].length > 0 && (
+              {hasLoadedFiles && (filesByType[activeTab]?.length > 0) && (
                 <div className="mb-4">
                   <input
                     type="text"
@@ -340,7 +294,7 @@ export default function FileManagementPanel({
                 </div>
               )}
 
-              {hasLoadedFiles && filesByType[activeTab].length === 0 ? (
+              {hasLoadedFiles && (!filesByType[activeTab] || filesByType[activeTab].length === 0) ? (
                 <div className="text-center py-8">
                   <File className="h-12 w-12 text-gray-600 mx-auto mb-3" />
                   <p className="text-gray-400">{UI_TEXT.EMPTY_STATE_TITLE}</p>
