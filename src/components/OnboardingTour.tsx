@@ -13,51 +13,34 @@ import {
   X 
 } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
-
 import { cn } from "@/lib/utils"
 
-// Constants
-export const DASHBOARD_TOUR_STEPS = {
-  SIDEBAR_NAVIGATION: "sidebar-navigation",
-  ANALYTICS_OVERVIEW: "analytics-overview",
-  QUICK_ACTIONS: "quick-actions",
-  RECENT_ACTIVITY: "recent-activity",
-  USER_SETTINGS: "user-settings",
-} as const
+// Import extracted constants and types - Phase 1
+import {
+  DASHBOARD_TOUR_STEPS,
+  ANIMATION_CONFIG,
+  CSS_CLASSES,
+  UI_TEXT,
+  TOUR_CONFIG,
+  ERROR_MESSAGES,
+  ICON_SIZES,
+} from './onboarding-tour/constants';
 
-export interface DashboardTourStep {
-  content: React.ReactNode
-  selectorId: string
-  title: string
-  position?: "top" | "bottom" | "left" | "right"
-  icon?: React.ReactNode
-}
+import type {
+  DashboardTourStep,
+  ElementPosition,
+  DashboardTourContextType,
+  DashboardTourProviderProps,
+  DashboardTourWelcomeDialogProps,
+} from './onboarding-tour/types';
 
-interface DashboardTourContextType {
-  currentStep: number
-  totalSteps: number
-  nextStep: () => void
-  previousStep: () => void
-  endTour: () => void
-  isActive: boolean
-  startTour: () => void
-  setSteps: (steps: DashboardTourStep[]) => void
-  steps: DashboardTourStep[]
-  isTourCompleted: boolean
-  setIsTourCompleted: (completed: boolean) => void
-  skipToStep: (stepIndex: number) => void
-}
-
-interface DashboardTourProviderProps {
-  children: React.ReactNode
-  onComplete?: () => void
-  className?: string
-  isTourCompleted?: boolean
-}
+// Re-export for backward compatibility
+export { DASHBOARD_TOUR_STEPS } from './onboarding-tour/constants';
+export type { DashboardTourStep } from './onboarding-tour/types';
 
 const DashboardTourContext = React.createContext<DashboardTourContextType | null>(null)
 
-function getElementPosition(id: string) {
+function getElementPosition(id: string): ElementPosition | null {
   const element = document.getElementById(id)
   if (!element) return null
   const rect = element.getBoundingClientRect()
@@ -76,12 +59,7 @@ export function DashboardTourProvider({
 }: DashboardTourProviderProps) {
   const [steps, setSteps] = useState<DashboardTourStep[]>([])
   const [currentStep, setCurrentStep] = useState(-1)
-  const [elementPosition, setElementPosition] = useState<{
-    top: number
-    left: number
-    width: number
-    height: number
-  } | null>(null)
+  const [elementPosition, setElementPosition] = useState<ElementPosition | null>(null)
   const [isCompleted, setIsCompleted] = useState(isTourCompleted)
   const [showConfetti, setShowConfetti] = useState(false)
 
@@ -109,7 +87,7 @@ export function DashboardTourProvider({
     setCurrentStep((prev) => {
       if (prev >= steps.length - 1) {
         setShowConfetti(true)
-        setTimeout(() => setShowConfetti(false), 3000)
+        setTimeout(() => setShowConfetti(false), ANIMATION_CONFIG.CONFETTI.SHOW_DURATION)
         return -1
       }
       return prev + 1
@@ -167,19 +145,19 @@ export function DashboardTourProvider({
       <AnimatePresence>
         {currentStep >= 0 && elementPosition && (
           <>
-            <div className="fixed inset-0 z-50 overflow-hidden bg-black/50 backdrop-blur-[2px]">
-              <div className="fixed inset-0 overflow-hidden">
-                <div className="foo">
+            <div className={CSS_CLASSES.OVERLAY}>
+              <div className={CSS_CLASSES.MODAL_CONTAINER}>
+                <div className={CSS_CLASSES.MODAL_WRAPPER}>
                   <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
+                    initial={ANIMATION_CONFIG.OVERLAY.INITIAL}
+                    animate={ANIMATION_CONFIG.OVERLAY.ANIMATE}
+                    exit={ANIMATION_CONFIG.OVERLAY.EXIT}
                   >
-                    <div className="foo">
+                    <div className={CSS_CLASSES.MODAL_WRAPPER}>
                       <motion.div
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.95 }}
+                        initial={ANIMATION_CONFIG.MODAL.INITIAL}
+                        animate={ANIMATION_CONFIG.MODAL.ANIMATE}
+                        exit={ANIMATION_CONFIG.MODAL.EXIT}
                         style={{
                           position: "fixed",
                           top: elementPosition.top,
@@ -188,87 +166,88 @@ export function DashboardTourProvider({
                           height: elementPosition.height,
                         }}
                       >
-                        <div className="bg-background relative rounded-lg border p-5 shadow-lg">
+                        <div className={CSS_CLASSES.MODAL_CONTENT}>
                           <button
-                            className="absolute right-2 top-2"
+                            className={CSS_CLASSES.CLOSE_BUTTON}
                             onClick={endTour}
+                            aria-label={UI_TEXT.ARIA_LABELS.CLOSE_TOUR}
                           >
-                            <X className="h-4 w-4" />
+                            <X className={ICON_SIZES.MEDIUM} />
                           </button>
                           
-                          <div className="mb-4 flex items-center gap-3">
-                            {steps[currentStep]?.icon || <Lightbulb className="h-5 w-5 text-primary" />}
-                            <h3 className="font-semibold">{steps[currentStep]?.title}</h3>
+                          <div className={CSS_CLASSES.HEADER_SECTION}>
+                            {steps[currentStep]?.icon || <Lightbulb className={`${ICON_SIZES.LARGE} text-primary`} />}
+                            <h3 className={CSS_CLASSES.TITLE}>{steps[currentStep]?.title}</h3>
                           </div>
                           
                           <AnimatePresence mode="wait">
                             <div>
                               <motion.div
                                 key={`tour-content-${currentStep}`}
-                                initial={{ opacity: 0, scale: 0.95 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                exit={{ opacity: 0, scale: 0.95 }}
-                                style={{ filter: currentStep === -1 ? "blur(4px)" : "blur(0px)", minHeight: 80 }}
-                                transition={{
-                                  duration: 0.2,
-                                  height: {
-                                    duration: 0.4,
-                                  },
+                                initial={ANIMATION_CONFIG.CONTENT.INITIAL}
+                                animate={ANIMATION_CONFIG.CONTENT.ANIMATE}
+                                exit={ANIMATION_CONFIG.CONTENT.EXIT}
+                                style={{ 
+                                  filter: currentStep === -1 ? TOUR_CONFIG.BLUR_FILTERS.INACTIVE : TOUR_CONFIG.BLUR_FILTERS.ACTIVE, 
+                                  minHeight: TOUR_CONFIG.MIN_CONTENT_HEIGHT 
                                 }}
+                                transition={ANIMATION_CONFIG.CONTENT.TRANSITION}
                               >
                                 {steps[currentStep]?.content}
                               </motion.div>
                               
-                              <div className="mt-5 flex flex-col gap-3">
-                                <div className="h-1 bg-primary rounded-full overflow-hidden">
+                              <div className={CSS_CLASSES.CONTENT_SECTION}>
+                                <div className={CSS_CLASSES.PROGRESS_BAR}>
                                   <div
-                                    className="h-1 bg-primary/50"
+                                    className={CSS_CLASSES.PROGRESS_FILL}
                                     style={{ width: `${((currentStep + 1) / steps.length) * 100}%` }}
                                   ></div>
                                 </div>
                                 
-                                <div className="flex items-center justify-between">
-                                  <div className="flex gap-1">
+                                <div className={CSS_CLASSES.NAVIGATION_SECTION}>
+                                  <div className={CSS_CLASSES.STEP_INDICATORS}>
                                     {steps.map((_, index) => (
                                       <button
                                         key={index}
                                         onClick={() => skipToStep(index)}
                                         className={cn(
-                                          "h-1.5 w-1.5 rounded-full",
+                                          CSS_CLASSES.STEP_DOT,
                                           index === currentStep 
-                                            ? "bg-primary" 
+                                            ? CSS_CLASSES.STEP_ACTIVE
                                             : index < currentStep 
-                                              ? "bg-primary/50" 
-                                              : "bg-muted"
+                                              ? CSS_CLASSES.STEP_COMPLETED
+                                              : CSS_CLASSES.STEP_INACTIVE
                                         )}
-                                        aria-label={`Go to step ${index + 1}`}
+                                        aria-label={`${UI_TEXT.ARIA_LABELS.GO_TO_STEP} ${index + 1}`}
                                       />
                                     ))}
                                   </div>
                                   
-                                  <div className="flex gap-2">
+                                  <div className={CSS_CLASSES.NAVIGATION_BUTTONS}>
                                     {currentStep > 0 && (
                                       <button
                                         onClick={previousStep}
-                                        className="h-8"
+                                        className={CSS_CLASSES.BACK_BUTTON}
+                                        aria-label={UI_TEXT.ARIA_LABELS.BACK_STEP}
                                       >
-                                        <ChevronLeft className="mr-1 h-3 w-3" />
-                                        Back
+                                        <ChevronLeft className={`mr-1 ${ICON_SIZES.SMALL}`} />
+                                        {UI_TEXT.NAVIGATION.BACK}
                                       </button>
                                     )}
                                     <button
                                       onClick={nextStep}
-                                      className="h-8"
+                                      className={CSS_CLASSES.NEXT_BUTTON}
+                                      aria-label={currentStep === steps.length - 1 ? UI_TEXT.ARIA_LABELS.FINISH_TOUR : UI_TEXT.ARIA_LABELS.NEXT_STEP}
                                     >
                                       {currentStep === steps.length - 1 ? (
                                         <>
-                                          Finish
-                                          <CheckCircle2 className="ml-1 h-3 w-3" />
+                                          {UI_TEXT.NAVIGATION.FINISH}
+                                          <CheckCircle2 className={`ml-1 ${ICON_SIZES.SMALL}`} />
                                         </>
                                       ) : (
                                         <>
-                                          Next
-                                          <ChevronRight className="ml-1 h-3 w-3" />
+                                          {UI_TEXT.NAVIGATION.NEXT}
+                                          <ChevronRight className={`ml-1 ${ICON_SIZES.SMALL}`} />
                                         </>
                                       )}
                                     </button>
@@ -296,12 +275,12 @@ export function DashboardTourProvider({
 export function useDashboardTour() {
   const context = React.useContext(DashboardTourContext)
   if (!context) {
-    throw new Error("useDashboardTour must be used within a DashboardTourProvider")
+    throw new Error(ERROR_MESSAGES.HOOK_OUTSIDE_PROVIDER)
   }
   return context
 }
 
-export function DashboardTourWelcomeDialog({ setIsOpen }: { setIsOpen: (isOpen: boolean) => void }) {
+export function DashboardTourWelcomeDialog({ setIsOpen }: DashboardTourWelcomeDialogProps) {
   const { startTour, steps, isTourCompleted } = useDashboardTour()
 
   if (isTourCompleted || steps.length === 0) {
@@ -313,80 +292,52 @@ export function DashboardTourWelcomeDialog({ setIsOpen }: { setIsOpen: (isOpen: 
   }
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/50 backdrop-blur-[2px]"></div>
-      <div className="fixed inset-0 overflow-hidden">
-        <div className="foo">
+    <div className={CSS_CLASSES.WELCOME_CONTAINER}>
+      <div className={CSS_CLASSES.BACKDROP}></div>
+      <div className={CSS_CLASSES.MODAL_CONTAINER}>
+        <div className={CSS_CLASSES.MODAL_WRAPPER}>
           <motion.div
-            initial={{ scale: 0.7, filter: "blur(10px)" }}
-            animate={{
-              scale: 1,
-              filter: "blur(0px)",
-              y: [0, -8, 0],
-            }}
-            transition={{
-              duration: 0.4,
-              ease: "easeOut",
-              y: {
-                duration: 2.5,
-                repeat: Number.POSITIVE_INFINITY,
-                ease: "easeInOut",
-              },
-            }}
+            initial={ANIMATION_CONFIG.WELCOME_DIALOG.INITIAL}
+            animate={ANIMATION_CONFIG.WELCOME_DIALOG.ANIMATE}
+            transition={ANIMATION_CONFIG.WELCOME_DIALOG.TRANSITION}
           >
-            <div className="fixed inset-0 z-[100] rounded-md border-2 border-primary">
-              <div className="relative mb-4">
+            <div className={CSS_CLASSES.WELCOME_MODAL}>
+              <div className={CSS_CLASSES.WELCOME_HEADER}>
                 <motion.div
-                  initial={{ scale: 0.7 }}
-                  animate={{ scale: 1, y: [0, -8, 0] }}
-                  style={{ filter: "blur(0px)", position: "absolute", right: 0, top: 0 }}
-                  transition={{
-                    duration: 0.4,
-                    ease: "easeOut",
-                    y: {
-                      duration: 2.5,
-                      repeat: Number.POSITIVE_INFINITY,
-                      ease: "easeInOut",
-                    },
-                  }}
+                  initial={ANIMATION_CONFIG.COMPASS.INITIAL}
+                  animate={ANIMATION_CONFIG.COMPASS.ANIMATE}
+                  style={{ filter: TOUR_CONFIG.BLUR_FILTERS.ACTIVE, position: "absolute", right: 0, top: 0 }}
+                  transition={ANIMATION_CONFIG.COMPASS.TRANSITION}
                 >
-                  <Compass className="h-24 w-24 text-primary" />
+                  <Compass className={`${ICON_SIZES.COMPASS} text-primary`} />
                 </motion.div>
                 <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1, rotate: [0, 360] }}
+                  initial={ANIMATION_CONFIG.SPARKLES.INITIAL}
+                  animate={ANIMATION_CONFIG.SPARKLES.ANIMATE}
                   style={{ position: "absolute", right: 0, top: 0 }}
-                  transition={{
-                    delay: 0.3,
-                    duration: 0.5,
-                    rotate: {
-                      duration: 20,
-                      repeat: Number.POSITIVE_INFINITY,
-                      ease: "linear",
-                    },
-                  }}
+                  transition={ANIMATION_CONFIG.SPARKLES.TRANSITION}
                 >
-                  <Sparkles className="h-6 w-6 text-primary" />
+                  <Sparkles className={`${ICON_SIZES.EXTRA_LARGE} text-primary`} />
                 </motion.div>
               </div>
-              <div className="text-center">
-                <h2 className="text-2xl font-medium mb-4">Welcome to Your Dashboard</h2>
-                <p className="text-muted-foreground mb-6">
-                  Let&apos;s take a quick tour to help you get familiar with all the features and make the most of your experience.
+              <div className={CSS_CLASSES.WELCOME_TEXT_CENTER}>
+                <h2 className={CSS_CLASSES.WELCOME_TITLE}>{UI_TEXT.WELCOME.TITLE}</h2>
+                <p className={CSS_CLASSES.WELCOME_DESCRIPTION}>
+                  {UI_TEXT.WELCOME.DESCRIPTION}
                 </p>
-                <div className="space-x-2">
+                <div className={CSS_CLASSES.WELCOME_BUTTONS}>
                   <button
                     onClick={startTour}
-                    className="px-4 py-2 bg-primary text-white rounded-md"
+                    className={CSS_CLASSES.START_BUTTON}
                   >
-                    Start Tour
-                    <ArrowRight className="ml-2 h-4 w-4" />
+                    {UI_TEXT.WELCOME.START_BUTTON}
+                    <ArrowRight className={`ml-2 ${ICON_SIZES.MEDIUM}`} />
                   </button>
                   <button
                     onClick={handleSkip}
-                    className="px-4 py-2 bg-muted text-muted-foreground rounded-md"
+                    className={CSS_CLASSES.SKIP_BUTTON}
                   >
-                    Skip for Now
+                    {UI_TEXT.WELCOME.SKIP_BUTTON}
                   </button>
                 </div>
               </div>
@@ -415,7 +366,7 @@ export function DashboardTourExample() {
         ),
         selectorId: DASHBOARD_TOUR_STEPS.SIDEBAR_NAVIGATION,
         position: "right",
-        icon: <Compass className="h-5 w-5 text-primary" />,
+        icon: <Compass className={`${ICON_SIZES.LARGE} text-primary`} />,
       },
       {
         title: "Analytics Overview",
@@ -428,7 +379,7 @@ export function DashboardTourExample() {
         ),
         selectorId: DASHBOARD_TOUR_STEPS.ANALYTICS_OVERVIEW,
         position: "bottom",
-        icon: <Sparkles className="h-5 w-5 text-primary" />,
+        icon: <Sparkles className={`${ICON_SIZES.LARGE} text-primary`} />,
       },
       {
         title: "Quick Actions",
@@ -470,34 +421,34 @@ export function DashboardTourExample() {
   }, [setSteps])
 
   return (
-    <div className="container mx-auto p-10">
-      <div className="space-y-8">
-        <div className="space-y-2">
-          <h1 className="text-3xl font-bold">Dashboard</h1>
-          <p className="text-muted-foreground">
-            Welcome to your dashboard. Here&apos;s an overview of your account.
+    <div className={CSS_CLASSES.DEMO_CONTAINER}>
+      <div className={CSS_CLASSES.DEMO_CONTENT}>
+        <div className={CSS_CLASSES.DEMO_HEADER}>
+          <h1 className={CSS_CLASSES.DEMO_TITLE}>{UI_TEXT.DEMO.TITLE}</h1>
+          <p className={CSS_CLASSES.DEMO_DESCRIPTION}>
+            {UI_TEXT.DEMO.DESCRIPTION}
           </p>
         </div>
 
-        <div className="grid gap-8">
-          <div id={DASHBOARD_TOUR_STEPS.SIDEBAR_NAVIGATION} className="border rounded-lg p-6 bg-muted/30">
-            <div className="text-muted-foreground text-sm">Sidebar Navigation</div>
+        <div className={CSS_CLASSES.DEMO_GRID}>
+          <div id={DASHBOARD_TOUR_STEPS.SIDEBAR_NAVIGATION} className={CSS_CLASSES.DEMO_ITEM}>
+            <div className={CSS_CLASSES.DEMO_ITEM_TEXT}>{UI_TEXT.DEMO.SECTIONS.SIDEBAR_NAVIGATION}</div>
           </div>
 
-          <div id={DASHBOARD_TOUR_STEPS.ANALYTICS_OVERVIEW} className="border rounded-lg p-6 bg-muted/30">
-            <div className="text-muted-foreground text-sm">Analytics Overview</div>
+          <div id={DASHBOARD_TOUR_STEPS.ANALYTICS_OVERVIEW} className={CSS_CLASSES.DEMO_ITEM}>
+            <div className={CSS_CLASSES.DEMO_ITEM_TEXT}>{UI_TEXT.DEMO.SECTIONS.ANALYTICS_OVERVIEW}</div>
           </div>
 
-          <div id={DASHBOARD_TOUR_STEPS.QUICK_ACTIONS} className="border rounded-lg p-6 bg-muted/30">
-            <div className="text-muted-foreground text-sm">Quick Actions</div>
+          <div id={DASHBOARD_TOUR_STEPS.QUICK_ACTIONS} className={CSS_CLASSES.DEMO_ITEM}>
+            <div className={CSS_CLASSES.DEMO_ITEM_TEXT}>{UI_TEXT.DEMO.SECTIONS.QUICK_ACTIONS}</div>
           </div>
 
-          <div id={DASHBOARD_TOUR_STEPS.RECENT_ACTIVITY} className="border rounded-lg p-6 bg-muted/30">
-            <div className="text-muted-foreground text-sm">Recent Activity</div>
+          <div id={DASHBOARD_TOUR_STEPS.RECENT_ACTIVITY} className={CSS_CLASSES.DEMO_ITEM}>
+            <div className={CSS_CLASSES.DEMO_ITEM_TEXT}>{UI_TEXT.DEMO.SECTIONS.RECENT_ACTIVITY}</div>
           </div>
 
-          <div id={DASHBOARD_TOUR_STEPS.USER_SETTINGS} className="border rounded-lg p-6 bg-muted/30">
-            <div className="text-muted-foreground text-sm">User Settings</div>
+          <div id={DASHBOARD_TOUR_STEPS.USER_SETTINGS} className={CSS_CLASSES.DEMO_ITEM}>
+            <div className={CSS_CLASSES.DEMO_ITEM_TEXT}>{UI_TEXT.DEMO.SECTIONS.USER_SETTINGS}</div>
           </div>
         </div>
       </div>
@@ -510,17 +461,17 @@ export function DashboardTourExample() {
 // Simple confetti animation component
 function Confetti() {
   return (
-    <div className="fixed inset-0 pointer-events-none z-[1000] overflow-hidden">
-      {Array.from({ length: 100 }).map((_, i) => (
-        <div className="absolute w-2 h-2 rounded-full" key={i}>
+    <div className={CSS_CLASSES.CONFETTI_CONTAINER}>
+      {Array.from({ length: ANIMATION_CONFIG.CONFETTI.PARTICLE_COUNT }).map((_, i) => (
+        <div className={CSS_CLASSES.CONFETTI_PARTICLE} key={i}>
           <motion.div
             initial={{ top: "-10%", left: `${Math.random() * 100}%` }}
             animate={{ top: "100%", left: `${Math.random() * 100}%`, rotate: Math.random() * 360 }}
             style={{ backgroundColor: `hsl(${Math.random() * 360}, 100%, 50%)`, position: "absolute" }}
             transition={{
-              duration: Math.random() * 2 + 2,
+              duration: Math.random() * ANIMATION_CONFIG.CONFETTI.FALL_DURATION.min + ANIMATION_CONFIG.CONFETTI.FALL_DURATION.max,
               ease: "easeOut",
-              delay: Math.random() * 0.5,
+              delay: Math.random() * ANIMATION_CONFIG.CONFETTI.DELAY_MAX,
             }}
           ></motion.div>
         </div>
