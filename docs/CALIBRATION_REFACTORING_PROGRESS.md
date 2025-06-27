@@ -984,3 +984,50 @@ After this refactor, ProjectCard.tsx will be a clean, focused UI component, with
 
 **Status:**
 - ✅ Refactor complete and merged to main.
+
+---
+
+## 🧩 Planned Modularization: useAnalysisOperations Hook
+
+### Rationale
+The current `useAnalysisOperations` hook is monolithic, combining state, API logic, and UI-facing handlers for outlier, consistency, and histogram analysis. This makes the code harder to maintain, test, and extend. Modularizing this logic will align it with the project's best practices and the modular architecture established in previous refactors.
+
+### Modular Structure
+```
+src/components/calibration/
+  hooks/
+    useAnalysisOperations.ts         # Composes the three hooks below
+    useOutlierAnalysis.ts
+    useConsistencyAnalysis.ts
+    useHistogramAnalysis.ts
+  services/
+    analysisApi.ts                   # All API calls for analysis
+  types/
+    analysis.types.ts                # All interfaces/types for analysis
+  constants/
+    analysisEndpoints.ts             # API endpoint constants
+```
+
+### Refactor Steps
+1. **Extract Types and Constants**
+   - Move all interfaces (e.g., `OutlierResult`, `ConsistencyResult`, `HistogramResult`, `AnalysisState`) to `types/analysis.types.ts`.
+   - Define API endpoints in `constants/analysisEndpoints.ts`.
+2. **Split API Logic**
+   - Create `services/analysisApi.ts` for all analysis-related API calls, with clear error handling and typed responses.
+3. **Modularize State Management**
+   - Create `useOutlierAnalysis`, `useConsistencyAnalysis`, and `useHistogramAnalysis` hooks, each managing its own state and API logic.
+4. **Compose with Parent Hook**
+   - Refactor `useAnalysisOperations` to compose the three hooks and provide a unified interface for the UI.
+5. **General Improvements**
+   - Use environment variables or config for API base URLs.
+   - Centralize error formatting and add JSDoc comments for all public functions and types.
+   - Consider React Query or SWR for advanced data fetching/caching if appropriate.
+
+### Benefits
+- **Separation of Concerns:** API, state, and UI logic are decoupled.
+- **Reusability:** Each analysis type can be used independently or together.
+- **Testability:** Smaller, focused modules are easier to test.
+- **Maintainability:** Adding new analysis types or changing API endpoints is straightforward.
+- **Consistency:** Follows the modular, barrel-import, and best-practice patterns established in previous refactors.
+
+---

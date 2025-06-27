@@ -1,7 +1,7 @@
 // Legacy hooks (keeping for backward compatibility during transition)
 export { useCalibrationState } from './useCalibrationState';
-export { useOutlierDetection } from './useOutlierDetection';
-export { useFrameConsistency } from './useFrameConsistency';
+// export { useOutlierDetection } from './useOutlierDetection'; // Removed
+// export { useFrameConsistency } from './useFrameConsistency'; // Removed
 export { useHistogramAnalysis } from './useHistogramAnalysis';
 export { useUIState } from './useUIState';
 export { useJobManagement } from './useJobManagement';
