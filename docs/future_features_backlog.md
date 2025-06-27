@@ -478,4 +478,39 @@ This enhancement transforms Stellar Astro from a single-method tool to a compreh
 - **Cloud-scale processing** for large imaging sessions
 - **Seamless integration** between detection and correction stages
 
-This feature would establish Stellar Astro as the **only astrophotography platform** offering integrated gradient detection (calibration) and correction (post-processing) in a unified web-based workflow, providing significant competitive advantage over existing desktop solutions. 
+This feature would establish Stellar Astro as the **only astrophotography platform** offering integrated gradient detection (calibration) and correction (post-processing) in a unified web-based workflow, providing significant competitive advantage over existing desktop solutions.
+
+## Storage Utilities: Post-Modularization Optimization & Enhancement Phases
+
+After modularization and error handling, consider these optional future phases for `src/utils/storage.ts` and related modules:
+
+### 1. Performance Optimizations
+- Batching and parallelization for file operations (e.g., uploads/downloads)
+- Caching results of expensive/frequent operations
+- Debouncing/throttling UI-triggered file operations
+
+### 2. Type Safety & API Improvements
+- Stricter types and runtime validation (e.g., with zod/io-ts)
+- Consistent return value shapes for all APIs
+
+### 3. Logging & Monitoring
+- Centralized logging utility with log levels
+- Usage metrics for uploads, downloads, errors, etc.
+
+### 4. Security & Robustness
+- Input validation and sanitization
+- Access control for all file operations
+
+### 5. Testing
+- Unit and integration tests for all modules
+- Mock Supabase/storage APIs for logic testing
+
+### 6. Documentation & Examples
+- JSDoc comments for all exported functions
+- Usage examples in README or code comments
+
+### 7. API Surface Review
+- Barrel exports for easier imports
+- Deprecate/remove legacy or duplicate functions
+
+> These phases are optional and can be prioritized based on project needs (performance, security, maintainability, etc.). 
