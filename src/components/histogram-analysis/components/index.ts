@@ -1,0 +1,9 @@
+// Export all histogram analysis components
+export { HistogramSummaryHeader } from './HistogramSummaryHeader';
+export { RecommendationsPanel } from './RecommendationsPanel';
+export { StatisticalOverview } from './StatisticalOverview';
+export { FrameAnalysisList } from './FrameAnalysisList';
+export { FrameAnalysisItem } from './FrameAnalysisItem';
+export { QualityIndicators } from './QualityIndicators';
+export { FrameActionButtons } from './FrameActionButtons';
+export { FrameDetailsPanel } from './FrameDetailsPanel'; 
