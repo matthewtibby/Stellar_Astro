@@ -1,6 +1,7 @@
 import React from 'react';
 import { MasterType } from '../types/calibration.types';
 import { Star, Moon, BarChart3, Info } from 'lucide-react';
+import type { MasterStats } from '../types/analysis.types';
 
 interface MasterPreviewPanelProps {
   selectedType: MasterType;
@@ -8,8 +9,8 @@ interface MasterPreviewPanelProps {
   previewUrl: string | null;
   superdarkPreviewUrl: string | null;
   selectedSuperdarkPath: string | null;
-  masterStats: any;
-  superdarkStats: any;
+  masterStats: MasterStats | null;
+  superdarkStats: MasterStats | null;
   superdarkStatsLoading: boolean;
   showHistogram: boolean;
   setShowHistogram: (show: boolean | ((prev: boolean) => boolean)) => void;
@@ -207,14 +208,14 @@ export const MasterPreviewPanel: React.FC<MasterPreviewPanelProps> = ({
             <div className="font-semibold text-gray-200 mb-1 text-right">Information</div>
             <div className="flex flex-col gap-0.5 text-right">
               {(() => {
-                const currentStats = isShowingSuperdark ? superdarkStats : masterStats;
-                const stats = currentStats.stats || currentStats;
+                if (isShowingSuperdark ? !superdarkStats || !superdarkStats.stats : !masterStats || !masterStats.stats) return null;
+                const stats = isShowingSuperdark ? superdarkStats!.stats : masterStats!.stats;
                 return (
                   <>
-                    <div><span className="text-gray-400">Max</span> <span className="ml-2 font-mono">{stats.max}</span></div>
-                    <div><span className="text-gray-400">Min</span> <span className="ml-2 font-mono">{stats.min}</span></div>
-                    <div><span className="text-gray-400">Avg</span> <span className="ml-2 font-mono">{stats.mean.toFixed(0)}</span></div>
-                    <div><span className="text-gray-400">Std</span> <span className="ml-2 font-mono">{stats.std.toFixed(0)}</span></div>
+                    <div><span className="text-gray-400">Max</span> <span className="ml-2 font-mono">{stats.max ?? '-'}</span></div>
+                    <div><span className="text-gray-400">Min</span> <span className="ml-2 font-mono">{stats.min ?? '-'}</span></div>
+                    <div><span className="text-gray-400">Avg</span> <span className="ml-2 font-mono">{typeof stats.mean === 'number' ? stats.mean.toFixed(0) : '-'}</span></div>
+                    <div><span className="text-gray-400">Std</span> <span className="ml-2 font-mono">{typeof stats.std === 'number' ? stats.std.toFixed(0) : '-'}</span></div>
                   </>
                 );
               })()}

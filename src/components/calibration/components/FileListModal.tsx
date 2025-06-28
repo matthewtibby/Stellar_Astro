@@ -1,4 +1,5 @@
-import React, { useRef } from 'react';
+import React, { useRef, useEffect } from 'react';
+import ReactDOM from 'react-dom';
 import { XCircle } from 'lucide-react';
 import { FRAME_TYPES } from '../types/calibration.types';
 import type { MasterType } from '../types/calibration.types';
@@ -29,14 +30,26 @@ export const FileListModal: React.FC<FileListModalProps> = ({
 
   if (!isOpen) return null;
 
-  return (
+  // Accessibility: focus modal when opened
+  useEffect(() => {
+    if (isOpen && modalRef.current) {
+      modalRef.current.focus();
+    }
+  }, [isOpen]);
+
+  const modalContent = (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 animate-fade-in">
       <div 
         ref={modalRef} 
         className="bg-[#10131a] rounded-2xl shadow-2xl border border-[#232946]/60 p-8 w-[420px] max-h-[80vh] flex flex-col animate-slide-in"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="file-list-modal-title"
+        tabIndex={-1}
+        onKeyDown={e => { if (e.key === 'Escape') onClose(); }}
       >
         <div className="flex items-center justify-between mb-4">
-          <h4 className="text-lg font-bold text-white">
+          <h4 id="file-list-modal-title" className="text-lg font-bold text-white">
             All {FRAME_TYPES.find(f => f.key === selectedType)?.label} Files
           </h4>
           <button
@@ -79,4 +92,10 @@ export const FileListModal: React.FC<FileListModalProps> = ({
       </div>
     </div>
   );
+
+  // Use React Portal to render modal at document.body
+  if (typeof document !== 'undefined') {
+    return ReactDOM.createPortal(modalContent, document.body);
+  }
+  return null;
 }; 

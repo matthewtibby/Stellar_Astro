@@ -21,3 +21,10 @@ export { useEnhancedCalibrationState } from './useEnhancedCalibrationState';
 
 // Re-export types
 export type { JobStatus } from './useJobManagement';
+
+export { useCalibrationModals } from './useModalManagement';
+export { useFileModal } from './useFileModal';
+export { useSuperdarkModal } from './useSuperdarkModal';
+export { usePresetMenuModal } from './usePresetMenuModal';
+export { useRecommendationDialog } from './useRecommendationDialog';
+export type { RecommendationDialog } from './useRecommendationDialog';

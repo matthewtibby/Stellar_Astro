@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
+import ReactDOM from 'react-dom';
 import { MasterType, TabState } from '../types/calibration.types';
 
 interface PresetManagementModalProps {
@@ -29,6 +30,14 @@ export const PresetManagementModal: React.FC<PresetManagementModalProps> = ({
   triggerRef,
 }) => {
   if (!isOpen) return null;
+
+  // Accessibility: focus modal when opened
+  const modalRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (isOpen && modalRef.current) {
+      modalRef.current.focus();
+    }
+  }, [isOpen]);
 
   const handleSavePreset = () => {
     if (!presetNameInput.trim()) return;
@@ -87,7 +96,7 @@ export const PresetManagementModal: React.FC<PresetManagementModalProps> = ({
   const currentPresets = presets[selectedType] || {};
   const presetNames = Object.keys(currentPresets);
 
-  return (
+  const modalContent = (
     <>
       {/* Backdrop */}
       <div 
@@ -97,12 +106,18 @@ export const PresetManagementModal: React.FC<PresetManagementModalProps> = ({
       
       {/* Modal */}
       <div 
+        ref={modalRef}
         className="bg-white rounded-lg shadow-lg border p-4 w-80"
         style={getPosition()}
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="preset-management-modal-title"
+        tabIndex={-1}
+        onKeyDown={e => { if (e.key === 'Escape') onClose(); }}
       >
         <div className="mb-4">
-          <h3 className="text-lg font-semibold mb-2">Preset Management</h3>
+          <h3 id="preset-management-modal-title" className="text-lg font-semibold mb-2">Preset Management</h3>
           <p className="text-sm text-gray-600">
             Save and load {selectedType} frame settings
           </p>
@@ -188,4 +203,10 @@ export const PresetManagementModal: React.FC<PresetManagementModalProps> = ({
       </div>
     </>
   );
+
+  // Use React Portal to render modal at document.body
+  if (typeof document !== 'undefined') {
+    return ReactDOM.createPortal(modalContent, document.body);
+  }
+  return null;
 }; 

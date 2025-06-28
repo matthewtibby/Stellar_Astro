@@ -1,7 +1,9 @@
 import React from 'react';
+import ReactDOM from 'react-dom';
 import { FileListModal } from './FileListModal';
 import { FrameQualityReport, HistogramAnalysisReport } from '../../ui/missing-components';
-import { MasterType, TabState } from '../types/calibration.types';
+import type { QualityAnalysisResult, HistogramResult, Presets } from '../types/analysis.types';
+import type { MasterType, TabState } from '../types/calibration.types';
 import { PresetManagementModal } from './PresetManagementModal';
 import { SuperdarkCreationModal } from './SuperdarkCreationModal';
 
@@ -27,14 +29,14 @@ interface ModalContainerProps {
   onFileSearchChange: (search: string) => void;
   
   // Quality report props
-  qualityAnalysisResults: any;
+  qualityAnalysisResults: QualityAnalysisResult | null;
   
   // Histogram report props
-  histogramAnalysisResults: any;
+  histogramAnalysisResults: HistogramResult | null;
   
   // Preset modal props
-  presets: { [K in MasterType]: Record<string, any> };
-  setPresets: React.Dispatch<React.SetStateAction<{ [K in MasterType]: Record<string, any> }>>;
+  presets: Presets;
+  setPresets: React.Dispatch<React.SetStateAction<Presets>>;
   tabState: { [K in MasterType]: TabState };
   setTabState: (updater: (prev: { [K in MasterType]: TabState }) => { [K in MasterType]: TabState }) => void;
   presetNameInput: string;
@@ -102,38 +104,64 @@ export const ModalContainer: React.FC<ModalContainerProps> = ({
       
       {/* Frame Quality Report Modal */}
       {showQualityReport && qualityAnalysisResults && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
-          <div className="bg-white rounded-lg p-6 max-w-4xl max-h-[80vh] overflow-auto">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold">Frame Quality Report</h2>
-              <button
-                onClick={() => setShowQualityReport(false)}
-                className="text-gray-500 hover:text-gray-700"
+        typeof document !== 'undefined'
+          ? ReactDOM.createPortal(
+              <div
+                className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="frame-quality-report-title"
+                tabIndex={-1}
+                onKeyDown={e => { if (e.key === 'Escape') setShowQualityReport(false); }}
               >
-                ✕
-              </button>
-            </div>
-            <FrameQualityReport data={qualityAnalysisResults} />
-          </div>
-        </div>
+                <div className="bg-white rounded-lg p-6 max-w-4xl max-h-[80vh] overflow-auto">
+                  <div className="flex justify-between items-center mb-4">
+                    <h2 id="frame-quality-report-title" className="text-xl font-semibold">Frame Quality Report</h2>
+                    <button
+                      onClick={() => setShowQualityReport(false)}
+                      className="text-gray-500 hover:text-gray-700"
+                      aria-label="Close Frame Quality Report"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <FrameQualityReport data={qualityAnalysisResults} />
+                </div>
+              </div>,
+              document.body
+            )
+          : null
       )}
       
       {/* Histogram Analysis Report Modal */}
       {showHistogramReport && histogramAnalysisResults && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
-          <div className="bg-white rounded-lg p-6 max-w-4xl max-h-[80vh] overflow-auto">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold">Histogram Analysis Report</h2>
-              <button
-                onClick={() => setShowHistogramReport(false)}
-                className="text-gray-500 hover:text-gray-700"
+        typeof document !== 'undefined'
+          ? ReactDOM.createPortal(
+              <div
+                className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="histogram-analysis-report-title"
+                tabIndex={-1}
+                onKeyDown={e => { if (e.key === 'Escape') setShowHistogramReport(false); }}
               >
-                ✕
-              </button>
-            </div>
-            <HistogramAnalysisReport data={histogramAnalysisResults} />
-          </div>
-        </div>
+                <div className="bg-white rounded-lg p-6 max-w-4xl max-h-[80vh] overflow-auto">
+                  <div className="flex justify-between items-center mb-4">
+                    <h2 id="histogram-analysis-report-title" className="text-xl font-semibold">Histogram Analysis Report</h2>
+                    <button
+                      onClick={() => setShowHistogramReport(false)}
+                      className="text-gray-500 hover:text-gray-700"
+                      aria-label="Close Histogram Analysis Report"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <HistogramAnalysisReport data={histogramAnalysisResults} />
+                </div>
+              </div>,
+              document.body
+            )
+          : null
       )}
       
       {/* Preset Management Modal */}

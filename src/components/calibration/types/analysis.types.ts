@@ -53,4 +53,38 @@ export interface AnalysisState {
     results: HistogramResult[];
     notification: string | null;
   };
-} 
+}
+
+/**
+ * Quality analysis result for a single frame or overall.
+ * Adjust fields as needed to match your actual data.
+ */
+export interface QualityAnalysisResult {
+  frame?: string;
+  score: number;
+  issues?: string[];
+  recommendation?: string;
+  [key: string]: any;
+}
+
+/**
+ * Master stats for preview panels.
+ */
+export interface MasterStats {
+  score: number;
+  recommendations: string[];
+  stats: {
+    max: number;
+    min: number;
+    mean: number;
+    std: number;
+    [key: string]: number;
+  };
+  [key: string]: any;
+}
+
+/**
+ * Presets type for modal management.
+ */
+import type { MasterType, TabState } from './calibration.types';
+export type Presets = { [K in MasterType]: Record<string, TabState> }; 

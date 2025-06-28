@@ -5,12 +5,13 @@ import { TooltipProvider } from '../components/ui/tooltip';
 
 // Import hooks - Phase 5.5 Final Optimized Architecture
 import {
-  useModalManagement,
+  useCalibrationModals,
   useEnhancedCalibrationState,
   useJobOperations,
   useJobPolling,
   useDataEffects,
-  useLocalState
+  useLocalState,
+  useUIState
 } from './calibration/hooks';
 
 // Import types and utilities
@@ -32,25 +33,56 @@ import {
   ActionButtons
 } from './calibration/components';
 
+/**
+ * CalibrationScaffoldUI
+ *
+ * Main UI scaffold for the calibration workflow. Composes all calibration state, modular modal management, and job operations.
+ *
+ * Modular modal management is handled via useCalibrationModals, which provides state and controls for each modal type.
+ *
+ * Example usage:
+ *   const modals = useCalibrationModals();
+ *   modals.fileModal.openModal();
+ *   modals.superdarkModal.closeModal();
+ *
+ * Props:
+ *   - projectId: string (project identifier)
+ *   - userId: string (user identifier)
+ */
 const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = ({ projectId, userId }) => {
   
   // Phase 5.5 Final Optimized Hook Architecture
   const calibrationState = useEnhancedCalibrationState();
-  const modalManagement = useModalManagement();
+  // --- Modular modal management ---
+  const modals = useCalibrationModals();
   const jobOperations = useJobOperations(projectId);
   const localState = useLocalState();
+  const uiState = useUIState();
 
   // Simple destructuring that works
   const { selectedType, setSelectedType, tabState, setTabState } = calibrationState;
-  const { realFiles, setRealFiles, previewUrls, setPreviewUrls, masterStats } = calibrationState;
+  const { realFiles, setRealFiles, previewUrls, setPreviewUrls } = calibrationState;
   const { showSuccess, previewUrl, previewLoading, superdarkPreviewUrl } = calibrationState;
   const { selectedSuperdarkPath, superdarkStats, superdarkStatsLoading } = calibrationState;
   const { setSuperdarkStats, setSuperdarkStatsLoading, setSuperdarkPreviewUrl } = calibrationState;
   const { previewError } = calibrationState;
 
-  // Modal management
-  const { showFileModal, setShowFileModal, showHistogram, fileSearch, showQualityReport } = modalManagement;
-  const { presetBtnRef } = modalManagement;
+  // Modal state and setters from modular hooks
+  const { fileModal, presetMenuModal } = modals;
+  // Modal management (replace destructuring from old modalManagement)
+  const showFileModal = fileModal.open;
+  const setShowFileModal = fileModal.setOpen;
+  const fileSearch = fileModal.fileSearch;
+  const setFileSearch = fileModal.setFileSearch;
+  const presetBtnRef = presetMenuModal.presetBtnRef;
+  const showPresetMenu = presetMenuModal.open;
+  const setShowPresetMenu = presetMenuModal.setOpen;
+  const presetNameInput = presetMenuModal.presetNameInput;
+  const setPresetNameInput = presetMenuModal.setPresetNameInput;
+  const presetMenuDirection = presetMenuModal.menuDirection;
+
+  // UI modal state
+  const { showHistogram, setShowHistogram, handleBack, handleNextStep } = uiState;
 
   // Job operations
   const { jobStatus, jobId, setJobStatus, setJobProgress } = jobOperations;
@@ -59,8 +91,8 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
   const { 
     qualityAnalysisResults, setQualityAnalysisResults, showHistogramReport, setShowHistogramReport,
     setLastMeta, setLastAutoPopulated,
-    presetNameInput, setPresetNameInput, showPresetMenu, setShowPresetMenu,
-    presetMenuDirection, presets, setPresets,
+    presetNameInput: localPresetNameInput, setPresetNameInput: setLocalPresetNameInput, showPresetMenu: localShowPresetMenu, setShowPresetMenu: setLocalShowPresetMenu,
+    presetMenuDirection: localPresetMenuDirection, presets, setPresets,
     setPreviewLoadings,
     setLaCosmicParams, setAutoPopulated
   } = localState;
@@ -78,7 +110,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
     jobStatus, jobId, projectId, selectedType, setJobProgress, setJobStatus,
     setShowSuccess: () => {}, setPreviewUrls, setPreviewLoadings,
     setPreviewUrl: () => {}, setPreviewLoading: () => {},
-    setQualityAnalysisResults, modalManagement, previewUrls
+    setQualityAnalysisResults, modalManagement: { setShowQualityReport }, previewUrls
   });
 
   // Keyboard accessibility for modal
@@ -94,10 +126,6 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
   // Phase 5.5 - Use utility for status computation
   const getMasterStatusForType = (type: MasterType) => getMasterStatus(type, previewUrls, jobStatus, selectedType);
 
-  // Navigation helpers
-  const handleBack = () => modalManagement.handleBack();
-  const handleNextStep = () => modalManagement.handleNextStep();
-
   return (
     <TooltipProvider>
       <div className="flex flex-col h-full bg-[#0a0d13]/80 rounded-2xl shadow-2xl border border-[#232946]/60 p-6 backdrop-blur-md">
@@ -105,19 +133,19 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
         
         <ModalContainer
           showFileModal={showFileModal}
-          showQualityReport={showQualityReport}
+          showQualityReport={showHistogramReport}
           showHistogramReport={showHistogramReport}
           showPresetMenu={showPresetMenu}
           showSuperdarkModal={false}
-          setShowFileModal={modalManagement.setShowFileModal}
-          setShowQualityReport={modalManagement.setShowQualityReport}
+          setShowFileModal={setShowFileModal}
+          setShowQualityReport={setShowHistogramReport}
           setShowHistogramReport={setShowHistogramReport}
           setShowPresetMenu={setShowPresetMenu}
           setShowSuperdarkModal={() => {}}
           selectedType={selectedType}
           realFiles={realFiles}
           fileSearch={fileSearch}
-          onFileSearchChange={modalManagement.setFileSearch}
+          onFileSearchChange={setFileSearch}
           qualityAnalysisResults={qualityAnalysisResults}
           histogramAnalysisResults={null}
           presets={presets}
@@ -142,7 +170,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
           <CalibrationSettingsPanel
             selectedType={selectedType}
             realFiles={realFiles}
-            onShowFileModal={() => modalManagement.setShowFileModal(true)}
+            onShowFileModal={() => setShowFileModal(true)}
             getMasterStatus={getMasterStatusForType}
             tabState={tabState}
             setTabState={setTabState}
@@ -154,14 +182,14 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
             previewUrl={previewUrl}
             superdarkPreviewUrl={superdarkPreviewUrl}
             selectedSuperdarkPath={selectedSuperdarkPath}
-            masterStats={masterStats}
+            masterStats={null}
             superdarkStats={superdarkStats}
             superdarkStatsLoading={superdarkStatsLoading}
             showHistogram={showHistogram}
-            setShowHistogram={modalManagement.setShowHistogram}
+            setShowHistogram={setShowHistogram}
             qualityAnalysisResults={qualityAnalysisResults}
-            showQualityReport={showQualityReport}
-            setShowQualityReport={modalManagement.setShowQualityReport}
+            showQualityReport={showHistogramReport}
+            setShowQualityReport={setShowHistogramReport}
             previewError={previewError}
             FRAME_TYPES={FRAME_TYPES}
           />
