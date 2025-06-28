@@ -1,6 +1,7 @@
 import { Info, Clock, CheckCircle, Telescope, Camera, Filter } from "lucide-react";
 import { Equipment, ProjectCardProps } from "../types/projectCard.types";
 import React from "react";
+import { format } from 'date-fns';
 
 export function getStatusBadgeVariant(status: ProjectCardProps["status"]): string {
   switch (status) {
@@ -41,5 +42,16 @@ export function getEquipmentIcon(type: Equipment["type"]): React.ReactNode {
 export function formatDate(date: string | Date | undefined | null): string {
   if (!date) return "";
   const d = typeof date === "string" ? new Date(date) : date;
-  return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  return format(d, 'dd MMM yyyy');
+}
+
+export function formatFileSize(bytes: number): string {
+  if (typeof bytes !== 'number' || isNaN(bytes)) return '—';
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${kb.toFixed(1)} KB`;
+  const mb = kb / 1024;
+  if (mb < 1024) return `${mb.toFixed(1)} MB`;
+  const gb = mb / 1024;
+  return `${gb.toFixed(2)} GB`;
 } 

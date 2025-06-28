@@ -28,7 +28,7 @@ import {
 import { getSkyViewThumbnailUrl } from '@/src/lib/client/skyview';
 import Image from 'next/image';
 import { ProjectCardProps } from "./types/projectCard.types";
-import { getStatusBadgeVariant, getStatusLabel, getStatusIcon, getEquipmentIcon, formatDate } from "./utils/projectCardUtils";
+import { getStatusBadgeVariant, getStatusLabel, getStatusIcon, getEquipmentIcon, formatDate, formatFileSize } from "./utils/projectCardUtils";
 import { useProjectCardState } from './hooks/useProjectCardState';
 import { useProjectThumbnail } from './hooks/useProjectThumbnail';
 import ProjectInfoDialog from './ProjectInfoDialog';
@@ -231,7 +231,7 @@ function ProjectCard(props: ProjectCardProps) {
                 </span>
                 <span className="flex items-center gap-1">
                   <FileText className="w-4 h-4 text-blue-300" />
-                  <span className="font-mono">{safeFileSize}</span>
+                  <span className="font-mono">{formatFileSize(typeof fileSize === 'number' ? fileSize : Number(fileSize) || 0)}</span>
                 </span>
               </div>
               <div className="flex gap-2 justify-center w-full">
