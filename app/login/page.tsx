@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useUserStore } from '@/src/store/user';
 import { supabase } from '@/src/lib/supabaseClient';
 import { Eye, EyeOff } from 'lucide-react';
+import Image from 'next/image';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -45,17 +46,12 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 to-slate-900">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(56,189,248,0.15),transparent_50%)]" />
-      <div className="relative flex min-h-screen flex-col justify-center py-12 sm:px-6 lg:px-8">
+      <div className="relative flex min-h-screen flex-col justify-center py-4 sm:px-6 lg:px-8">
         <div className="sm:mx-auto sm:w-full sm:max-w-md">
           <div className="flex justify-center">
-            <div className="relative h-16 w-16">
-              <div className="absolute inset-0 rounded-full bg-gradient-to-r from-primary to-blue-500 animate-pulse"></div>
-              <div className="absolute inset-1 rounded-full bg-black flex items-center justify-center">
-                <span className="text-white text-2xl font-bold">SA</span>
-              </div>
-            </div>
+            <Image src="/logo/logo.png" alt="Stellar Astro Logo" width={128} height={128} className="rounded-full shadow-lg" priority />
           </div>
-          <h2 className="mt-6 text-center text-3xl font-bold tracking-tight text-white">
+          <h2 className="mt-2 text-center text-3xl font-bold tracking-tight text-white">
             Welcome back
           </h2>
           <p className="mt-2 text-center text-sm text-gray-400">

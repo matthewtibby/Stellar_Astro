@@ -2,6 +2,7 @@
 
 import { PricingCard } from '@/components/PricingCard';
 import { CurrencyProvider } from '@/components/CurrencyProvider';
+import Image from 'next/image';
 
 const FREE_FEATURES = [
   'Basic calibration tools',
@@ -34,8 +35,9 @@ export default function PricingPage() {
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(56,189,248,0.15),transparent_50%)]" />
       <CurrencyProvider>
         {/* Hero Section */}
-        <section className="py-24 relative">
-          <div className="container">
+        <section className="py-8 relative">
+          <div className="container flex flex-col items-center">
+            <Image src="/logo/logo.png" alt="Stellar Astro Logo" width={128} height={128} className="rounded-full shadow-lg mb-2" priority />
             <h1 className="text-5xl md:text-6xl font-bold text-center mb-6 bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">
               Simple, Transparent Pricing
             </h1>

@@ -1,346 +1,193 @@
 "use client";
+import React, { useRef, useEffect } from 'react';
+import { useSignUpForm } from './hooks/useSignUpForm';
+import { NameInput } from './components/NameInput';
+import { EmailInput } from './components/EmailInput';
+import { PasswordInput } from './components/PasswordInput';
+import { ConfirmPasswordInput } from './components/ConfirmPasswordInput';
+import { ErrorMessage } from './components/ErrorMessage';
+import Image from 'next/image';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { createBrowserClient, supabaseUrl, supabaseAnonKey } from '@/src/lib/supabase';
-import { Eye, EyeOff } from 'lucide-react';
+function Spinner() {
+  return (
+    <span
+      style={{
+        display: 'inline-block',
+        width: 16,
+        height: 16,
+        border: '2px solid #ccc',
+        borderTop: '2px solid #333',
+        borderRadius: '50%',
+        animation: 'spin 1s linear infinite',
+        marginRight: 8,
+        verticalAlign: 'middle',
+      }}
+      aria-label="Loading"
+    />
+  );
+}
 
-export default function SignUp() {
-  const router = useRouter();
-  const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-    confirmPassword: '',
-  });
-  const [errors, setErrors] = useState<{
-    email?: string;
-    password?: string;
-    confirmPassword?: string;
-  }>({});
-  const [isLoading, setIsLoading] = useState(false);
-  const [passwordStrength, setPasswordStrength] = useState<'weak' | 'medium' | 'strong'>('weak');
-  const [passwordCriteria, setPasswordCriteria] = useState({
-    minLength: false,
-    hasUppercase: false,
-    hasLowercase: false,
-    hasNumber: false,
-    hasSpecial: false,
-  });
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+export default function SignUpPage() {
+  const {
+    firstName,
+    lastName,
+    email,
+    password,
+    confirmPassword,
+    error,
+    setField,
+    handleSubmit,
+    loading,
+    serverError,
+    success,
+  } = useSignUpForm();
 
-  const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
-
-  const validateForm = () => {
-    const newErrors: {
-      email?: string;
-      password?: string;
-      confirmPassword?: string;
-    } = {};
-
-    // Email validation
-    if (!formData.email) {
-      newErrors.email = 'Email is required';
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'Email is invalid';
-    }
-
-    // Password validation
-    if (!formData.password) {
-      newErrors.password = 'Password is required';
-    } else if (formData.password.length < 8) {
-      newErrors.password = 'Password must be at least 8 characters';
-    } else if (!/(?=.*[a-z])/.test(formData.password)) {
-      newErrors.password = 'Password must contain at least one lowercase letter';
-    } else if (!/(?=.*[A-Z])/.test(formData.password)) {
-      newErrors.password = 'Password must contain at least one uppercase letter';
-    } else if (!/(?=.*\d)/.test(formData.password)) {
-      newErrors.password = 'Password must contain at least one number';
-    } else if (!/(?=.*[!@#$%^&*])/.test(formData.password)) {
-      newErrors.password = 'Password must contain at least one special character';
-    }
-
-    // Confirm password validation
-    if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = 'Passwords do not match';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const validatePassword = (pass: string) => {
-    const criteria = {
-      minLength: pass.length >= 8,
-      hasUppercase: /[A-Z]/.test(pass),
-      hasLowercase: /[a-z]/.test(pass),
-      hasNumber: /[0-9]/.test(pass),
-      hasSpecial: /[!@#$%^&*(),.?":{}|<>]/.test(pass),
-    };
-    setPasswordCriteria(criteria);
-
-    const metCriteria = Object.values(criteria).filter(Boolean).length;
-    if (metCriteria <= 2) setPasswordStrength('weak');
-    else if (metCriteria <= 4) setPasswordStrength('medium');
-    else setPasswordStrength('strong');
-  };
+  const firstNameRef = useRef<HTMLInputElement>(null);
+  const lastNameRef = useRef<HTMLInputElement>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
+  const confirmPasswordRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    validatePassword(formData.password);
-  }, [formData.password]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!validateForm()) return;
-
-    setIsLoading(true);
-    try {
-      const { error } = await supabase.auth.signUp({
-        email: formData.email,
-        password: formData.password,
-      });
-
-      if (error) throw error;
-
-      // Store signup data in sessionStorage for the next step
-      if (typeof window !== "undefined") {
-        sessionStorage.setItem('signupData', JSON.stringify({ email: formData.email }));
-      }
-
-      // Redirect to plan selection page
-      router.push('/signup/plan');
-    } catch (error) {
-      setErrors({ email: error instanceof Error ? error.message : 'Signup failed. Please try again.' });
-    } finally {
-      setIsLoading(false);
+    if (error === 'Invalid first name' && firstNameRef.current) {
+      firstNameRef.current.focus();
+    } else if (error === 'Invalid last name' && lastNameRef.current) {
+      lastNameRef.current.focus();
+    } else if (error === 'Invalid email' && emailRef.current) {
+      emailRef.current.focus();
+    } else if (error === 'Password is too weak' && passwordRef.current) {
+      passwordRef.current.focus();
+    } else if (error === 'Passwords do not match' && confirmPasswordRef.current) {
+      confirmPasswordRef.current.focus();
     }
-  };
+  }, [error]);
+
+  // Inline spinner keyframes
+  React.useEffect(() => {
+    const style = document.createElement('style');
+    style.innerHTML = `@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`;
+    document.head.appendChild(style);
+    return () => { document.head.removeChild(style); };
+  }, []);
+
+  const isDisabled = loading || success;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 to-slate-900">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(56,189,248,0.15),transparent_50%)]" />
-      <div className="relative flex min-h-screen flex-col justify-center py-12 sm:px-6 lg:px-8">
-        <div className="sm:mx-auto sm:w-full sm:max-w-md">
-          <div className="flex justify-center">
-            <div className="relative h-16 w-16">
-              <div className="absolute inset-0 rounded-full bg-gradient-to-r from-primary to-blue-500 animate-pulse"></div>
-              <div className="absolute inset-1 rounded-full bg-black flex items-center justify-center">
-                <span className="text-white text-2xl font-bold">SA</span>
-              </div>
-            </div>
-          </div>
-          <h2 className="mt-6 text-center text-3xl font-bold tracking-tight text-white">
-            Create your account
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-400">
-            Join the Stellar Astro community
-          </p>
-        </div>
-
+      <div className="relative flex min-h-screen flex-col items-center py-4 sm:px-6 lg:px-8">
         <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-          <div className="bg-gray-900/50 px-4 py-8 shadow sm:rounded-lg sm:px-10">
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-300">
-                  Email address
-                </label>
-                <div className="mt-2">
-                  <input
-                    id="email"
-                    name="email"
-                    type="email"
-                    required
-                    autoComplete="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className={`block w-full rounded-md bg-black/50 px-3 py-2 text-white border ${
-                      errors.email ? 'border-red-500' : 'border-gray-700'
-                    } placeholder:text-gray-500 focus:border-primary focus:ring-1 focus:ring-primary sm:text-sm`}
-                    placeholder="Enter your email"
-                  />
-                  {errors.email && (
-                    <p className="mt-1 text-sm text-red-500">{errors.email}</p>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <label htmlFor="password" className="block text-sm font-medium text-gray-300">
-                  Password
-                </label>
-                <div className="mt-2 relative">
-                  <input
-                    id="password"
-                    name="password"
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    autoComplete="new-password"
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    className={`block w-full rounded-md bg-black/50 px-3 py-2 text-white border ${
-                      passwordStrength === 'weak'
-                        ? 'border-red-500'
-                        : passwordStrength === 'medium'
-                        ? 'border-yellow-500'
-                        : 'border-green-500'
-                    } placeholder:text-gray-500 focus:border-primary focus:ring-1 focus:ring-primary sm:text-sm`}
-                    placeholder="Create a password"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((v) => !v)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200 focus:outline-none"
-                    tabIndex={-1}
-                    aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  >
-                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                  </button>
-                </div>
-                <div className="mt-2">
-                  <div className="h-1 w-full bg-gray-700 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full ${
-                        passwordStrength === 'weak'
-                          ? 'bg-red-500 w-1/3'
-                          : passwordStrength === 'medium'
-                          ? 'bg-yellow-500 w-2/3'
-                          : 'bg-green-500 w-full'
-                      } transition-all duration-300`}
-                    ></div>
-                  </div>
-                  <ul className="mt-2 space-y-1 text-sm">
-                    <li className={`flex items-center ${passwordCriteria.minLength ? 'text-green-500' : 'text-gray-400'}`}>
-                      <svg className={`h-4 w-4 mr-1 ${passwordCriteria.minLength ? 'text-green-500' : 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                      At least 8 characters
-                    </li>
-                    <li className={`flex items-center ${passwordCriteria.hasUppercase ? 'text-green-500' : 'text-gray-400'}`}>
-                      <svg className={`h-4 w-4 mr-1 ${passwordCriteria.hasUppercase ? 'text-green-500' : 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                      At least 1 uppercase letter
-                    </li>
-                    <li className={`flex items-center ${passwordCriteria.hasLowercase ? 'text-green-500' : 'text-gray-400'}`}>
-                      <svg className={`h-4 w-4 mr-1 ${passwordCriteria.hasLowercase ? 'text-green-500' : 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                      At least 1 lowercase letter
-                    </li>
-                    <li className={`flex items-center ${passwordCriteria.hasNumber ? 'text-green-500' : 'text-gray-400'}`}>
-                      <svg className={`h-4 w-4 mr-1 ${passwordCriteria.hasNumber ? 'text-green-500' : 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                      At least 1 number
-                    </li>
-                    <li className={`flex items-center ${passwordCriteria.hasSpecial ? 'text-green-500' : 'text-gray-400'}`}>
-                      <svg className={`h-4 w-4 mr-1 ${passwordCriteria.hasSpecial ? 'text-green-500' : 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                      At least 1 special character
-                    </li>
-                  </ul>
-                </div>
-              </div>
-
-              <div>
-                <label htmlFor="confirm-password" className="block text-sm font-medium text-gray-300">
-                  Confirm Password
-                </label>
-                <div className="mt-2 relative">
-                  <input
-                    id="confirm-password"
-                    name="confirm-password"
-                    type={showConfirmPassword ? 'text' : 'password'}
-                    required
-                    autoComplete="new-password"
-                    value={formData.confirmPassword}
-                    onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                    className={`block w-full rounded-md bg-black/50 px-3 py-2 text-white border ${
-                      formData.confirmPassword && formData.password !== formData.confirmPassword
-                        ? 'border-red-500'
-                        : formData.confirmPassword && formData.password === formData.confirmPassword
-                        ? 'border-green-500'
-                        : 'border-gray-700'
-                    } placeholder:text-gray-500 focus:border-primary focus:ring-1 focus:ring-primary sm:text-sm`}
-                    placeholder="Confirm your password"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword((v) => !v)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200 focus:outline-none"
-                    tabIndex={-1}
-                    aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
-                  >
-                    {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <button
-                  type="submit"
-                  disabled={
-                    !passwordCriteria.minLength ||
-                    !passwordCriteria.hasUppercase ||
-                    !passwordCriteria.hasLowercase ||
-                    !passwordCriteria.hasNumber ||
-                    !passwordCriteria.hasSpecial ||
-                    formData.password !== formData.confirmPassword
-                  }
-                  className="flex w-full justify-center rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isLoading ? 'Creating account...' : 'Sign up'}
-                </button>
-              </div>
-            </form>
-
+          <div className="relative px-6 py-10 sm:px-10 rounded-2xl bg-gradient-to-br from-purple-800/80 via-indigo-800/70 to-slate-900/60 border border-slate-700 shadow-2xl ring-1 ring-blue-900/40 backdrop-blur-md transition-transform duration-300 hover:scale-[1.025] hover:shadow-blue-500/30 animate-fade-in animate-float">
+            <div className="flex justify-center">
+              <Image src="/logo/logo.png" alt="Stellar Astro Logo" width={128} height={128} className="rounded-full shadow-lg" priority />
+            </div>
+            <h1 className="mt-2 text-center text-3xl font-bold tracking-tight text-white">Sign Up</h1>
+            <p className="mt-2 text-center text-sm text-gray-400">Create your Stellar Astro account</p>
             <div className="mt-6">
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-gray-700"></div>
+              {success ? (
+                <div className="flex flex-col items-center justify-center py-8 animate-fade-in">
+                  <svg className="w-16 h-16 text-green-400 mb-4 animate-bounce" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                  <div className="text-green-400 text-lg font-semibold mb-2">Signup successful!</div>
+                  <div className="text-gray-300 text-sm mb-2">Redirecting to login...</div>
+                  {/* Confetti animation placeholder (add real confetti if desired) */}
                 </div>
-                <div className="relative flex justify-center text-sm">
-                  <span className="bg-gray-900/50 px-2 text-gray-400">Or continue with</span>
-                </div>
-              </div>
-
-              <div className="mt-6">
-                <button
-                  type="button"
-                  className="flex w-full items-center justify-center gap-3 rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-600"
-                >
-                  <svg className="h-5 w-5" aria-hidden="true" viewBox="0 0 24 24">
-                    <path
-                      d="M12.0003 4.75C13.7703 4.75 15.3553 5.36002 16.6053 6.54998L20.0303 3.125C17.9502 1.19 15.2353 0 12.0003 0C7.31028 0 3.25527 2.69 1.28027 6.60998L5.27028 9.70498C6.21525 6.86002 8.87028 4.75 12.0003 4.75Z"
-                      fill="#EA4335"
+              ) : (
+                <>
+                  {/* Social signup buttons */}
+                  <div className="flex flex-col gap-3 mb-6">
+                    <button type="button" className="flex items-center justify-center gap-2 w-full rounded-lg bg-white/10 border border-slate-600 text-white font-semibold py-2 shadow hover:bg-white/20 transition">
+                      <svg width="20" height="20" viewBox="0 0 48 48" className="inline-block"><g><circle fill="#4285F4" cx="24" cy="24" r="24"/><path fill="#fff" d="M34.6 24.2c0-.7-.1-1.4-.2-2H24v4.1h6c-.3 1.5-1.3 2.7-2.7 3.5v2.9h4.4c2.6-2.4 4.1-5.9 4.1-9.5z"/><path fill="#fff" d="M24 36c2.7 0 5-0.9 6.7-2.4l-4.4-2.9c-1.2.8-2.7 1.3-4.3 1.3-3.3 0-6-2.2-7-5.2h-4.5v3.2C13.7 33.7 18.5 36 24 36z"/><path fill="#fff" d="M17 27.8c-.3-.8-.5-1.7-.5-2.8s.2-2 .5-2.8v-3.2h-4.5C11.2 21.1 12 23.4 13.7 25.2l3.3-2.4z"/><path fill="#fff" d="M24 16.7c1.5 0 2.8.5 3.8 1.4l2.8-2.8C29 13.5 26.7 12.5 24 12.5c-5.5 0-10.3 2.3-13.3 6.1l4.5 3.2c1-3 3.7-5.2 7-5.2z"/></g></svg>
+                      Sign up with Google
+                    </button>
+                  </div>
+                  <div className="flex items-center mb-6">
+                    <div className="flex-grow border-t border-slate-700" />
+                    <span className="mx-4 text-gray-400 text-xs">or</span>
+                    <div className="flex-grow border-t border-slate-700" />
+                  </div>
+                  <form
+                    onSubmit={handleSubmit}
+                    aria-busy={loading || success}
+                    role="form"
+                  >
+                    <NameInput
+                      label="First Name"
+                      name="firstName"
+                      value={firstName}
+                      onChange={e => setField('firstName', e.target.value)}
+                      required
+                      error={error === 'Invalid first name' ? error : undefined}
+                      disabled={isDisabled}
+                      autoFocus={!!(error === 'Invalid first name')}
+                      ref={firstNameRef}
                     />
-                    <path
-                      d="M23.49 12.275C23.49 11.49 23.415 10.73 23.3 10H12V14.51H18.47C18.18 15.99 17.34 17.25 16.08 18.1L19.945 21.1C22.2 19.01 23.49 15.92 23.49 12.275Z"
-                      fill="#4285F4"
+                    <NameInput
+                      label="Last Name"
+                      name="lastName"
+                      value={lastName}
+                      onChange={e => setField('lastName', e.target.value)}
+                      required
+                      error={error === 'Invalid last name' ? error : undefined}
+                      disabled={isDisabled}
+                      autoFocus={!!(error === 'Invalid last name') && !error}
+                      ref={lastNameRef}
                     />
-                    <path
-                      d="M5.26498 14.2949C5.02498 13.5699 4.88501 12.7999 4.88501 11.9999C4.88501 11.1999 5.01998 10.4299 5.26498 9.7049L1.27498 6.60986C0.464979 8.22986 0 10.0599 0 11.9999C0 13.9399 0.464979 15.7699 1.27498 17.3899L5.26498 14.2949Z"
-                      fill="#FBBC05"
+                    <EmailInput
+                      value={email}
+                      onChange={e => setField('email', e.target.value)}
+                      required
+                      error={error === 'Invalid email' ? error : undefined}
+                      disabled={isDisabled}
+                      autoFocus={!!(error === 'Invalid email') && !error}
+                      ref={emailRef}
                     />
-                    <path
-                      d="M12.0004 24C15.2354 24 17.9504 22.935 19.9454 21.095L16.0804 18.095C15.0054 18.82 13.6204 19.245 12.0004 19.245C8.87043 19.245 6.21543 17.135 5.27043 14.29L1.28043 17.385C3.25543 21.31 7.31043 24 12.0004 24Z"
-                      fill="#34A853"
+                    <PasswordInput
+                      value={password}
+                      onChange={e => setField('password', e.target.value)}
+                      required
+                      error={error === 'Password is too weak' ? error : undefined}
+                      disabled={isDisabled}
+                      autoFocus={!!(error === 'Password is too weak') && !error}
+                      ref={passwordRef}
                     />
-                  </svg>
-                  <span>Continue with Google</span>
-                </button>
-              </div>
+                    <ConfirmPasswordInput
+                      value={confirmPassword}
+                      onChange={e => setField('confirmPassword', e.target.value)}
+                      required
+                      error={error === 'Passwords do not match' ? error : undefined}
+                      disabled={isDisabled}
+                      autoFocus={!!(error === 'Passwords do not match') && !error}
+                      ref={confirmPasswordRef}
+                    />
+                    <div className="flex items-center mb-4 mt-2">
+                      <input id="terms" name="terms" type="checkbox" required className="h-4 w-4 rounded border-gray-600 bg-gray-800 text-blue-600 focus:ring-blue-500" />
+                      <label htmlFor="terms" className="ml-2 block text-xs text-gray-300">
+                        I agree to the <a href="/terms" className="underline hover:text-blue-400">Terms</a> and <a href="/privacy" className="underline hover:text-blue-400">Privacy Policy</a>
+                      </label>
+                    </div>
+                    {/* Show any other error */}
+                    <ErrorMessage error={
+                      error && !['Invalid email', 'Password is too weak', 'Passwords do not match'].includes(error)
+                        ? error
+                        : undefined
+                    } />
+                    {/* Show server error */}
+                    {serverError && (
+                      <div aria-live="polite" style={{ color: 'red', marginBottom: 8 }}>{serverError}</div>
+                    )}
+                    <button type="submit" disabled={isDisabled} className="flex w-full justify-center rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50 disabled:cursor-not-allowed mt-4" aria-label="Sign up">
+                      {loading && <Spinner />}
+                      {loading ? 'Signing up...' : 'Sign Up'}
+                    </button>
+                  </form>
+                  <div className="mt-6 text-center text-sm text-gray-400">
+                    Already have an account?{' '}
+                    <a href="/login" className="font-semibold text-blue-400 hover:underline">Log in</a>
+                  </div>
+                </>
+              )}
             </div>
           </div>
-
-          <p className="mt-8 text-center text-sm text-gray-400">
-            Already have an account?{' '}
-            <Link href="/login" className="font-semibold text-primary hover:text-primary/80">
-              Sign in
-            </Link>
-          </p>
         </div>
       </div>
     </div>
