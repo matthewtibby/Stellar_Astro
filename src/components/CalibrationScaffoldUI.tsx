@@ -110,7 +110,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
     jobStatus, jobId, projectId, selectedType, setJobProgress, setJobStatus,
     setShowSuccess: () => {}, setPreviewUrls, setPreviewLoadings,
     setPreviewUrl: () => {}, setPreviewLoading: () => {},
-    setQualityAnalysisResults, modalManagement: { setShowQualityReport }, previewUrls
+    setQualityAnalysisResults, modalManagement: { setShowQualityReport: setShowHistogramReport }, previewUrls
   });
 
   // Keyboard accessibility for modal

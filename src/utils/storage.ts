@@ -27,3 +27,4 @@ const checkSupabase = () => {
 // Removed duplicate implementation of getFitsPreviewUrl; use the imported version from storage.files.ts
 
 export type { StorageFile } from '@/src/types/store';
+export { getFilesByType };

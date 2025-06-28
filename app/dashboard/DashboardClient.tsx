@@ -13,6 +13,7 @@ import { DashboardTourProvider } from '@/src/components/OnboardingTour';
 import DashboardHeader from './components/DashboardHeader';
 import DashboardControls from './components/DashboardControls';
 import ProjectList from './components/ProjectList';
+import ProjectChecklist from '@/src/components/checklist';
 
 const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
 
@@ -56,6 +57,10 @@ export default function DashboardClient({ user, projects }: DashboardClientProps
     }
   }, [user]);
 
+  useEffect(() => {
+    console.log('Dashboard projectList:', projectList);
+  }, [projectList]);
+
   // Main dashboard UI
   if (!user) {
     return (
@@ -95,6 +100,7 @@ export default function DashboardClient({ user, projects }: DashboardClientProps
                     {/* Projects Section */}
                     <div className="flex flex-col items-center w-full">
                       <ProjectList projectList={projectList} loading={loading} activeView={activeView as 'grid' | 'list'} />
+                      {projectList.length === 0 && <ProjectChecklist />}
                     </div>
                   </div>
                 </div>

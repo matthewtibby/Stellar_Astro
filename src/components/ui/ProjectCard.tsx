@@ -9,6 +9,7 @@ import {
   Info,
   Share2,
   Trash2,
+  Settings,
 } from "lucide-react";
 import {
   Card,
@@ -39,6 +40,7 @@ import { useProjectImage } from './hooks/useProjectImage';
 import { getProjectCardFallbacks } from './utils/projectCardFallbacks';
 import ProjectNameEditForm from './ProjectNameEditForm';
 import { useDeleteConfirmLogger } from './hooks/useDeleteConfirmLogger';
+import { useRouter } from 'next/navigation';
 
 function ProjectCard(props: ProjectCardProps) {
   const {
@@ -76,6 +78,8 @@ function ProjectCard(props: ProjectCardProps) {
     dataFallbacks,
   } = getProjectCardFallbacks(props);
   useDeleteConfirmLogger({ showDeleteConfirm: state.showDeleteConfirm, id, onDelete, onProjectDeleted });
+
+  const router = useRouter();
 
   // SkyView dynamic thumbnail logic
   let skyviewUrl: string | undefined = undefined;
@@ -270,6 +274,24 @@ function ProjectCard(props: ProjectCardProps) {
                 <Button size="icon" variant="ghost" className="hover:bg-red-600 hover:text-white text-white border-none" onClick={e => { e.stopPropagation(); console.log('[ProjectCard] Delete button clicked for project:', id); state.showDeleteConfirm = true; }} aria-label="Delete Project">
                   <Trash2 className="h-4 w-4" />
                 </Button>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        aria-label="Manage Project"
+                        onClick={e => {
+                          e.stopPropagation();
+                          router.push(`/dashboard/${id}/manage`);
+                        }}
+                      >
+                        <Settings className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Manage Project</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </div>
             </div>
           </div>

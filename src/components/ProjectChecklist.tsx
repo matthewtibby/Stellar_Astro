@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { CheckCircle, Circle, AlertCircle, ChevronDown, ChevronRight } from 'lucide-react';
 import { useProjectStore } from '@/src/store/project';
 import { useToast } from '../hooks/useToast';
+import { useProjectSync } from '@/src/hooks/useProjectSync';
 
 interface ProjectChecklistProps {
   projectId: string;
@@ -109,6 +110,8 @@ const defaultChecklist: ChecklistItem[] = [
 ];
 
 export default function ProjectChecklist({ projectId }: ProjectChecklistProps) {
+  const canonicalProject = useProjectSync(projectId, 5000);
+  console.log('ProjectChecklist rendered', { projectId, canonicalProject });
   const [checklist, setChecklist] = useState<ChecklistItem[]>(defaultChecklist);
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
     setup: true,
@@ -120,45 +123,22 @@ export default function ProjectChecklist({ projectId }: ProjectChecklistProps) {
   const { addToast } = useToast();
 
   useEffect(() => {
-    if (currentProject?.steps) {
+    if (canonicalProject?.steps) {
+      console.log('Canonical project steps:', canonicalProject.steps);
       const updatedChecklist = checklist.map(item => {
-        const step = currentProject.steps.find(s => s.id === item.id);
+        const step = canonicalProject.steps.find((s: any) => s.id === item.id);
         return step ? { ...item, status: step.status, completedAt: step.completedAt } : item;
       });
+      console.log('Mapped checklist after hydration:', updatedChecklist);
       setChecklist(updatedChecklist);
     }
-  }, [currentProject]);
+  }, [canonicalProject]);
 
   const toggleCategory = (category: string) => {
     setExpandedCategories(prev => ({
       ...prev,
       [category]: !prev[category]
     }));
-  };
-
-  const updateItemStatus = async (itemId: string, newStatus: ChecklistItem['status']) => {
-    try {
-      const updatedChecklist = checklist.map(item =>
-        item.id === itemId
-          ? { ...item, status: newStatus, completedAt: newStatus === 'completed' ? new Date().toISOString() : undefined }
-          : item
-      );
-      setChecklist(updatedChecklist);
-
-      // Update project steps
-      const steps = updatedChecklist.map(item => ({
-        id: item.id,
-        name: item.title,
-        status: item.status,
-        completedAt: item.completedAt
-      }));
-
-      await updateProject(projectId, { steps });
-      addToast('success', 'Checklist updated');
-    } catch (error) {
-      console.error('Error updating checklist:', error);
-      addToast('error', 'Failed to update checklist');
-    }
   };
 
   const getCategoryItems = (category: string) => {
@@ -193,47 +173,35 @@ export default function ProjectChecklist({ projectId }: ProjectChecklistProps) {
   return (
     <div className="space-y-4 p-4 bg-gray-900/50 rounded-lg border border-gray-700">
       <h3 className="text-lg font-semibold text-white">Project Checklist</h3>
-      
       <div className="space-y-4">
         {['setup', 'capture', 'processing', 'export'].map(category => (
           <div key={category} className="space-y-2">
             <div
-              className="flex items-center justify-between cursor-pointer"
+              className="flex items-center cursor-pointer select-none"
               onClick={() => toggleCategory(category)}
             >
-              <div className="flex items-center space-x-2">
-                <span className="text-white capitalize">{category}</span>
-                <span className="text-sm text-gray-400">
-                  ({getCategoryProgress(category).toFixed(0)}% complete)
-                </span>
-              </div>
               {getCategoryIcon(category)}
+              <span className="ml-2 font-semibold text-gray-200 capitalize">{category}</span>
+              <span className="ml-4 text-xs text-gray-400">{getCategoryProgress(category).toFixed(0)}% complete</span>
             </div>
-
             {expandedCategories[category] && (
-              <div className="pl-4 space-y-2">
+              <ul className="pl-6 space-y-1">
                 {getCategoryItems(category).map(item => (
-                  <div
-                    key={item.id}
-                    className="p-3 bg-gray-800/50 rounded-lg border border-gray-700"
-                  >
-                    <div className="flex items-center space-x-3">
-                      <button
-                        onClick={() => {
-                          const newStatus = item.status === 'completed' ? 'pending' : 'completed';
-                          updateItemStatus(item.id, newStatus);
-                        }}
-                      >
-                        {getStatusIcon(item.status)}
-                      </button>
-                      <div>
-                        <p className="text-sm text-white">{item.title}</p>
-                        <p className="text-xs text-gray-400">{item.description}</p>
-                      </div>
-                    </div>
-                  </div>
+                  <li key={item.id} className="flex items-center gap-2">
+                    {getStatusIcon(item.status)}
+                    <span className="text-gray-100">{item.title}</span>
+                    {item.status === 'in_progress' && (
+                      <span className="ml-2 text-xs text-yellow-400">In Progress</span>
+                    )}
+                    {item.status === 'completed' && (
+                      <span className="ml-2 text-xs text-green-400">Completed</span>
+                    )}
+                    {item.status === 'pending' && (
+                      <span className="ml-2 text-xs text-gray-400">Pending</span>
+                    )}
+                  </li>
                 ))}
-              </div>
+              </ul>
             )}
           </div>
         ))}

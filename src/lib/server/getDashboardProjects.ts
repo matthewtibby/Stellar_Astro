@@ -22,7 +22,7 @@ export interface HydratedProject {
   frameCount: number;
   fileSize: number;
   equipment: { type: string; name: string }[];
-  steps: { status: string }[];
+  steps: { id: string; status: string }[];
   tags?: string[];
   isFavorite?: boolean;
   target?: {
@@ -51,6 +51,20 @@ async function listAllFilesRecursive(basePath: string): Promise<Array<{ name: st
     }
   }
   return allFiles;
+}
+
+// Helper: check if files exist for a given type
+async function hasFilesOfType(supabase: any, projectId: string, type: string) {
+  try {
+    const { data, error } = await supabase
+      .from('project_files')
+      .select('id')
+      .eq('project_id', projectId)
+      .eq('file_type', type);
+    return !error && data && data.length > 0;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -142,24 +156,71 @@ export async function getDashboardProjects(userId: string): Promise<HydratedProj
       userImageUrl = final ? final.file_path : undefined;
     }
 
-    let steps: { status: string }[] = [];
+    let steps: { id: string; status: string }[] = [];
     let status: 'new' | 'in_progress' | 'completed' = 'new';
     try {
-      const { data, error } = await supabase
-        .from('processing_steps')
-        .select('*')
-        .eq('project_id', project.id as string);
-      if (error) throw error;
-      steps = (data || []).map((s: Record<string, unknown>) => ({ status: typeof s.status === 'string' ? s.status : '' }));
+      // Workflow-aware step hydration
+      let workflowStepStatus: Record<string, 'pending' | 'in_progress' | 'completed'> = {
+        'upload-frames': 'pending',
+        'calibrate-frames': 'pending',
+        'register-frames': 'pending',
+        'stack-frames': 'pending',
+        'post-processing': 'pending',
+        'export-final': 'pending',
+      };
+      // Upload step
       if (frameCount > 0) {
-        const allStepsDone = steps.length > 0 && steps.every(s => s.status === 'done' || s.status === 'completed');
+        workflowStepStatus['upload-frames'] = 'completed';
+      }
+      // Calibration step
+      if (await hasFilesOfType(supabase, project.id as string, 'calibrated')) {
+        workflowStepStatus['calibrate-frames'] = 'completed';
+      } else if (workflowStepStatus['upload-frames'] === 'completed') {
+        workflowStepStatus['calibrate-frames'] = 'in_progress';
+      }
+      // Registration step
+      if (await hasFilesOfType(supabase, project.id as string, 'aligned')) {
+        workflowStepStatus['register-frames'] = 'completed';
+      } else if (workflowStepStatus['calibrate-frames'] === 'completed') {
+        workflowStepStatus['register-frames'] = 'in_progress';
+      }
+      // Stacking step
+      if (await hasFilesOfType(supabase, project.id as string, 'stacked')) {
+        workflowStepStatus['stack-frames'] = 'completed';
+      } else if (workflowStepStatus['register-frames'] === 'completed') {
+        workflowStepStatus['stack-frames'] = 'in_progress';
+      }
+      // Post-processing step
+      if (await hasFilesOfType(supabase, project.id as string, 'post-processed')) {
+        workflowStepStatus['post-processing'] = 'completed';
+      } else if (workflowStepStatus['stack-frames'] === 'completed') {
+        workflowStepStatus['post-processing'] = 'in_progress';
+      }
+      // Export step
+      if (await hasFilesOfType(supabase, project.id as string, 'exported')) {
+        workflowStepStatus['export-final'] = 'completed';
+      } else if (workflowStepStatus['post-processing'] === 'completed') {
+        workflowStepStatus['export-final'] = 'in_progress';
+      }
+      // Map to steps array in canonical order
+      steps = ['upload-frames', 'calibrate-frames', 'register-frames', 'stack-frames', 'post-processing', 'export-final'].map(id => ({ id, status: workflowStepStatus[id] }));
+      if (frameCount > 0) {
+        const allStepsDone = steps.length > 0 && steps.every(s => s.status === 'completed');
         status = allStepsDone ? 'completed' : 'in_progress';
       } else {
         status = 'new';
       }
     } catch (err) {
       console.warn(`Failed to fetch processing_steps for project ${project.id}:`, err);
-      steps = [];
+      // If error, return all steps as pending
+      steps = [
+        'upload-frames',
+        'calibrate-frames',
+        'register-frames',
+        'stack-frames',
+        'post-processing',
+        'export-final',
+      ].map(id => ({ id, status: 'pending' }));
       status = frameCount > 0 ? 'in_progress' : 'new';
     }
 

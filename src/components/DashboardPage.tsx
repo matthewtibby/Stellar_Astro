@@ -37,6 +37,10 @@ const DashboardPage = () => {
     fetchSessionTemplates();
   }, []);
 
+  useEffect(() => {
+    console.log('Dashboard projects:', projects);
+  }, [projects]);
+
   const applySessionTemplate = (template: SessionTemplate) => {
     setProjectName(template.name);
     setProjectDescription(template.description);
