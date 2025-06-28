@@ -2,8 +2,8 @@
  * Fetches and hydrates all projects for a user with related data for dashboard display.
  * Handles errors and missing data gracefully.
  */
-import { createClient } from '@/src/lib/supabase';
-// import type { HydratedProject } from '@/src/types/dashboard'; // TODO: Create this type or inline
+import { createClient } from '@/lib/supabase';
+// import type { HydratedProject } from '@/types/dashboard'; // TODO: Create this type or inline
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;

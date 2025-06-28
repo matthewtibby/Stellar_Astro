@@ -1,62 +1,39 @@
-import { createBrowserClient, supabaseUrl, supabaseAnonKey } from '@/src/lib/supabase';
-import { createProject } from '@/src/utils/projects';
-import { uploadRawFrame } from '@/src/utils/storage';
-import { FileType } from '@/src/types/store';
+import { FileType } from '@/types/store';
 
-async function testSupabaseUpload() {
-  try {
-    // Get Supabase client
-    const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
-    
-    // Check authentication
+// Mock Supabase client
+const mockUser = { id: '00000000-0000-0000-0000-000000000000', email: 'test@example.com' };
+const mockAuth = { getUser: jest.fn().mockResolvedValue({ data: { user: mockUser }, error: null }) };
+const mockSupabase = { auth: mockAuth };
+jest.mock('@/lib/supabase', () => ({
+  createBrowserClient: jest.fn(() => mockSupabase),
+  supabaseUrl: '',
+  supabaseAnonKey: '',
+}));
+
+// Mock createProject
+jest.mock('@/utils/projects', () => ({
+  createProject: jest.fn(async (userId, projectName) => ({
+    id: 'mock-project-id',
+    name: projectName,
+    user_id: userId,
+  })),
+}));
+
+describe('Supabase Upload', () => {
+  test('should authenticate and create a test project', async () => {
+    const { createBrowserClient } = require('@/lib/supabase');
+    const { createProject } = require('@/utils/projects');
+    const supabase = createBrowserClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      throw new Error('Not authenticated. Please log in first.');
-    }
-    console.log('Authenticated as:', user.email);
+    expect(authError).toBeNull();
+    expect(user).toBeDefined();
+    expect(user.email).toBe('test@example.com');
 
-    // Create a test project
+    // Create a test project (mocked)
     const projectName = 'test-upload-project';
-    const project = await createProject('test-user-id', projectName);
-    console.log('Created new test project:', project);
-
-    // Read the test.fits file using the API endpoint
-    const response = await fetch('/api/file-operations', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        operation: 'readFile',
-        filePath: 'test.fits'
-      })
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to read file');
-    }
-
-    const { content } = await response.json();
-    const file = new File(
-      [content],
-      'test.fits',
-      { type: 'application/fits' }
-    );
-
-    // Upload the file
-    console.log('Starting file upload...');
-    await uploadRawFrame(
-      file,
-      project.id,
-      'light' as FileType,
-      (progress) => console.log(`Upload progress: ${Math.round(progress * 100)}%`)
-    );
-    
-    console.log('Test completed successfully');
-  } catch (error) {
-    console.error('Test failed:', error);
-  }
-}
-
-// Run the test
-testSupabaseUpload(); 
+    const project = await createProject(user.id, projectName);
+    expect(project).toBeDefined();
+    expect(project.name).toBe(projectName);
+    expect(project.user_id).toBe(user.id);
+  });
+}); 

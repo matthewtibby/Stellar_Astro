@@ -5,11 +5,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DATABASE_URL = os.getenv('DATABASE_URL')
-print(f"Database URL: {DATABASE_URL}")  # Debug print
 
 async def init_db():
     # Create database connection
-    print(f"Connecting to database with URL: {DATABASE_URL}")  # Debug print
     conn = await asyncpg.connect(DATABASE_URL)
     
     # Create fits_metadata table if it doesn't exist

@@ -8,8 +8,6 @@ load_dotenv(dotenv_path=env_path)
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_KEY")
-print("SUPABASE_URL:", SUPABASE_URL)
-print("SUPABASE_SERVICE_KEY:", SUPABASE_KEY)
 from supabase import create_client, Client
 
 # Create an httpx client with a longer timeout for large file uploads

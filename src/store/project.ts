@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Project } from '@/types/store';
-import { supabase } from '@/src/lib/supabaseClient';
-import type { HydratedProject } from '@/src/lib/server/getDashboardProjects';
+import { supabase } from '@/lib/supabaseClient';
+import type { HydratedProject } from '@/lib/server/getDashboardProjects';
 
 interface ProjectStore {
   currentProject: Project | null;

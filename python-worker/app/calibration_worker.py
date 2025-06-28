@@ -25,7 +25,7 @@ from astropy.nddata import CCDData
 import astropy.units as u
 import matplotlib.pyplot as plt
 import tempfile
-from supabase_io import download_file, upload_file, get_public_url, list_files
+from .supabase_io import download_file, upload_file, get_public_url, list_files
 import astroscrappy
 import time
 

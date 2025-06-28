@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { UserStore, UserState } from '@/types/store';
-import type { User } from '@/src/lib/supabase';
-import { createBrowserClient, supabaseUrl, supabaseAnonKey } from '@/src/lib/supabase';
+import type { User } from '@/lib/supabase';
+import { createBrowserClient, supabaseUrl, supabaseAnonKey } from '@/lib/supabase';
 
 const initialState: UserState = {
   id: '',
