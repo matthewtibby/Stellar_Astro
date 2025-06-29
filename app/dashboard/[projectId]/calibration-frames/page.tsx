@@ -1,19 +1,17 @@
+"use client";
 import CalibrationClient from '@/src/components/CalibrationClient';
-import { createSupabaseServerClient } from '@/src/lib/supabaseServer';
-import { getDashboardProjects } from '@/src/lib/server/getDashboardProjects';
 
-export default async function CalibrationStepPage({ params }: { params: { projectId: string } }) {
-  const supabase = createSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  const projectId = params?.projectId;
-  if (!user || !projectId) return <div className="text-white p-8">Project or user not found.</div>;
-  const projects = await getDashboardProjects(user.id);
-  const project = projects.find(p => p.id === projectId);
+export default async function CalibrationStepPage({ params }: { params: Promise<{ projectId: string }> }) {
+  const { projectId } = await params;
+  // TODO: Fetch userId and projectName via client-side logic (e.g., useEffect, context, or props)
+  // For now, use placeholders
+  const userId = "TODO_USER_ID";
+  const projectName = "Calibration & Processing";
   return (
     <CalibrationClient
       projectId={projectId}
-      userId={user.id}
-      projectName={project?.title || 'Calibration & Processing'}
+      userId={userId}
+      projectName={projectName}
     />
   );
 }

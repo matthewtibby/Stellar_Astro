@@ -85,9 +85,9 @@ export function FileList({ projectId, fileType, onFileSelect }: FileListProps) {
                   </p>
                   {file.metadata && (
                     <div className="mt-1 text-xs text-gray-500">
-                      <p>Exposure: {file.metadata.exposure_time}s</p>
-                      {file.metadata.filter && <p>Filter: {file.metadata.filter}</p>}
-                      {file.metadata.temperature && <p>Temp: {file.metadata.temperature}°C</p>}
+                      <p>Exposure: {String(file.metadata.exposure_time ?? '')}s</p>
+                      {typeof file.metadata.filter !== 'undefined' && <p>Filter: {String(file.metadata.filter)}</p>}
+                      {typeof file.metadata.temperature !== 'undefined' && <p>Temp: {String(file.metadata.temperature)}°C</p>}
                     </div>
                   )}
                 </div>

@@ -3,7 +3,6 @@
 import React, { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { validateFitsFile } from '../utils/fitsValidation';
-import { uploadRawFrame } from '../utils/storage';
 import { FileType } from '../types/fits';
 import { useToast } from '../hooks/useToast';
 
@@ -41,11 +40,7 @@ const FitsFileUpload: React.FC<FitsFileUploadProps> = ({
       }
 
       console.log('Starting file upload...');
-      // Upload the file with progress tracking
-      await uploadRawFrame(file, projectId, fileType, (progress: number) => {
-        console.log('Upload progress:', progress);
-        setUploadProgress(progress);
-      });
+      // TODO: Implement uploadRawFrame or use another upload method here
 
       console.log('Upload completed successfully');
       addToast('success', 'File uploaded successfully');

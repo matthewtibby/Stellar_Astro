@@ -7,7 +7,7 @@ import { User, CreditCard, Settings } from 'lucide-react';
 import { redirect } from 'next/navigation';
 
 export default async function ProfilePage() {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
     redirect('/login');

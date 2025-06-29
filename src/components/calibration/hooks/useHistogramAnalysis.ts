@@ -15,15 +15,18 @@ export function useHistogramAnalysis() {
    * Run histogram analysis.
    */
   const run = useCallback(async (files: string[], frameType: string) => {
+    console.log('[useHistogramAnalysis] Triggered run with files:', files, 'frameType:', frameType);
     setLoading(true);
     setError(null);
     try {
       const data = await fetchHistogramAnalysis(files, frameType);
+      console.log('[useHistogramAnalysis] Received data:', data);
       setResults(data.analysis_results || []);
       setNotification(data.summary ? 'Histogram analysis completed' : null);
       setLoading(false);
       return data;
     } catch (err) {
+      console.error('[useHistogramAnalysis] Error:', err);
       setError(err instanceof Error ? err.message : 'Unknown error');
       setLoading(false);
       throw err;

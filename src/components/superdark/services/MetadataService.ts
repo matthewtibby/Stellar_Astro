@@ -97,7 +97,7 @@ export class MetadataService {
               (f: FileMetadata): DarkFileWithMetadata => ({
                 name: f.path.split('/').pop() || '',
                 path: f.path,
-                project: project.title,
+                project: typeof project.title === 'string' ? project.title : 'Untitled',
                 projectId: project.id,
                 camera: f.metadata?.instrument || f.metadata?.INSTRUME || 'Unknown',
                 binning: f.metadata?.binning || `${f.metadata?.XBINNING || 1}x${f.metadata?.YBINNING || 1}`,

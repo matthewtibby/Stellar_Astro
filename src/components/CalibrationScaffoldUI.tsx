@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 
 // Import UI components
 import { TooltipProvider } from '../components/ui/tooltip';
@@ -11,7 +11,8 @@ import {
   useJobPolling,
   useDataEffects,
   useLocalState,
-  useUIState
+  useUIState,
+  useAnalysisOperations
 } from './calibration/hooks';
 
 // Import types and utilities
@@ -30,8 +31,13 @@ import {
   MasterPreviewPanel,
   ModalContainer,
   SuccessToast,
-  ActionButtons
+  ActionButtons,
+  HistogramAnalysisSection
 } from './calibration/components';
+
+import { FileOperationsService } from '../services/calibration/FileOperationsService';
+import { FrameConsistencyTable } from './calibration/components/FrameConsistencyTable';
+import { OutlierReviewTable } from './calibration/components/OutlierReviewTable';
 
 /**
  * CalibrationScaffoldUI
@@ -126,6 +132,27 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
   // Phase 5.5 - Use utility for status computation
   const getMasterStatusForType = (type: MasterType) => getMasterStatus(type, previewUrls, jobStatus, selectedType);
 
+  const fileOperationsService = new FileOperationsService();
+
+  // Fetch preview image for selected frame type on mount and when dependencies change
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchPreview() {
+      if (!userId || !projectId || !selectedType) return;
+      const result = await fileOperationsService.fetchMasterPreview(userId, projectId, selectedType);
+      if (isMounted) {
+        calibrationState.setPreviewUrl(result.previewUrl);
+        // Optionally handle error/loading state here
+      }
+    }
+    fetchPreview();
+    return () => { isMounted = false; };
+  }, [userId, projectId, selectedType]);
+
+  const analysis = useAnalysisOperations();
+
+  const [sigmaValue, setSigmaValue] = useState(3.0); // For outlier detection
+
   return (
     <TooltipProvider>
       <div className="flex flex-col h-full bg-[#0a0d13]/80 rounded-2xl shadow-2xl border border-[#232946]/60 p-6 backdrop-blur-md">
@@ -175,24 +202,54 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
             tabState={tabState}
             setTabState={setTabState}
           />
-          
-          <MasterPreviewPanel
-            selectedType={selectedType}
-            previewLoading={previewLoading}
-            previewUrl={previewUrl}
-            superdarkPreviewUrl={superdarkPreviewUrl}
-            selectedSuperdarkPath={selectedSuperdarkPath}
-            masterStats={null}
-            superdarkStats={superdarkStats}
-            superdarkStatsLoading={superdarkStatsLoading}
-            showHistogram={showHistogram}
-            setShowHistogram={setShowHistogram}
-            qualityAnalysisResults={qualityAnalysisResults}
-            showQualityReport={showHistogramReport}
-            setShowQualityReport={setShowHistogramReport}
-            previewError={previewError}
-            FRAME_TYPES={FRAME_TYPES}
-          />
+          <div className="flex flex-col flex-1 gap-4">
+            <MasterPreviewPanel
+              selectedType={selectedType}
+              previewLoading={previewLoading}
+              previewUrl={previewUrl}
+              superdarkPreviewUrl={superdarkPreviewUrl}
+              selectedSuperdarkPath={selectedSuperdarkPath}
+              masterStats={null}
+              superdarkStats={superdarkStats}
+              superdarkStatsLoading={superdarkStatsLoading}
+              showHistogram={showHistogram}
+              setShowHistogram={setShowHistogram}
+              qualityAnalysisResults={qualityAnalysisResults}
+              showQualityReport={showHistogramReport}
+              setShowQualityReport={setShowHistogramReport}
+              previewError={previewError}
+              FRAME_TYPES={FRAME_TYPES}
+            />
+            <HistogramAnalysisSection
+              frameType={selectedType}
+              realFiles={realFiles}
+              userId={userId}
+              projectId={projectId}
+              histogramAnalysisResults={analysis.histogramResults}
+              histogramAnalysisLoading={analysis.histogramLoading}
+              histogramAnalysisNotification={analysis.histogramNotification}
+              onHistogramAnalysis={(paths) => analysis.runHistogramAnalysis(paths, selectedType)}
+              onShowHistogramReport={setShowHistogramReport}
+            />
+            <OutlierReviewTable
+              frames={analysis.outlierResults}
+              outliers={analysis.outlierResults}
+              sigma={sigmaValue}
+              onSigmaChange={setSigmaValue}
+              onOverride={(path, include) => analysis.handleOutlierOverride(path, include ? 'keep' : 'remove')}
+              overrides={Object.fromEntries(
+                Object.entries(analysis.outlierOverrides).map(([k, v]) => [k, v === 'keep'])
+              )}
+              loading={analysis.outlierLoading}
+              onReRun={() => { analysis.runOutlierDetection(realFiles, selectedType, sigmaValue); }}
+            />
+            <FrameConsistencyTable
+              analysis={analysis.consistencyResults}
+              onFrameToggle={analysis.handleConsistencyFrameToggle}
+              frameSelections={analysis.consistencySelections}
+              loading={analysis.consistencyLoading}
+            />
+          </div>
         </div>
 
         <ActionButtons onBack={handleBack} onNext={handleNextStep} />

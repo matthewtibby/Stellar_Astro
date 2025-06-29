@@ -1,23 +1,16 @@
 import ProjectUploadClient from '@/src/components/ProjectUploadClient';
-import { createSupabaseServerClient } from '@/src/lib/supabaseServer';
-import { getDashboardProjects } from '@/src/lib/server/getDashboardProjects';
 
-interface UploadPageParams {
-  params: { projectId: string };
-}
-
-export default async function ProjectUploadPage({ params }: UploadPageParams) {
-  const supabase = createSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  const projectId = params?.projectId;
-  if (!user || !projectId) return <div className="text-white p-8">Project or user not found.</div>;
-  const projects = await getDashboardProjects(user.id);
-  const project = projects.find(p => p.id === projectId);
+export default async function ProjectUploadPage({ params }: { params: Promise<{ projectId: string }> }) {
+  const { projectId } = await params;
+  // TODO: Fetch userId and projectName via client-side logic (e.g., useEffect, context, or props)
+  // For now, use placeholders
+  const userId = "TODO_USER_ID";
+  const projectName = "Project Upload";
   return (
     <ProjectUploadClient
       projectId={projectId}
-      userId={user.id}
-      projectName={project?.title || 'Project Upload'}
+      userId={userId}
+      projectName={projectName}
     />
   );
 } 

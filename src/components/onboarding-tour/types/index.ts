@@ -16,6 +16,10 @@ export type {
   ConfettiProps,
   ConfettiParticle,
   TourExampleProps,
+  ConfettiAnimationProps,
+  DemoExampleProps,
+  TourRendererProps,
+  WelcomeDialogProps,
   
   // Hook return types
   UseTourStateReturn,

@@ -25,6 +25,7 @@ export function useAnalysisOperations() {
       consistencyThreshold?: number;
     } = {}
   ) => {
+    console.log('[useAnalysisOperations] runFullAnalysis called with', { files, frameType, options });
     const {
       includeOutliers = true,
       includeConsistency = true,
@@ -44,6 +45,7 @@ export function useAnalysisOperations() {
       promises.push(histogram.run(files, frameType).then(data => { results.histogram = data; }));
     }
     await Promise.all(promises);
+    console.log('[useAnalysisOperations] runFullAnalysis results', results);
     return results;
   };
 

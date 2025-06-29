@@ -60,6 +60,37 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     progress = null,
   } = job;
 
+  // Fallback: If no preview_url, try to find the latest PNG in storage
+  if (!result.preview_url) {
+    const folder = `${userId}/${projectId}/${frameType}/`;
+    console.log('[Preview Fallback] Checking folder:', folder);
+    const { data: files, error } = await supabase.storage.from('calibrated-frames').list(folder);
+    if (error) {
+      console.error('[Preview Fallback] Error listing files:', error);
+    } else if (!files || files.length === 0) {
+      console.log('[Preview Fallback] No files found in folder:', folder);
+    } else {
+      console.log(`[Preview Fallback] Found ${files.length} files in folder.`);
+      const pngFiles = files.filter(f => f.name.toLowerCase().endsWith('.png'));
+      console.log('[Preview Fallback] PNG files:', pngFiles.map(f => f.name));
+      if (pngFiles.length > 0) {
+        pngFiles.sort((a, b) => new Date(b.updated_at || b.created_at || 0).getTime() - new Date(a.updated_at || a.created_at || 0).getTime());
+        const latestPng = pngFiles[pngFiles.length - 1];
+        console.log('[Preview Fallback] Latest PNG:', latestPng.name);
+        const path = `${folder}${latestPng.name}`;
+        const { data } = await supabase.storage.from('calibrated-frames').getPublicUrl(path);
+        if (data?.publicUrl) {
+          console.log('[Preview Fallback] Public URL:', data.publicUrl);
+          result.preview_url = data.publicUrl;
+        } else {
+          console.log('[Preview Fallback] No public URL for:', path);
+        }
+      } else {
+        console.log('[Preview Fallback] No PNG files found in folder.');
+      }
+    }
+  }
+
   // Return the job result, diagnostics, and preview URL
   return res.status(200).json({
     job_id: job_id ?? job.job_id ?? null,

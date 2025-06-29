@@ -16,13 +16,13 @@ export { useLocalState } from './useLocalState';
 
 // Phase 5.2 Consolidated Hooks - NEW ARCHITECTURE
 export { useAnalysisOperations } from './useAnalysisOperations';
-export { useModalManagement } from './useModalManagement';
+// export { useModalManagement } from './useModalManagement'; // Removed, not implemented
+export { useCalibrationModals } from './useModalManagement';
 export { useEnhancedCalibrationState } from './useEnhancedCalibrationState';
 
 // Re-export types
 export type { JobStatus } from './useJobManagement';
 
-export { useCalibrationModals } from './useModalManagement';
 export { useFileModal } from './useFileModal';
 export { useSuperdarkModal } from './useSuperdarkModal';
 export { usePresetMenuModal } from './usePresetMenuModal';

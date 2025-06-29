@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { getSupabaseClient } from '@/src/lib/supabase';
+import { createClient, supabaseUrl, supabaseAnonKey } from '@/lib/supabase';
 import { SessionTemplate } from '@/types/session';
-import { setProjectName, setProjectDescription, setSelectedTarget, setSelectedTelescope, setSelectedCamera, setSelectedFilters } from '../store/project';
+import { useProjectStore } from '@/store/project';
 import { useProjects } from '@/src/hooks/useProjects';
 import { Tooltip } from 'react-tooltip';
 import { AlertCircle, Plus, ChevronRight, File, Folder, Trash2 } from 'lucide-react';
-import { useUserStore } from '../store/userStore';
+import { useUserStore } from '@/store/user';
 import Link from 'next/link';
 import { handleError, ValidationError } from '@/src/utils/errorHandling';
 import { useToast } from '../hooks/useToast';
@@ -18,11 +18,13 @@ const DashboardPage = () => {
   const [filterStatus, setFilterStatus] = useState('');
   const [sortBy, setSortBy] = useState('created_at');
   const [sortOrder, setSortOrder] = useState('desc');
+  const setProjectName = useProjectStore((state) => state.setCurrentProject);
 
   useEffect(() => {
     const fetchSessionTemplates = async () => {
       try {
-        const { data, error } = await getSupabaseClient()
+        const supabase = createClient(supabaseUrl, supabaseAnonKey);
+        const { data, error } = await supabase
           .from('session_templates')
           .select('*');
 
@@ -41,30 +43,21 @@ const DashboardPage = () => {
     console.log('Dashboard projects:', projects);
   }, [projects]);
 
-  const applySessionTemplate = (template: SessionTemplate) => {
-    setProjectName(template.name);
-    setProjectDescription(template.description);
-    setSelectedTarget(template.target);
-    setSelectedTelescope(template.telescope);
-    setSelectedCamera(template.camera);
-    setSelectedFilters(template.filters);
-  };
-
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(e.target.value);
-    fetchProjects(e.target.value, filterStatus, sortBy, sortOrder);
+    fetchProjects();
   };
 
   const handleFilterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setFilterStatus(e.target.value);
-    fetchProjects(searchTerm, e.target.value, sortBy, sortOrder);
+    fetchProjects();
   };
 
   const handleSortChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const [sortField, order] = e.target.value.split(':');
     setSortBy(sortField);
     setSortOrder(order);
-    fetchProjects(searchTerm, filterStatus, sortField, order);
+    fetchProjects();
   };
 
   const renderSessionTemplates = () => (
@@ -74,12 +67,6 @@ const DashboardPage = () => {
         {sessionTemplates.map((template) => (
           <li key={template.id} className="flex justify-between items-center">
             <span className="text-white">{template.name}</span>
-            <button
-              className="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-              onClick={() => applySessionTemplate(template)}
-            >
-              Apply
-            </button>
           </li>
         ))}
       </ul>

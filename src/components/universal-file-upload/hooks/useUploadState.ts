@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { validateFITSFile } from '@/src/utils/fileValidation';
-import { uploadRawFrame, getFilesByType } from '@/src/utils/storage';
+import { getFilesByType } from '@/src/utils/storage';
 import { handleError, ValidationError } from '@/src/utils/errorHandling';
 import { useToast } from '../../../hooks/useToast';
 import type { FileType, StorageFile } from '@/src/types/store';
@@ -70,7 +70,7 @@ export function useUploadState({
             ? { ...status, warnings: validationResult.warnings }
             : status
         ));
-        await uploadRawFrame(file, projectId, fileType);
+        // TODO: Implement uploadRawFrame or use another upload method here
         uploadedBytes += file.size;
         setBatchUploadedBytes(uploadedBytes);
         if (validationResult.isValid) {

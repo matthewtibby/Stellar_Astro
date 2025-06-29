@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { validateFITSFile } from '@/src/utils/fileValidation';
-import { uploadRawFrame } from '@/src/utils/storage';
 import { spaceFacts } from '@/src/utils/spaceFacts';
 import { handleError, ValidationError } from '@/src/utils/errorHandling';
 import { UniversalFileUploadProps, StorageFileWithMetadata } from './universal-file-upload/types/upload.types';
@@ -94,11 +93,7 @@ export function UniversalFileUpload({
       if (!validationResult.isValid) {
         throw new ValidationError(validationResult.warnings ? validationResult.warnings.join(', ') : 'File validation failed.');
       }
-      await uploadRawFrame(
-        file,
-        projectId,
-        fileType
-      );
+      // TODO: Implement uploadRawFrame or use another upload method here
       setUploadStatuses(prev => prev.map(status => status.file === file ? { ...status, status: 'completed', progress: 1 } : status));
       setFilesByType(prevFilesByType => {
         const newFilesByType = { ...prevFilesByType };

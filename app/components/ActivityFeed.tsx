@@ -65,6 +65,22 @@ function getEventDescription(item: ActivityFeedItem) {
   }
 }
 
+function renderDetails(details: unknown): React.ReactNode {
+  if (
+    !details ||
+    typeof details !== 'object' ||
+    Array.isArray(details) ||
+    details === null ||
+    Object.keys(details).length === 0
+  ) {
+    return null;
+  }
+  const detailsString = Object.entries(details as Record<string, unknown>)
+    .map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : String(v ?? '')}`)
+    .join(', ');
+  return <span style={{ color: '#b0bec5', fontSize: 14, marginLeft: 12 }}>{detailsString}</span>;
+}
+
 async function fetchActivityFeed({ eventType, project, dateRange, jwt }: FetchActivityFeedParams): Promise<{ feed: ActivityFeedGroup[] }> {
   const params = new URLSearchParams();
   if (eventType) params.append('eventType', eventType);
@@ -191,11 +207,7 @@ export default function ActivityFeed() {
               }}>
                 <span style={{ fontSize: 24, marginRight: 20 }}>{getEventIcon(item.action)}</span>
                 <span style={{ color: '#fff', fontSize: 16 }}>{getEventDescription(item)}</span>
-                {item.details && typeof item.details === 'object' && Object.keys(item.details).length > 0 && (
-                  <span style={{ color: '#b0bec5', fontSize: 14, marginLeft: 12 }}>
-                    {Object.entries(item.details).map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : String(v ?? '')}`).join(', ')}
-                  </span>
-                )}
+                {renderDetails(item.details)}
                 <span style={{ marginLeft: 'auto', color: '#b0bec5', fontSize: 15 }}>{new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
               </div>
             ))}

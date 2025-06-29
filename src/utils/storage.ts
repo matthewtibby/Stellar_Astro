@@ -28,3 +28,8 @@ const checkSupabase = () => {
 
 export type { StorageFile } from '@/src/types/store';
 export { getFilesByType };
+export { uploadProfilePicture } from './storage.files';
+export { getFitsFileUrl } from './storage.files';
+export { getFitsPreviewUrl } from './storage.files';
+export { deleteFitsFile, listProjectFiles } from './storage.files';
+export { validateFitsFile } from './storage.validation';

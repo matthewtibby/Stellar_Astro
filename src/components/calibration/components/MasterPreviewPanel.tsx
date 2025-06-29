@@ -176,10 +176,11 @@ export const MasterPreviewPanel: React.FC<MasterPreviewPanelProps> = ({
             <svg className="absolute left-0 bottom-0 w-full h-32 pointer-events-none z-10" viewBox="0 0 400 80">
               {(() => {
                 const currentStats = isShowingSuperdark ? superdarkStats : masterStats;
+                if (!currentStats || !currentStats.histogram) return null;
                 const hist = currentStats.histogram;
                 const max = Math.max(...hist);
-                const minVal = currentStats.stats?.min || currentStats.min;
-                const maxVal = currentStats.stats?.max || currentStats.max;
+                const minVal = currentStats.stats?.min ?? currentStats.min;
+                const maxVal = currentStats.stats?.max ?? currentStats.max;
                 return (
                   <>
                     {/* Axis bar */}

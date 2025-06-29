@@ -1,7 +1,7 @@
 import { FileType, StorageFile } from '../../../types/store';
 
 // Re-export types for service layer
-export { FileType, StorageFile };
+export type { FileType, StorageFile };
 
 // Main component props
 export interface FileManagementPanelProps {

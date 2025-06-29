@@ -80,6 +80,7 @@ export interface CosmeticMethod {
   category: string;
   defaultEnabled: boolean;
   order: number;
+  frameTypes: MasterType[];
 }
 
 export interface RecommendationDialog {
@@ -104,7 +105,7 @@ export const PLACEHOLDER_FILES = {
   bias: Array.from({ length: 8 }, (_, i) => `Bias${i + 1}.fits`),
 };
 
-export const BASIC_STACKING_METHODS: StackingMethod[] = [
+export const BEGINNER_DARK_STACKING_METHODS: StackingMethod[] = [
   { value: 'median', label: 'Median' },
   { value: 'mean', label: 'Mean' },
 ];
@@ -130,6 +131,23 @@ export const ADVANCED_BIAS_STACKING_METHODS: StackingMethod[] = [
   { value: 'superbias', label: 'Superbias (PCA modeling, advanced)' },
 ];
 
+export const ADVANCED_FLAT_STACKING_METHODS: StackingMethod[] = [
+  { value: 'adaptive', label: 'Auto-stacking (recommended)' },
+  { value: 'median', label: 'Median' },
+  { value: 'mean', label: 'Mean' },
+  { value: 'sigma', label: 'Kappa-Sigma Clipping' },
+  { value: 'percentile_clip', label: 'Percentile Clipping' },
+  { value: 'minmax', label: 'MinMax Rejection' },
+  { value: 'winsorized', label: 'Winsorized Sigma Clipping' },
+  { value: 'linear_fit', label: 'Linear Fit Clipping' },
+  { value: 'entropy_weighted', label: 'Entropy-Weighted Averaging' },
+];
+
+export const BEGINNER_FLAT_STACKING_METHODS: StackingMethod[] = [
+  { value: 'median', label: 'Median' },
+  { value: 'mean', label: 'Mean' },
+];
+
 export const STATUS_COLORS: Record<MasterStatus, string> = {
   complete: 'bg-green-500',
   in_progress: 'bg-amber-400',
@@ -149,7 +167,8 @@ export const COSMETIC_METHODS: CosmeticMethod[] = [
     tooltip: 'Identifies and masks consistently hot pixels by comparing multiple frames. Essential for removing sensor defects.',
     category: 'detection',
     defaultEnabled: true,
-    order: 1
+    order: 1,
+    frameTypes: ['bias', 'dark', 'flat'],
   },
   { 
     value: 'la_cosmic_enhanced', 
@@ -157,7 +176,8 @@ export const COSMETIC_METHODS: CosmeticMethod[] = [
     tooltip: 'Advanced cosmic ray detection using L.A.Cosmic algorithm with auto-tuning and multi-method support. Removes high-energy particle strikes.',
     category: 'cosmic_rays',
     defaultEnabled: true,
-    order: 2
+    order: 2,
+    frameTypes: ['dark', 'flat'],
   },
   { 
     value: 'bad_pixel_masking', 
@@ -165,7 +185,8 @@ export const COSMETIC_METHODS: CosmeticMethod[] = [
     tooltip: 'Masks known bad pixels, columns, and rows based on calibration analysis. Removes systematic sensor defects.',
     category: 'masking',
     defaultEnabled: false,
-    order: 3
+    order: 3,
+    frameTypes: ['dark', 'flat'],
   },
   { 
     value: 'patterned_noise_removal', 
@@ -173,7 +194,8 @@ export const COSMETIC_METHODS: CosmeticMethod[] = [
     tooltip: 'Removes systematic noise patterns like banding, fixed pattern noise, and readout artifacts using advanced filtering.',
     category: 'noise',
     defaultEnabled: false,
-    order: 4
+    order: 4,
+    frameTypes: ['dark', 'flat'],
   },
   { 
     value: 'la_cosmic', 
@@ -181,7 +203,8 @@ export const COSMETIC_METHODS: CosmeticMethod[] = [
     tooltip: 'Standard L.A.Cosmic cosmic ray detection with manual parameters. Use Enhanced version for better results.',
     category: 'cosmic_rays',
     defaultEnabled: false,
-    order: 5
+    order: 5,
+    frameTypes: ['dark', 'flat'],
   },
   { 
     value: 'multi_algorithm', 
@@ -189,7 +212,8 @@ export const COSMETIC_METHODS: CosmeticMethod[] = [
     tooltip: 'Combines multiple cosmic ray detection methods (L.A.Cosmic, sigma clipping, Laplacian) with voting strategies.',
     category: 'cosmic_rays',
     defaultEnabled: false,
-    order: 6
+    order: 6,
+    frameTypes: ['dark', 'flat'],
   },
 ];
 

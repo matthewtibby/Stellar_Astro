@@ -5,9 +5,13 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '../../ui/tooltip';
 import { 
   FRAME_TYPES, 
   STATUS_LABELS,
-  BASIC_STACKING_METHODS,
   ADVANCED_BIAS_STACKING_METHODS,
-  STACKING_METHOD_TOOLTIPS
+  ADVANCED_DARK_STACKING_METHODS,
+  ADVANCED_FLAT_STACKING_METHODS,
+  BEGINNER_DARK_STACKING_METHODS,
+  BEGINNER_FLAT_STACKING_METHODS,
+  STACKING_METHOD_TOOLTIPS,
+  COSMETIC_METHODS,
 } from '../types/calibration.types';
 import type { MasterType, MasterStatus } from '../types/calibration.types';
 
@@ -18,8 +22,49 @@ const FRAME_TYPE_ICONS: Record<MasterType, React.ReactElement> = {
   bias: <Zap className="w-6 h-6 text-pink-400 drop-shadow" />,
 };
 
-// Beginner bias methods (subset of basic methods)
-const BEGINNER_BIAS_STACKING_METHODS = BASIC_STACKING_METHODS;
+// Define mutually exclusive method groups
+const MUTUALLY_EXCLUSIVE_METHODS = [
+  ['la_cosmic', 'la_cosmic_enhanced'],
+  // Add more groups as needed
+];
+
+// Helper to check if a method is disabled due to mutual exclusion
+function isMethodDisabled(methodValue: string, tabState: any, selectedType: string) {
+  for (const group of MUTUALLY_EXCLUSIVE_METHODS) {
+    if (group.includes(methodValue)) {
+      // If any other method in the group is enabled, disable this one
+      return group.some(other => other !== methodValue && tabState[selectedType].cosmeticMethods?.[other]?.enabled);
+    }
+  }
+  return false;
+}
+
+// Helper to handle mutually exclusive toggling
+function handleMutuallyExclusiveToggle(methodValue: string, checked: boolean, tabState: any, selectedType: string, setTabState: any) {
+  let newCosmeticMethods = { ...tabState[selectedType].cosmeticMethods };
+  for (const group of MUTUALLY_EXCLUSIVE_METHODS) {
+    if (group.includes(methodValue) && checked) {
+      // Uncheck all other methods in the group
+      for (const other of group) {
+        if (other !== methodValue) {
+          newCosmeticMethods[other] = { ...newCosmeticMethods[other], enabled: false };
+        }
+      }
+    }
+  }
+  newCosmeticMethods[methodValue] = {
+    ...newCosmeticMethods[methodValue],
+    enabled: checked,
+    order: COSMETIC_METHODS.find(m => m.value === methodValue)?.order || 0,
+  };
+  setTabState((prev: any) => ({
+    ...prev,
+    [selectedType]: {
+      ...prev[selectedType],
+      cosmeticMethods: newCosmeticMethods,
+    },
+  }));
+}
 
 interface CalibrationSettingsPanelProps {
   selectedType: MasterType;
@@ -38,6 +83,24 @@ export const CalibrationSettingsPanel: React.FC<CalibrationSettingsPanelProps> =
   tabState,
   setTabState,
 }) => {
+  // Helper to get stacking methods and advanced state for each type
+  const getStackingMethods = () => {
+    if (selectedType === 'bias') {
+      return tabState.bias.advanced ? ADVANCED_BIAS_STACKING_METHODS : [
+        { value: 'median', label: 'Median' },
+        { value: 'mean', label: 'Mean' },
+      ];
+    } else if (selectedType === 'dark') {
+      return tabState.dark.advanced ? ADVANCED_DARK_STACKING_METHODS : BEGINNER_DARK_STACKING_METHODS;
+    } else if (selectedType === 'flat') {
+      return tabState.flat.advanced ? ADVANCED_FLAT_STACKING_METHODS : BEGINNER_FLAT_STACKING_METHODS;
+    }
+    return [];
+  };
+
+  // Only show cosmetic methods relevant for the current frame type
+  const relevantCosmeticMethods = COSMETIC_METHODS.filter(method => method.frameTypes.includes(selectedType));
+
   return (
     <div className="w-2/5 bg-[#10131a]/90 rounded-2xl p-6 border border-[#232946]/60 flex flex-col shadow-xl relative">
       {/* Header row: title left, status chip right */}
@@ -112,103 +175,192 @@ export const CalibrationSettingsPanel: React.FC<CalibrationSettingsPanelProps> =
       
       {/* Calibration Settings */}
       <div className="flex flex-col gap-6">
-        {/* Master Bias Tab */}
-        {selectedType === 'bias' && (
-          <>
-            {/* Beginner/Advanced toggle for Bias */}
-            <div className="flex items-center mb-4 gap-4">
-              <span className="font-medium text-blue-200">Beginner</span>
-              <label className="inline-flex relative items-center cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  className="sr-only peer" 
-                  checked={tabState.bias.advanced} 
-                  onChange={e => setTabState((prev: any) => ({ 
-                    ...prev, 
-                    bias: { ...prev.bias, advanced: e.target.checked } 
-                  }))} 
-                />
-                <div className="w-10 h-5 bg-gray-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:bg-blue-600 transition-all flex items-center justify-start peer-checked:justify-end">
-                  {!tabState.bias.advanced && <span className="w-3 h-3 bg-white rounded-full ml-1" />}
-                  {tabState.bias.advanced && <span className="w-3 h-3 bg-blue-300 rounded-full mr-1" />}
-                </div>
-              </label>
-              <span className="font-medium text-blue-200">Advanced</span>
+        {/* Beginner/Advanced toggle for bias, dark, and flat */}
+        {(selectedType === 'bias' || selectedType === 'dark' || selectedType === 'flat') && (
+          <div className="flex items-center gap-4 mb-4">
+            <span className="text-blue-100 font-medium">Mode:</span>
+            <button
+              className={`px-3 py-1 rounded-lg text-sm font-semibold border transition-colors duration-200 ${tabState[selectedType].advanced ? 'bg-gray-800 text-blue-300 border-blue-500' : 'bg-blue-600 text-white border-blue-600'}`}
+              onClick={() => setTabState((prev: any) => ({
+                ...prev,
+                [selectedType]: {
+                  ...prev[selectedType],
+                  advanced: false,
+                },
+              }))}
+            >
+              Beginner
+            </button>
+            <button
+              className={`px-3 py-1 rounded-lg text-sm font-semibold border transition-colors duration-200 ${tabState[selectedType].advanced ? 'bg-blue-600 text-white border-blue-600' : 'bg-gray-800 text-blue-300 border-blue-500'}`}
+              onClick={() => setTabState((prev: any) => ({
+                ...prev,
+                [selectedType]: {
+                  ...prev[selectedType],
+                  advanced: true,
+                },
+              }))}
+            >
+              Advanced
+            </button>
+          </div>
+        )}
+        {/* Stacking method selection for all types */}
+        {(selectedType === 'bias' || selectedType === 'dark' || selectedType === 'flat') && (
+          <div className="mb-4">
+            <label className="block font-medium mb-1 text-blue-100">Stacking Method</label>
+            <div className="flex flex-col gap-2">
+              {getStackingMethods().map((m: any) => (
+                <Tooltip key={m.value}>
+                  <TooltipTrigger asChild>
+                    <label className="flex items-center gap-2 text-blue-200 cursor-pointer">
+                      <input
+                        type="radio"
+                        name={`${selectedType}StackingMethod`}
+                        value={m.value}
+                        checked={tabState[selectedType].stackingMethod === m.value}
+                        onChange={() => setTabState((prev: any) => ({
+                          ...prev,
+                          [selectedType]: {
+                            ...prev[selectedType],
+                            stackingMethod: m.value,
+                          },
+                        }))}
+                        className="accent-blue-600"
+                      />
+                      <span>{m.label}</span>
+                    </label>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" sideOffset={4} className="max-w-xs text-sm">
+                    {STACKING_METHOD_TOOLTIPS[m.value]}
+                  </TooltipContent>
+                </Tooltip>
+              ))}
             </div>
-            
-            {/* Beginner mode: only show stacking method (Median, Mean) */}
-            {selectedType === 'bias' && !tabState.bias.advanced && (
-              <div className="mb-4">
-                <label className="block font-medium mb-1 text-blue-100">Stacking Method</label>
-                <div className="flex flex-col gap-2">
-                  {BEGINNER_BIAS_STACKING_METHODS.map((m: any) => (
-                    <Tooltip key={m.value}>
-                      <TooltipTrigger asChild>
-                        <label className="flex items-center gap-2 text-blue-200 cursor-pointer">
-                          <input
-                            type="radio"
-                            name="biasStackingMethod"
-                            value={m.value}
-                            checked={tabState.bias.stackingMethod === m.value}
-                            onChange={() => setTabState((prev: any) => ({
-                              ...prev,
-                              bias: {
-                                ...prev.bias,
-                                stackingMethod: m.value,
-                              }
-                            }))}
-                            className="accent-blue-600"
-                          />
-                          <span>{m.label}</span>
-                        </label>
-                      </TooltipTrigger>
-                      <TooltipContent side="top" sideOffset={4} className="max-w-xs text-sm">
-                        {STACKING_METHOD_TOOLTIPS[m.value]}
-                      </TooltipContent>
-                    </Tooltip>
-                  ))}
-                </div>
-              </div>
-            )}
-            
-            {/* Advanced mode: all stacking methods, cosmetic correction, custom rejection */}
-            {tabState.bias.advanced && (
-              <>
-                <div className="mb-4">
-                  <label className="block font-medium mb-1 text-blue-100">Stacking Method</label>
-                  <div className="flex flex-col gap-2">
-                    {ADVANCED_BIAS_STACKING_METHODS.map((m: any) => (
-                      <Tooltip key={m.value}>
-                        <TooltipTrigger asChild>
-                          <label className="flex items-center gap-2 text-blue-200 cursor-pointer">
-                            <input
-                              type="radio"
-                              name="biasStackingMethod"
-                              value={m.value}
-                              checked={tabState.bias.stackingMethod === m.value}
-                              onChange={() => setTabState((prev: any) => ({
-                                ...prev,
-                                bias: {
-                                  ...prev.bias,
-                                  stackingMethod: m.value,
-                                }
-                              }))}
-                              className="accent-blue-600"
-                            />
-                            <span>{m.label}</span>
-                          </label>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" sideOffset={4} className="max-w-xs text-sm">
-                          {STACKING_METHOD_TOOLTIPS[m.value]}
-                        </TooltipContent>
-                      </Tooltip>
-                    ))}
+          </div>
+        )}
+        
+        {/* Cosmetic Correction (Advanced Only) */}
+        {(selectedType === 'bias' || selectedType === 'dark' || selectedType === 'flat') && tabState[selectedType].advanced && (
+          <div className="mt-6">
+            <h4 className="text-blue-200 font-semibold mb-2">Cosmetic Correction</h4>
+            <div className="flex flex-col gap-3">
+              {relevantCosmeticMethods.map((method) => {
+                const isChecked = tabState[selectedType].cosmeticMethods?.[method.value]?.enabled || false;
+                return (
+                  <div key={method.value} className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={e => handleMutuallyExclusiveToggle(method.value, e.target.checked, tabState, selectedType, setTabState)}
+                      className="accent-blue-600"
+                      id={`${selectedType}-cosmetic-${method.value}`}
+                    />
+                    <label htmlFor={`${selectedType}-cosmetic-${method.value}`} className="text-blue-100 cursor-pointer">
+                      {method.label}
+                    </label>
+                    <span className="text-xs text-blue-300" title={method.tooltip}>ⓘ</span>
                   </div>
+                );
+              })}
+            </div>
+            {/* Parameter controls for enabled methods */}
+            {relevantCosmeticMethods.map((method) => (
+              tabState[selectedType].cosmeticMethods?.[method.value]?.enabled && (
+                <div key={method.value + '-params'} className="ml-6 mt-2 flex flex-col gap-2">
+                  {/* Example: threshold for hot_pixel_map and bad_pixel_masking */}
+                  {(method.value === 'hot_pixel_map' || method.value === 'bad_pixel_masking') && (
+                    <div>
+                      <label className="block text-xs text-blue-200 mb-1">Sigma Threshold</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={10}
+                        step={0.1}
+                        value={tabState[selectedType].badPixelSigmaThreshold || 5.0}
+                        onChange={e => setTabState((prev: any) => ({
+                          ...prev,
+                          [selectedType]: {
+                            ...prev[selectedType],
+                            badPixelSigmaThreshold: parseFloat(e.target.value),
+                          },
+                        }))}
+                        className="bg-[#181c23] text-white border border-[#232946] rounded px-2 py-1 w-24"
+                      />
+                    </div>
+                  )}
+                  {/* Patterned noise method/strength */}
+                  {method.value === 'patterned_noise_removal' && (
+                    <>
+                      <div>
+                        <label className="block text-xs text-blue-200 mb-1">Patterned Noise Method</label>
+                        <select
+                          className="bg-[#181c23] text-white border border-[#232946] rounded px-2 py-1"
+                          value={tabState[selectedType].patternedNoiseMethod || 'auto'}
+                          onChange={e => setTabState((prev: any) => ({
+                            ...prev,
+                            [selectedType]: {
+                              ...prev[selectedType],
+                              patternedNoiseMethod: e.target.value,
+                            },
+                          }))}
+                        >
+                          <option value="auto">Auto</option>
+                          <option value="median_filter">Median Filter</option>
+                          <option value="fourier_filter">Fourier Filter</option>
+                          <option value="polynomial">Polynomial</option>
+                          <option value="combined">Combined</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-blue-200 mb-1">Strength</label>
+                        <input
+                          type="number"
+                          min={0}
+                          max={1}
+                          step={0.01}
+                          value={tabState[selectedType].patternedNoiseStrength || 0.5}
+                          onChange={e => setTabState((prev: any) => ({
+                            ...prev,
+                            [selectedType]: {
+                              ...prev[selectedType],
+                              patternedNoiseStrength: parseFloat(e.target.value),
+                            },
+                          }))}
+                          className="bg-[#181c23] text-white border border-[#232946] rounded px-2 py-1 w-24"
+                        />
+                      </div>
+                    </>
+                  )}
+                  {/* L.A.Cosmic params (example: sigclip) */}
+                  {(method.value === 'la_cosmic' || method.value === 'la_cosmic_enhanced') && (
+                    <div>
+                      <label className="block text-xs text-blue-200 mb-1">Sigma Clip</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={10}
+                        step={0.1}
+                        value={tabState[selectedType].laCosmicParams?.sigclip || 4.5}
+                        onChange={e => setTabState((prev: any) => ({
+                          ...prev,
+                          [selectedType]: {
+                            ...prev[selectedType],
+                            laCosmicParams: {
+                              ...prev[selectedType].laCosmicParams,
+                              sigclip: parseFloat(e.target.value),
+                            },
+                          },
+                        }))}
+                        className="bg-[#181c23] text-white border border-[#232946] rounded px-2 py-1 w-24"
+                      />
+                    </div>
+                  )}
+                  {/* Add more parameter controls as needed for other methods */}
                 </div>
-                {/* Additional advanced settings can be added here */}
-              </>
-            )}
-          </>
+              )
+            ))}
+          </div>
         )}
         
         {/* Add similar sections for 'dark' and 'flat' types */}

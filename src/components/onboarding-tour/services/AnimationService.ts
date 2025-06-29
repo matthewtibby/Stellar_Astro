@@ -37,4 +37,36 @@ export const AnimationService = {
     animate: { opacity: 1, y: 0, transition: { delay: index * 0.02, type: 'spring', stiffness: 100 } },
     exit: { opacity: 0, y: 20, transition: { duration: 0.3 } },
   }),
+
+  // Modular animation methods for onboarding tour
+  getDemoAnimation: () => ({
+    initial: { opacity: 0, y: 20 },
+    animate: { opacity: 1, y: 0, transition: { duration: 0.4 } },
+    exit: { opacity: 0, y: 20, transition: { duration: 0.3 } },
+  }),
+  getFeatureAnimation: (index: number) => ({
+    initial: { opacity: 0, x: -20 },
+    animate: { opacity: 1, x: 0, transition: { delay: index * 0.05, duration: 0.3 } },
+    exit: { opacity: 0, x: 20, transition: { duration: 0.2 } },
+  }),
+  getModalAnimation: () => ({
+    initial: { opacity: 0, scale: 0.95 },
+    animate: { opacity: 1, scale: 1, transition: { duration: 0.3 } },
+    exit: { opacity: 0, scale: 0.95, transition: { duration: 0.2 } },
+  }),
+  getContentAnimation: () => ({
+    initial: { opacity: 0, y: 10 },
+    animate: { opacity: 1, y: 0, transition: { duration: 0.2 } },
+    exit: { opacity: 0, y: 10, transition: { duration: 0.2 } },
+  }),
+  getOverlayAnimation: () => ({
+    initial: { opacity: 0 },
+    animate: { opacity: 1, transition: { duration: 0.2 } },
+    exit: { opacity: 0, transition: { duration: 0.2 } },
+  }),
+  getWelcomeAnimation: () => ({
+    initial: { opacity: 0, scale: 0.9 },
+    animate: { opacity: 1, scale: 1, transition: { duration: 0.4 } },
+    exit: { opacity: 0, scale: 0.9, transition: { duration: 0.3 } },
+  }),
 }; 

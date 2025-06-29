@@ -98,6 +98,10 @@ export const CSS_CLASSES = {
   WELCOME_TITLE: "text-2xl font-medium mb-4",
   WELCOME_DESCRIPTION: "text-muted-foreground mb-6",
   WELCOME_BUTTONS: "space-x-2",
+  WELCOME_CONTENT: "bg-background rounded-lg p-6 flex flex-col items-center justify-center",
+  WELCOME_ACTIONS: "flex flex-row gap-4 mt-6 justify-center",
+  WELCOME_START_BUTTON: "px-4 py-2 bg-primary text-white rounded-md flex items-center gap-2 hover:bg-primary/90 transition",
+  WELCOME_SKIP_BUTTON: "px-4 py-2 bg-muted text-muted-foreground rounded-md flex items-center gap-2 hover:bg-muted/80 transition",
   
   // Navigation and controls
   CLOSE_BUTTON: "absolute right-2 top-2",
@@ -133,6 +137,10 @@ export const CSS_CLASSES = {
   DEMO_GRID: "grid gap-8",
   DEMO_ITEM: "border rounded-lg p-6 bg-muted/30",
   DEMO_ITEM_TEXT: "text-muted-foreground text-sm",
+  DEMO_FEATURES: "flex flex-col gap-2 mt-4",
+  DEMO_FEATURE: "flex items-center gap-2 p-2 bg-gray-800 rounded-md",
+  DEMO_FEATURE_BULLET: "w-2 h-2 rounded-full bg-blue-400 mr-2",
+  DEMO_FEATURE_TEXT: "text-white text-sm",
   
   // Confetti
   CONFETTI_CONTAINER: "fixed inset-0 pointer-events-none z-[1000] overflow-hidden",
@@ -162,6 +170,26 @@ export const UI_TEXT = {
       RECENT_ACTIVITY: "Recent Activity",
       USER_SETTINGS: "User Settings",
     },
+    TELESCOPE: {
+      TITLE: "Telescope",
+      DESCRIPTION: "Control and monitor your telescope.",
+      FEATURES: ["Slew to target", "Track objects", "Automated focusing"]
+    },
+    CAMERA: {
+      TITLE: "Camera",
+      DESCRIPTION: "Manage your imaging camera settings.",
+      FEATURES: ["Exposure control", "Sensor temperature", "Live view"]
+    },
+    PROCESSING: {
+      TITLE: "Processing",
+      DESCRIPTION: "Automate your image processing workflow.",
+      FEATURES: ["Calibration", "Stacking", "Post-processing"]
+    },
+    DEFAULT: {
+      TITLE: "Dashboard Feature",
+      DESCRIPTION: "Explore more features in your dashboard.",
+      FEATURES: ["Customizable layout", "Notifications", "User preferences"]
+    }
   },
   ARIA_LABELS: {
     CLOSE_TOUR: "Close tour",

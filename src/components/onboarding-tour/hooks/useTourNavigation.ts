@@ -18,18 +18,13 @@ export function useTourNavigation(
 ): UseTourNavigationReturn {
   
   const nextStep = useCallback(() => {
-    setCurrentStep((prev: number) => {
-      const nextIndex = TourNavigationService.getNextStepIndex(prev, steps.length);
-      
-      if (TourNavigationService.shouldShowConfetti(prev, steps.length)) {
-        setShowConfetti(true);
-        setTimeout(() => setShowConfetti(false), ANIMATION_CONFIG.CONFETTI.SHOW_DURATION);
-      }
-      
-      return nextIndex;
-    });
-
-    if (TourNavigationService.isLastStep(currentStep, steps.length)) {
+    const nextIndex = TourNavigationService.getNextStepIndex(currentStep, steps.length);
+    if (TourNavigationService.shouldShowConfetti(currentStep, steps.length)) {
+      setShowConfetti(true);
+      setTimeout(() => setShowConfetti(false), ANIMATION_CONFIG.CONFETTI.SHOW_DURATION);
+    }
+    setCurrentStep(nextIndex);
+    if (TourNavigationService.isLastStep(nextIndex, steps.length)) {
       setIsTourCompleted(true);
       onComplete?.();
     }

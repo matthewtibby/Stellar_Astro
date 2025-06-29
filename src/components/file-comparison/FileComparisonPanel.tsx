@@ -57,7 +57,6 @@ const FileComparisonPanel: React.FC<FileComparisonPanelProps> = ({ projectId }) 
               result={result}
               expanded={!!expandedResults[index]}
               onToggle={() => toggleResultExpansion(index)}
-              index={index}
             />
           ))}
         </div>
