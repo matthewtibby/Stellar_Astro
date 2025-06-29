@@ -38,6 +38,7 @@ import {
 import { FileOperationsService } from '../services/calibration/FileOperationsService';
 import { FrameConsistencyTable } from './calibration/components/FrameConsistencyTable';
 import { OutlierReviewTable } from './calibration/components/OutlierReviewTable';
+import { useFileOperations } from '@/src/components/calibration/hooks/useFileOperations';
 
 /**
  * CalibrationScaffoldUI
@@ -153,6 +154,9 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
 
   const [sigmaValue, setSigmaValue] = useState(3.0); // For outlier detection
 
+  // Add useFileOperations to fetch masterStats
+  const { masterStats } = useFileOperations(userId, projectId, selectedType);
+
   return (
     <TooltipProvider>
       <div className="flex flex-col h-full bg-[#0a0d13]/80 rounded-2xl shadow-2xl border border-[#232946]/60 p-6 backdrop-blur-md">
@@ -209,7 +213,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
               previewUrl={previewUrl}
               superdarkPreviewUrl={superdarkPreviewUrl}
               selectedSuperdarkPath={selectedSuperdarkPath}
-              masterStats={null}
+              masterStats={masterStats}
               superdarkStats={superdarkStats}
               superdarkStatsLoading={superdarkStatsLoading}
               showHistogram={showHistogram}
@@ -219,6 +223,7 @@ const CalibrationScaffoldUI: React.FC<{ projectId: string, userId: string }> = (
               setShowQualityReport={setShowHistogramReport}
               previewError={previewError}
               FRAME_TYPES={FRAME_TYPES}
+              histogramStats={analysis.histogramResults?.frame_results?.[0] || null}
             />
             <HistogramAnalysisSection
               frameType={selectedType}

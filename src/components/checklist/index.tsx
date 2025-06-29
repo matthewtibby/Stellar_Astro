@@ -7,6 +7,7 @@ import { useUserStore } from '@/src/store';
 import { getChecklistVisibility, setChecklistVisibility } from '@/src/lib/client/checklistVisibility';
 import { usePathname } from 'next/navigation';
 import { useProjectSync } from '@/src/hooks/useProjectSync';
+import { getMostRecentProjectStep } from '@/src/utils/projectStepUtils';
 
 // TODO: Move to types file
 interface ChecklistItem {
@@ -174,6 +175,9 @@ const ProjectChecklist: React.FC<{ projectId?: string }> = ({ projectId }) => {
   // Use projectId from prop or from route (if available)
   const canonicalProject = useProjectSync(projectId || '', 5000);
 
+  // Compute the current step id using the new utility
+  const currentStepId = canonicalProject?.steps ? getMostRecentProjectStep(canonicalProject.steps) : null;
+
   // Fetch visibility on mount
   useEffect(() => {
     if (!isAuthenticated || !userId || !pathname) return;
@@ -277,6 +281,7 @@ const ProjectChecklist: React.FC<{ projectId?: string }> = ({ projectId }) => {
                   description={item.description}
                   status={item.status}
                   animate={item.status === 'completed'}
+                  isCurrentStep={currentStepId === item.id}
                 />
               ))}
             </ChecklistCategoryPanel>

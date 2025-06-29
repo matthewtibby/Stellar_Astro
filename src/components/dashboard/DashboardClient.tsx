@@ -1,65 +1,52 @@
+/**
+ * DashboardClient is the main dashboard UI, orchestrating all dashboard features and layout.
+ * Uses modular components and custom hooks for state and logic.
+ * @component
+ */
 "use client";
-import React, { useEffect, useState, useRef } from 'react';
+import React from 'react';
 import { useRouter } from 'next/navigation';
-import { createBrowserClient, supabaseUrl, supabaseAnonKey } from '@/src/lib/supabase';
 import AuthSync from '@/components/AuthSync';
-import NotificationCenter from '../components/NotificationCenter';
-import DashboardStats from '../components/DashboardStats';
+// import NotificationCenter from '@/components/NotificationCenter';
+// import DashboardStats from '@/components/DashboardStats';
 import NewProjectModal from '@/src/components/NewProjectModal';
-import ProjectCard from '@/src/components/ui/ProjectCard';
 import type { HydratedProject } from '@/src/lib/server/getDashboardProjects';
-import { Plus, X, LayoutGrid, List as ListIcon, ChevronLeft, ChevronRight, ChevronDown, Folder, Grid, List, CheckCircle, Settings, File } from 'lucide-react';
 import { DashboardTourProvider } from '@/src/components/OnboardingTour';
-import DashboardHeader from './components/DashboardHeader';
-import DashboardControls from './components/DashboardControls';
-import ProjectList from './components/ProjectList';
+import DashboardHeader from './DashboardHeader';
+import DashboardControls from './DashboardControls';
+import ProjectList from './ProjectList';
 import ProjectChecklist from '@/src/components/checklist';
+import useDashboardProjects from '@/src/components/dashboard/hooks/useDashboardProjects';
+import useSubscription from '@/src/components/dashboard/hooks/useSubscription';
 
-const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
-
-// Helper: Capitalize first letter
-function capitalize(str: string) {
-  return str && typeof str === 'string' ? str[0].toUpperCase() + str.slice(1) : '';
-}
-
-// Optionally import DashboardClientProps if defined elsewhere
+/**
+ * Props for DashboardClient.
+ * @prop user The authenticated user (id, email) or null.
+ * @prop projects The initial list of hydrated projects.
+ */
 export type DashboardClientProps = {
   user: { id: string; email: string } | null;
   projects: HydratedProject[];
 };
 
-export default function DashboardClient({ user, projects }: DashboardClientProps) {
-  // State and logic from previous DashboardPage
+/**
+ * Main dashboard UI, orchestrating all dashboard features and layout.
+ */
+const DashboardClient: React.FC<DashboardClientProps> = ({ user, projects }) => {
   const router = useRouter();
-  const [activeView, setActiveView] = useState('grid');
-  const [showNewProject, setShowNewProject] = useState(false);
-  const [openStats, setOpenStats] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [projectList, setProjectList] = useState<HydratedProject[]>(projects);
-  const [subscription, setSubscription] = useState('free');
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [isFilesExpanded, setIsFilesExpanded] = useState(true);
-  const [uploadedFiles, setUploadedFiles] = useState<Record<string, string[]>>({ light: [], dark: [], flat: [], bias: [] });
-  const [isWorkflowExpanded, setIsWorkflowExpanded] = useState(true);
-  const [currentStep, setCurrentStep] = useState(0);
-  const [activeProject, setActiveProject] = useState<HydratedProject | null>(null);
+  const [activeView, setActiveView] = React.useState('grid');
+  const [showNewProject, setShowNewProject] = React.useState(false);
+  const [openStats, setOpenStats] = React.useState(false);
+  const [sidebarOpen, setSidebarOpen] = React.useState(true);
+  const [isFilesExpanded, setIsFilesExpanded] = React.useState(true);
+  const [uploadedFiles, setUploadedFiles] = React.useState<Record<string, string[]>>({ light: [], dark: [], flat: [], bias: [] });
+  const [isWorkflowExpanded, setIsWorkflowExpanded] = React.useState(true);
+  const [currentStep, setCurrentStep] = React.useState(0);
+  const [activeProject, setActiveProject] = React.useState<HydratedProject | null>(null);
 
-  useEffect(() => {
-    if (user) {
-      supabase
-        .from('profiles')
-        .select('subscription')
-        .eq('id', user.id)
-        .single()
-        .then(({ data }) => {
-          if (data?.subscription) setSubscription(data.subscription);
-        });
-    }
-  }, [user]);
-
-  useEffect(() => {
-    console.log('Dashboard projectList:', projectList);
-  }, [projectList]);
+  // Use custom hooks for project list and subscription
+  const { projectList, setProjectList, loading, setLoading } = useDashboardProjects(projects);
+  const subscription = useSubscription(user?.id);
 
   // Main dashboard UI
   if (!user) {
@@ -70,7 +57,6 @@ export default function DashboardClient({ user, projects }: DashboardClientProps
     );
   }
 
-  // Main dashboard UI
   return (
     <>
       <AuthSync />
@@ -83,7 +69,6 @@ export default function DashboardClient({ user, projects }: DashboardClientProps
             <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
               <div className="pt-8">
                 <DashboardHeader user={user} subscription={subscription} />
-                
                 <DashboardControls
                   activeProject={activeProject}
                   setActiveProject={setActiveProject}
@@ -92,7 +77,6 @@ export default function DashboardClient({ user, projects }: DashboardClientProps
                   setActiveView={setActiveView}
                   setShowNewProject={setShowNewProject}
                 />
-
                 {/* Sidebar and main content grid */}
                 <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
                   {/* Main Content Area */}
@@ -117,4 +101,6 @@ export default function DashboardClient({ user, projects }: DashboardClientProps
       </DashboardTourProvider>
     </>
   );
-}
+};
+
+export default DashboardClient; 

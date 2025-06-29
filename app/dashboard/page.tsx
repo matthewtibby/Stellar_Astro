@@ -1,5 +1,5 @@
 import { createSupabaseServerClient } from '@/src/lib/supabaseServer';
-import DashboardClient from './DashboardClient';
+import DashboardClient from '../../src/components/dashboard/DashboardClient';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 import { redirect } from 'next/navigation';
 import { getDashboardProjects, HydratedProject } from '@/src/lib/server/getDashboardProjects';

@@ -6,6 +6,7 @@ interface ChecklistItemRowProps {
   description: string;
   status: 'pending' | 'in_progress' | 'completed';
   animate?: boolean;
+  isCurrentStep?: boolean;
 }
 
 // Custom class for a gradient border (using Tailwind's ring utilities for a workaround)
@@ -17,7 +18,7 @@ const gradientBorderStyle = {
   border: '1px solid transparent',
 };
 
-const ChecklistItemRow: React.FC<ChecklistItemRowProps> = ({ id, title, description, status, animate }) => {
+const ChecklistItemRow: React.FC<ChecklistItemRowProps> = ({ id, title, description, status, animate, isCurrentStep }) => {
   const getStatusIcon = () => {
     switch (status) {
       case 'completed':
@@ -46,6 +47,10 @@ const ChecklistItemRow: React.FC<ChecklistItemRowProps> = ({ id, title, descript
     style = gradientBorderStyle;
   } else {
     className += ' border border-gray-700';
+  }
+  // Highlight current step
+  if (isCurrentStep) {
+    className += ' ring-2 ring-blue-400 ring-offset-2';
   }
 
   return (
